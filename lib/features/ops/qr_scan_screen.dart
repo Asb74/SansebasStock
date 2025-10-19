@@ -109,7 +109,6 @@ class _QrScanScreenState extends State<QrScanScreen> {
         children: <Widget>[
           MobileScanner(
             controller: _controller,
-            allowDuplicates: false,
             onDetect: _handleDetection,
           ),
           Align(
