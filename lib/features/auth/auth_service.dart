@@ -2,13 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) {
-  return const AuthService();
+  return AuthService();
 });
 
 final currentUserProvider = StateProvider<AppUser?>((ref) => null);
 
 class AuthService {
-  const AuthService({FirebaseFirestore? firestore})
+  AuthService({FirebaseFirestore? firestore})
       : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
