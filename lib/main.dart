@@ -23,7 +23,7 @@ class SansebasStockApp extends ConsumerWidget {
 
     return MaterialApp.router(
       title: 'Sansebas Stock',
-      theme: AppTheme.buildTheme(),
+      theme: buildTheme(),
       routerConfig: router,
     );
   }

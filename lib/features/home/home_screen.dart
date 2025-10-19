@@ -14,7 +14,9 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(user?.name.isNotEmpty == true ? 'Hola, ${user!.name}' : 'Inicio'),
+        title: Text(
+          user?.nombre.isNotEmpty == true ? 'Hola, ${user!.nombre}' : 'Inicio',
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
