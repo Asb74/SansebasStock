@@ -12,8 +12,8 @@ class QrScanScreen extends StatefulWidget {
 
 class _QrScanScreenState extends State<QrScanScreen> {
   final MobileScannerController _controller = MobileScannerController();
-  bool _isProcessing = false;
-  DateTime? _lastScanAt;
+  bool _busy = false;
+  DateTime? _lastDetection;
 
   @override
   void dispose() {
@@ -21,36 +21,14 @@ class _QrScanScreenState extends State<QrScanScreen> {
     super.dispose();
   }
 
-  Future<void> _handleDetection(BarcodeCapture capture) async {
-    if (_isProcessing) {
-      return;
-    }
-
-    final now = DateTime.now();
-    if (_lastScanAt != null && now.difference(_lastScanAt!).inMilliseconds < 1200) {
-      return;
-    }
-
-    String? rawValue;
-    for (final barcode in capture.barcodes) {
-      final value = barcode.rawValue;
-      if (value != null && value.trim().isNotEmpty) {
-        rawValue = value;
-        break;
-      }
-    }
-
-    if (rawValue == null) {
-      return;
-    }
-
+  Future<void> _handle(String raw) async {
     setState(() {
-      _isProcessing = true;
+      _busy = true;
     });
 
     try {
-      final pallet = parseQr(rawValue!);
-      _lastScanAt = now;
+      final pallet = parseQr(raw);
+      _lastDetection = DateTime.now();
 
       if (!mounted) {
         return;
@@ -80,7 +58,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
     } finally {
       if (mounted) {
         setState(() {
-          _isProcessing = false;
+          _busy = false;
         });
       }
     }
@@ -109,7 +87,30 @@ class _QrScanScreenState extends State<QrScanScreen> {
         children: <Widget>[
           MobileScanner(
             controller: _controller,
-            onDetect: _handleDetection,
+            onDetect: (capture) async {
+              if (_busy) {
+                return;
+              }
+
+              final now = DateTime.now();
+              if (_lastDetection != null &&
+                  now.difference(_lastDetection!).inMilliseconds < 1200) {
+                return;
+              }
+
+              final raw = capture.barcodes
+                  .map((barcode) => barcode.rawValue)
+                  .firstWhere(
+                    (value) => value != null && value.trim().isNotEmpty,
+                    orElse: () => null,
+                  );
+
+              if (raw == null) {
+                return;
+              }
+
+              await _handle(raw);
+            },
           ),
           Align(
             alignment: Alignment.bottomCenter,

@@ -7,17 +7,31 @@ final authServiceProvider = Provider<AuthService>((ref) {
 
 final currentUserProvider = StateProvider<AppUser?>((ref) => null);
 
+class AppUser {
+  const AppUser({
+    required this.id,
+    required this.nombre,
+    required this.correo,
+    required this.valor,
+  });
+
+  final String id;
+  final String nombre;
+  final String correo;
+  final bool valor;
+}
+
 class AuthService {
   AuthService({FirebaseFirestore? firestore})
       : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
 
-  Future<AppUser> signIn(String email, String password) async {
-    final trimmedEmail = email.trim();
+  Future<AppUser> signIn(String correo, String password) async {
+    final trimmedCorreo = correo.trim();
     final querySnapshot = await _firestore
         .collection('UsuariosAutorizados')
-        .where('correo', isEqualTo: trimmedEmail)
+        .where('correo', isEqualTo: trimmedCorreo)
         .limit(1)
         .get();
 
@@ -28,10 +42,10 @@ class AuthService {
     final doc = querySnapshot.docs.first;
     final data = doc.data();
 
-    final storedPassword = data['Contraseña'] as String?;
-    final isEnabled = data['Valor'] as bool? ?? false;
+    final storedPassword = data['Contraseña']?.toString();
+    final isEnabled = data['Valor'] == true;
 
-    if (storedPassword == null || storedPassword != password.trim()) {
+    if (storedPassword != password.trim()) {
       throw const AuthException('Correo o contraseña incorrectos.');
     }
 
@@ -39,31 +53,13 @@ class AuthService {
       throw const AuthException('Usuario no habilitado.');
     }
 
-    final name = data['Nombre'] as String? ?? '';
-
-    final user = AppUser(
+    return AppUser(
       id: doc.id,
-      email: trimmedEmail,
-      name: name,
-      enabled: isEnabled,
+      nombre: data['Nombre']?.toString() ?? 'Sin nombre',
+      correo: data['correo']?.toString() ?? trimmedCorreo,
+      valor: isEnabled,
     );
-
-    return user;
   }
-}
-
-class AppUser {
-  const AppUser({
-    required this.id,
-    required this.email,
-    required this.name,
-    required this.enabled,
-  });
-
-  final String id;
-  final String email;
-  final String name;
-  final bool enabled;
 }
 
 class AuthException implements Exception {
