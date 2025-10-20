@@ -1,3 +1,11 @@
+import java.util.Properties
+
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+}
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -28,11 +36,33 @@ android {
         versionName = "1.0"
     }
 
+    signingConfigs {
+        create("release") {
+            if (keystorePropertiesFile.exists()) {
+                val storeFilePath = keystoreProperties["storeFile"] as String?
+                if (storeFilePath != null) {
+                    storeFile = rootProject.file(storeFilePath)
+                }
+                storePassword = keystoreProperties["storePassword"] as String? ?: ""
+                keyAlias = keystoreProperties["keyAlias"] as String? ?: ""
+                keyPassword = keystoreProperties["keyPassword"] as String? ?: ""
+            }
+        }
+    }
+
     buildTypes {
-        release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+        getByName("release") {
+            signingConfig = signingConfigs.getByName("release")
+            // Para evitar crashes por shrink con ML Kit / CameraX en esta fase:
+            isMinifyEnabled = false
+            isShrinkResources = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+        }
+        getByName("debug") {
+            // mantener defaults
         }
     }
 }
