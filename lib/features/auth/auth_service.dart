@@ -60,6 +60,10 @@ class AuthService {
       valor: isEnabled,
     );
   }
+
+  Future<AppUser> signInWithCollection(String correo, String password) {
+    return signIn(correo, password);
+  }
 }
 
 class AuthException implements Exception {
