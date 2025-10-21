@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'auth_service.dart';
+import 'session_store.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -40,19 +41,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final authService = ref.read(authServiceProvider);
 
     try {
-      final user = await authService.signIn(
+      final user = await authService.signInWithCollection(
         _emailController.text,
         _passwordController.text,
       );
 
       ref.read(currentUserProvider.notifier).state = user;
+      await SessionStore.save(
+        _emailController.text,
+        _passwordController.text,
+      );
 
       if (!mounted) {
         return;
       }
 
-      context.go('/');
+      context.go('/', extra: user);
     } on AuthException catch (e) {
+      await SessionStore.clear();
       _showError(e.message);
     } catch (_) {
       _showError('Ha ocurrido un error inesperado.');
