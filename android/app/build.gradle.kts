@@ -1,9 +1,10 @@
+import java.io.FileInputStream
 import java.util.Properties
 
-val keystoreProperties = Properties()
 val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
-    keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 plugins {
@@ -39,26 +40,22 @@ android {
     signingConfigs {
         create("release") {
             if (keystorePropertiesFile.exists()) {
-                val storeFilePath = keystoreProperties["storeFile"] as String?
-                if (storeFilePath != null) {
-                    storeFile = rootProject.file(storeFilePath)
-                }
-                storePassword = keystoreProperties["storePassword"] as String? ?: ""
-                keyAlias = keystoreProperties["keyAlias"] as String? ?: ""
-                keyPassword = keystoreProperties["keyPassword"] as String? ?: ""
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
             }
         }
     }
 
     buildTypes {
-        getByName("release") {
+        release {
             signingConfig = signingConfigs.getByName("release")
-            // Para evitar crashes por shrink con ML Kit / CameraX en esta fase:
             isMinifyEnabled = false
             isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro",
+                "proguard-rules.pro"
             )
         }
         getByName("debug") {
