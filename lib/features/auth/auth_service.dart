@@ -44,11 +44,28 @@ class AuthService {
         password: trimmedPassword,
       );
 
-      final uid = credential.user!.uid;
-      final snapshot =
-          await _firestore.collection('UsuariosAutorizados').doc(uid).get();
+      final user = credential.user;
+      if (user == null) {
+        throw const AuthException('No se pudo iniciar sesión.');
+      }
 
-      if (!snapshot.exists) {
+      DocumentSnapshot<Map<String, dynamic>>? snapshot;
+      try {
+        snapshot = await _firestore
+            .collection('UsuariosAutorizados')
+            .doc(user.uid)
+            .get();
+      } on FirebaseException catch (e) {
+        if (e.code != 'permission-denied') {
+          rethrow;
+        }
+      }
+
+      if (snapshot == null || !snapshot.exists) {
+        snapshot = await _findAuthorizedUserByEmail(trimmedCorreo);
+      }
+
+      if (snapshot == null || !snapshot.exists) {
         await _firebaseAuth.signOut();
         throw const AuthException('Usuario no encontrado en Firestore.');
       }
@@ -82,6 +99,31 @@ class AuthService {
     } catch (e) {
       throw AuthException('Error inesperado: $e');
     }
+  }
+
+  Future<DocumentSnapshot<Map<String, dynamic>>?> _findAuthorizedUserByEmail(
+    String correo,
+  ) async {
+    final collection = _firestore.collection('UsuariosAutorizados');
+
+    final docByEmail = await collection.doc(correo).get();
+    if (docByEmail.exists) {
+      return docByEmail;
+    }
+
+    final lowerQuery =
+        await collection.where('correo', isEqualTo: correo).limit(1).get();
+    if (lowerQuery.docs.isNotEmpty) {
+      return lowerQuery.docs.first;
+    }
+
+    final capitalizedQuery =
+        await collection.where('Correo', isEqualTo: correo).limit(1).get();
+    if (capitalizedQuery.docs.isNotEmpty) {
+      return capitalizedQuery.docs.first;
+    }
+
+    return null;
   }
 
   Future<void> signOut() async {
