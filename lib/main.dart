@@ -8,10 +8,17 @@ import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (Firebase.apps.isEmpty) {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
+  try {
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+    } else {
+      Firebase.app();
+    }
+  } on FirebaseException catch (error) {
+    if (error.code != 'duplicate-app') rethrow;
+    Firebase.app();
   }
 
   runApp(const ProviderScope(child: SansebasStockApp()));
