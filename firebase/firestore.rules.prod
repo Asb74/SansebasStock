@@ -1,27 +1,14 @@
+// Deploy the secure rules with:
+// firebase deploy --only firestore:rules --rules firebase/firestore.rules.prod
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // --- Autorización por UID (si los docs están por uid) ---
-    match /UsuariosAutorizados/{uid} {
-      // Permite leer/escribir SOLO al propietario autenticado
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-    }
-
-    // --- Alternativa adicional por email en cada documento ---
-    // Si los docs NO están por uid y se consulta por correo, cada documento
-    // debe incluir el campo `correo`. Esta regla permite acceder únicamente
-    // si coincide con el email del usuario autenticado.
     match /UsuariosAutorizados/{docId} {
       allow read: if request.auth != null
                   && request.auth.token.email != null
                   && resource.data.correo == request.auth.token.email;
-      // Opcional: solo admins podrían escribir (ejemplo con custom claims)
-      allow write: if request.auth != null
-                   && request.auth.token.admin == true;
+      allow write: if request.auth != null && request.auth.token.admin == true;
     }
-
-    // Bloqueo por defecto del resto de colecciones
     match /{document=**} {
       allow read, write: if false;
     }

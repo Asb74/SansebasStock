@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) {
@@ -34,8 +35,7 @@ class AuthService {
   final FirebaseAuth _firebaseAuth;
 
   Future<AppUser> signIn(String correo, String password) async {
-    final trimmedCorreo = correo.trim();
-    final normalizedCorreo = trimmedCorreo.toLowerCase();
+    final normalizedCorreo = correo.trim().toLowerCase();
     final trimmedPassword = password.trim();
 
     try {
@@ -47,7 +47,7 @@ class AuthService {
       }
 
       await _firebaseAuth.signInWithEmailAndPassword(
-        email: trimmedCorreo,
+        email: normalizedCorreo,
         password: trimmedPassword,
       );
     } on FirebaseAuthException catch (error) {
@@ -58,9 +58,13 @@ class AuthService {
     }
 
     try {
+      debugPrint(
+        'Consultando UsuariosAutorizados con correo: $normalizedCorreo',
+      );
+
       final querySnapshot = await _firestore
           .collection('UsuariosAutorizados')
-          .where('correo', isEqualTo: trimmedCorreo)
+          .where('correo', isEqualTo: normalizedCorreo)
           .limit(1)
           .get();
 
@@ -87,10 +91,14 @@ class AuthService {
         throw const AuthException('Usuario no habilitado.');
       }
 
+      final firestoreCorreo = data['correo']?.toString();
+      final appUserCorreo =
+          firestoreCorreo != null ? firestoreCorreo.toLowerCase() : normalizedCorreo;
+
       return AppUser(
         id: doc.id,
         nombre: data['Nombre']?.toString() ?? 'Sin nombre',
-        correo: data['correo']?.toString() ?? trimmedCorreo,
+        correo: appUserCorreo,
         valor: isEnabled,
       );
     } on FirebaseException catch (error) {
