@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) {
@@ -22,43 +24,86 @@ class AppUser {
 }
 
 class AuthService {
-  AuthService({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+  AuthService({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? firebaseAuth,
+  })  : _firestore = firestore ?? FirebaseFirestore.instance,
+        _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore;
+  final FirebaseAuth _firebaseAuth;
 
   Future<AppUser> signIn(String correo, String password) async {
     final trimmedCorreo = correo.trim();
-    final querySnapshot = await _firestore
-        .collection('UsuariosAutorizados')
-        .where('correo', isEqualTo: trimmedCorreo)
-        .limit(1)
-        .get();
+    final normalizedCorreo = trimmedCorreo.toLowerCase();
+    final trimmedPassword = password.trim();
 
-    if (querySnapshot.docs.isEmpty) {
+    try {
+      final currentUser = _firebaseAuth.currentUser;
+      final currentEmail = currentUser?.email?.toLowerCase();
+
+      if (currentEmail != null && currentEmail != normalizedCorreo) {
+        await _firebaseAuth.signOut();
+      }
+
+      await _firebaseAuth.signInWithEmailAndPassword(
+        email: trimmedCorreo,
+        password: trimmedPassword,
+      );
+    } on FirebaseAuthException catch (error) {
+      if (error.code == 'user-disabled') {
+        throw const AuthException('Usuario no habilitado.');
+      }
       throw const AuthException('Correo o contraseña incorrectos.');
     }
 
-    final doc = querySnapshot.docs.first;
-    final data = doc.data();
+    try {
+      final querySnapshot = await _firestore
+          .collection('UsuariosAutorizados')
+          .where('correo', isEqualTo: trimmedCorreo)
+          .limit(1)
+          .get();
 
-    final storedPassword = data['Contraseña']?.toString();
-    final isEnabled = data['Valor'] == true;
+      if (querySnapshot.docs.isEmpty) {
+        await _firebaseAuth.signOut();
+        throw const AuthException('Correo o contraseña incorrectos.');
+      }
 
-    if (storedPassword != password.trim()) {
-      throw const AuthException('Correo o contraseña incorrectos.');
+      final doc = querySnapshot.docs.first;
+      final data = doc.data();
+
+      final storedPassword = data['Contraseña']?.toString();
+      final isEnabled = data['Valor'] == true;
+
+      if (storedPassword != null &&
+          storedPassword.isNotEmpty &&
+          storedPassword != trimmedPassword) {
+        await _firebaseAuth.signOut();
+        throw const AuthException('Correo o contraseña incorrectos.');
+      }
+
+      if (!isEnabled) {
+        await _firebaseAuth.signOut();
+        throw const AuthException('Usuario no habilitado.');
+      }
+
+      return AppUser(
+        id: doc.id,
+        nombre: data['Nombre']?.toString() ?? 'Sin nombre',
+        correo: data['correo']?.toString() ?? trimmedCorreo,
+        valor: isEnabled,
+      );
+    } on FirebaseException catch (error) {
+      await _firebaseAuth.signOut();
+      if (error.code == 'permission-denied') {
+        throw const AuthException('No tienes permisos para iniciar sesión.');
+      }
+      throw const AuthException('Ha ocurrido un error inesperado.');
     }
+  }
 
-    if (!isEnabled) {
-      throw const AuthException('Usuario no habilitado.');
-    }
-
-    return AppUser(
-      id: doc.id,
-      nombre: data['Nombre']?.toString() ?? 'Sin nombre',
-      correo: data['correo']?.toString() ?? trimmedCorreo,
-      valor: isEnabled,
-    );
+  Future<void> signOut() async {
+    await _firebaseAuth.signOut();
   }
 
   Future<AppUser> signInWithCollection(String correo, String password) {
