@@ -1,19 +1,25 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../../services/stock_service.dart';
 import '../qr/qr_parser.dart';
 
-class QrScanScreen extends StatefulWidget {
+class QrScanScreen extends ConsumerStatefulWidget {
   const QrScanScreen({super.key});
 
   @override
-  State<QrScanScreen> createState() => _QrScanScreenState();
+  ConsumerState<QrScanScreen> createState() => _QrScanScreenState();
 }
 
-class _QrScanScreenState extends State<QrScanScreen> {
+class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   final MobileScannerController _controller = MobileScannerController();
   bool _busy = false;
   DateTime? _lastDetection;
+
+  static const bool _mantenerUbicacionTrasOcupar = true;
+  static const Duration _detectionCooldown = Duration(milliseconds: 1200);
 
   @override
   void dispose() {
@@ -22,39 +28,35 @@ class _QrScanScreenState extends State<QrScanScreen> {
   }
 
   Future<void> _handle(String raw) async {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+
     setState(() {
       _busy = true;
     });
 
     try {
-      final pallet = parseQr(raw);
-      _lastDetection = DateTime.now();
-
-      if (!mounted) {
-        return;
+      if (_isUbicacionQr(trimmed)) {
+        await _onScanUbicacion(trimmed);
+      } else if (_isPaletQr(trimmed)) {
+        await _onScanPalet(trimmed);
+      } else {
+        throw const FormatException('QR no reconocido.');
       }
 
-      await showDialog<void>(
-        context: context,
-        builder: (context) {
-          return AlertDialog(
-            title: const Text('Palet detectado'),
-            content: Text(
-              'ID: ${pallet.palletId}\nLíneas: ${pallet.extras.lineas.length}',
-            ),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Aceptar'),
-              ),
-            ],
-          );
-        },
-      );
+      _lastDetection = DateTime.now();
     } on FormatException catch (e) {
       _showError(e.message);
-    } catch (_) {
-      _showError('No se pudo interpretar el código.');
+    } on FirebaseException {
+      _showError('No se pudo completar la operación.');
+    } on Exception catch (e) {
+      if (e.toString().contains(ubicacionRequeridaMessage)) {
+        _showError(ubicacionRequeridaMessage);
+      } else {
+        _showError('No se pudo completar la operación.');
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -64,6 +66,92 @@ class _QrScanScreenState extends State<QrScanScreen> {
     }
   }
 
+  Future<void> _onScanUbicacion(String raw) async {
+    final ubicacion = parseUbicacionQr(raw);
+    ref.read(ubicacionPendienteProvider.notifier).state = ubicacion;
+
+    if (!mounted) {
+      return;
+    }
+
+    _showMessage('Ubicación guardada: ${ubicacion.etiqueta}');
+  }
+
+  Future<void> _onScanPalet(String raw) async {
+    final stockService = ref.read(stockServiceProvider);
+    final ubicacionPendiente = ref.read(ubicacionPendienteProvider);
+
+    await stockService.procesarLecturaPalet(
+      rawPaletQr: raw,
+      ubicacionPendiente: ubicacionPendiente,
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    final result = stockService.lastResult;
+    if (result == null) {
+      _showMessage('Operación completada.');
+      return;
+    }
+
+    switch (result.action) {
+      case StockProcessAction.creadoOcupado:
+        final ubicacion = result.ubicacion;
+        final posicion = result.posicion;
+        if (ubicacion != null && posicion != null) {
+          _showMessage(
+            'Palet creado y ocupado en ${ubicacion.etiqueta} (Posición $posicion)',
+          );
+        } else {
+          _showMessage('Palet creado y ocupado.');
+        }
+        break;
+      case StockProcessAction.liberado:
+        _showMessage('Palet liberado');
+        break;
+      case StockProcessAction.reubicado:
+        final ubicacion = result.ubicacion;
+        final posicion = result.posicion;
+        if (ubicacion != null && posicion != null) {
+          _showMessage(
+            'Palet reubicado en ${ubicacion.etiqueta} (Posición $posicion)',
+          );
+        } else {
+          _showMessage('Palet reubicado.');
+        }
+        break;
+    }
+
+    if (!_mantenerUbicacionTrasOcupar &&
+        (result.action == StockProcessAction.creadoOcupado ||
+            result.action == StockProcessAction.reubicado)) {
+      ref.read(ubicacionPendienteProvider.notifier).state = null;
+    }
+  }
+
+  bool _isUbicacionQr(String value) {
+    final upper = value.toUpperCase();
+    return upper.contains('CAMARA=') &&
+        upper.contains('ESTANTERIA=') &&
+        upper.contains('NIVEL=');
+  }
+
+  bool _isPaletQr(String value) {
+    return value.toUpperCase().startsWith('P=');
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
   void _showError(String message) {
     if (!mounted) {
       return;
@@ -71,9 +159,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
 
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(message)),
-      );
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -94,7 +180,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
 
               final now = DateTime.now();
               if (_lastDetection != null &&
-                  now.difference(_lastDetection!).inMilliseconds < 1200) {
+                  now.difference(_lastDetection!) < _detectionCooldown) {
                 return;
               }
 
@@ -122,7 +208,7 @@ class _QrScanScreenState extends State<QrScanScreen> {
                 borderRadius: BorderRadius.circular(16),
               ),
               child: const Text(
-                'Apunta al código QR del palet',
+                'Escanea primero la ubicación y después el palet.',
                 style: TextStyle(color: Colors.white, fontSize: 16),
                 textAlign: TextAlign.center,
               ),
