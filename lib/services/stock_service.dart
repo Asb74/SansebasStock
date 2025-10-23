@@ -7,6 +7,9 @@ import '../features/qr/qr_parser.dart';
 const String ubicacionRequeridaMessage =
     'Ubicación requerida: escanea QR de cámara/estantería/nivel.';
 
+const kOcupado = 'OCUPADO';
+const kLibre = 'LIBRE';
+
 final ubicacionPendienteProvider = StateProvider<Ubicacion?>((ref) => null);
 
 final stockServiceProvider = Provider<StockService>((ref) {
@@ -50,101 +53,92 @@ class StockService {
     final uid = _auth.currentUser?.uid;
     StockProcessResult? operationResult;
 
-    await _db.runTransaction((tx) async {
-      final docSnapshot = await tx.get(docRef);
-      final baseData = _buildBaseData(palet);
-      final serverTimestamp = FieldValue.serverTimestamp();
+    final docSnapshot = await docRef.get();
+    final baseData = _buildBaseData(palet);
+    final serverTimestamp = FieldValue.serverTimestamp();
 
-      if (!docSnapshot.exists) {
-        final ubicacion =
-            ubicacionPendiente ?? (throw Exception(ubicacionRequeridaMessage));
-        final nextPos = await _getNextPosInTx(tx: tx, ubic: ubicacion);
-        final payload = <String, dynamic>{
-          ...baseData,
-          'CAMARA': ubicacion.camara,
-          'ESTANTERIA': ubicacion.estanteria,
-          'NIVEL': ubicacion.nivel,
-          'POSICION': nextPos,
-          'HUECO': 'Ocupado',
-          'createdAt': serverTimestamp,
-          'updatedAt': serverTimestamp,
-          'createdBy': uid,
-          'updatedBy': uid,
-        };
-        tx.set(docRef, payload);
-        operationResult = StockProcessResult(
-          action: StockProcessAction.creadoOcupado,
-          ubicacion: ubicacion,
-          posicion: nextPos,
-        );
-        // TODO: Registrar auditoría de ocupaciones/liberaciones (usuario, dispositivo).
-        return;
-      }
-
-      final data = docSnapshot.data()!;
-      final currentHueco = data['HUECO']?.toString().toLowerCase();
-
-      if (currentHueco != 'libre') {
-        final update = <String, dynamic>{
-          'HUECO': 'Libre',
-          'updatedAt': serverTimestamp,
-          'updatedBy': uid,
-        };
-        tx.update(docRef, update);
-        operationResult = const StockProcessResult(
-          action: StockProcessAction.liberado,
-        );
-        return;
-      }
-
+    if (!docSnapshot.exists) {
       final ubicacion =
           ubicacionPendiente ?? (throw Exception(ubicacionRequeridaMessage));
-      final nextPos = await _getNextPosInTx(tx: tx, ubic: ubicacion);
-      final updateData = <String, dynamic>{
+      final nextPos = await _getNextPos(ubicacion);
+      final payload = <String, dynamic>{
         ...baseData,
         'CAMARA': ubicacion.camara,
         'ESTANTERIA': ubicacion.estanteria,
         'NIVEL': ubicacion.nivel,
         'POSICION': nextPos,
-        'HUECO': 'Ocupado',
+        'HUECO': kOcupado,
+        'createdAt': serverTimestamp,
         'updatedAt': serverTimestamp,
+        'createdBy': uid,
         'updatedBy': uid,
       };
-      tx.update(docRef, updateData);
+      await docRef.set(payload, SetOptions(merge: true));
       operationResult = StockProcessResult(
-        action: StockProcessAction.reubicado,
+        action: StockProcessAction.creadoOcupado,
         ubicacion: ubicacion,
         posicion: nextPos,
       );
-    });
+      // TODO: Registrar auditoría de ocupaciones/liberaciones (usuario, dispositivo).
+      _lastResult = operationResult;
+      return;
+    }
+
+    final data = docSnapshot.data()!;
+    final currentHueco = data['HUECO']?.toString().toUpperCase();
+
+    if (currentHueco != kLibre) {
+      final update = <String, dynamic>{
+        'HUECO': kLibre,
+        'updatedAt': serverTimestamp,
+        'updatedBy': uid,
+      };
+      await docRef.update(update);
+      operationResult = const StockProcessResult(
+        action: StockProcessAction.liberado,
+      );
+      _lastResult = operationResult;
+      return;
+    }
+
+    final ubicacion =
+        ubicacionPendiente ?? (throw Exception(ubicacionRequeridaMessage));
+    final nextPos = await _getNextPos(ubicacion);
+    final updateData = <String, dynamic>{
+      ...baseData,
+      'CAMARA': ubicacion.camara,
+      'ESTANTERIA': ubicacion.estanteria,
+      'NIVEL': ubicacion.nivel,
+      'POSICION': nextPos,
+      'HUECO': kOcupado,
+      'updatedAt': serverTimestamp,
+      'updatedBy': uid,
+    };
+    await docRef.update(updateData);
+    operationResult = StockProcessResult(
+      action: StockProcessAction.reubicado,
+      ubicacion: ubicacion,
+      posicion: nextPos,
+    );
 
     _lastResult = operationResult;
   }
 
-  Future<int> _getNextPosInTx({
-    required Transaction tx,
-    required Ubicacion ubic,
-  }) async {
-    final counterRef = _db
-        .collection('StockCounters')
-        .doc('${ubic.camara}_${ubic.estanteria}_${ubic.nivel}');
-    final counterSnapshot = await tx.get(counterRef);
+  Future<int> _getNextPos(Ubicacion ubicacion) async {
+    final query = _db
+        .collection('Stock')
+        .where('CAMARA', isEqualTo: ubicacion.camara)
+        .where('ESTANTERIA', isEqualTo: ubicacion.estanteria)
+        .where('NIVEL', isEqualTo: ubicacion.nivel)
+        .where('HUECO', isEqualTo: kOcupado)
+        .orderBy('POSICION', descending: true)
+        .limit(1);
 
-    int? maxPos;
-    final counterData = counterSnapshot.data();
-    if (counterData != null) {
-      final value = counterData['maxPos'];
-      if (value is int) {
-        maxPos = value;
-      } else if (value is num) {
-        maxPos = value.toInt();
-      }
-    } else {
-      maxPos = await _fetchExistingMaxPos(ubic);
-    }
+    final qSnap = await query.get();
+    final nextPos = qSnap.docs.isEmpty
+        ? 1
+        : (qSnap.docs.first.data()['POSICION'] as int) + 1;
 
-    final nextPos = (maxPos ?? 0) + 1;
-    tx.set(counterRef, {'maxPos': nextPos}, SetOptions(merge: true));
     return nextPos;
   }
 
@@ -154,31 +148,5 @@ class StockService {
       'LINEAS_QR': palet.lineas,
       ...palet.campos,
     };
-  }
-
-  Future<int?> _fetchExistingMaxPos(Ubicacion ubic) async {
-    final query = _db
-        .collection('Stock')
-        .where('CAMARA', isEqualTo: ubic.camara)
-        .where('ESTANTERIA', isEqualTo: ubic.estanteria)
-        .where('NIVEL', isEqualTo: ubic.nivel)
-        .where('HUECO', isEqualTo: 'Ocupado')
-        .orderBy('POSICION', descending: true)
-        .limit(1);
-    // Nota: es posible que Firestore solicite crear un índice compuesto para
-    // (CAMARA, ESTANTERIA, NIVEL) con orderBy en POSICION descendente.
-    final snapshot = await query.get();
-    if (snapshot.docs.isEmpty) {
-      return null;
-    }
-    final data = snapshot.docs.first.data();
-    final pos = data['POSICION'];
-    if (pos is int) {
-      return pos;
-    }
-    if (pos is num) {
-      return pos.toInt();
-    }
-    return null;
   }
 }
