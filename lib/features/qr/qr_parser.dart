@@ -15,7 +15,7 @@ class Ubicacion {
 }
 
 class PaletQr {
-  const PaletQr({
+  PaletQr({
     required this.paletId,
     required this.lineas,
     required Map<String, String> campos,

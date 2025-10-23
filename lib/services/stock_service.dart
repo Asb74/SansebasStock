@@ -125,6 +125,38 @@ class StockService {
     required Transaction tx,
     required Ubicacion ubic,
   }) async {
+    final counterRef = _db
+        .collection('StockCounters')
+        .doc('${ubic.camara}_${ubic.estanteria}_${ubic.nivel}');
+    final counterSnapshot = await tx.get(counterRef);
+
+    int? maxPos;
+    final counterData = counterSnapshot.data();
+    if (counterData != null) {
+      final value = counterData['maxPos'];
+      if (value is int) {
+        maxPos = value;
+      } else if (value is num) {
+        maxPos = value.toInt();
+      }
+    } else {
+      maxPos = await _fetchExistingMaxPos(ubic);
+    }
+
+    final nextPos = (maxPos ?? 0) + 1;
+    tx.set(counterRef, {'maxPos': nextPos}, SetOptions(merge: true));
+    return nextPos;
+  }
+
+  Map<String, dynamic> _buildBaseData(PaletQr palet) {
+    return <String, dynamic>{
+      'P': palet.paletId,
+      'LINEAS_QR': palet.lineas,
+      ...palet.campos,
+    };
+  }
+
+  Future<int?> _fetchExistingMaxPos(Ubicacion ubic) async {
     final query = _db
         .collection('Stock')
         .where('CAMARA', isEqualTo: ubic.camara)
@@ -135,25 +167,18 @@ class StockService {
         .limit(1);
     // Nota: es posible que Firestore solicite crear un índice compuesto para
     // (CAMARA, ESTANTERIA, NIVEL) con orderBy en POSICION descendente.
-    final snapshot = await tx.get(query);
-    int? maxPos;
-    if (snapshot.docs.isNotEmpty) {
-      final data = snapshot.docs.first.data();
-      final pos = data['POSICION'];
-      if (pos is int) {
-        maxPos = pos;
-      } else if (pos is num) {
-        maxPos = pos.toInt();
-      }
+    final snapshot = await query.get();
+    if (snapshot.docs.isEmpty) {
+      return null;
     }
-    return (maxPos ?? 0) + 1;
-  }
-
-  Map<String, dynamic> _buildBaseData(PaletQr palet) {
-    return <String, dynamic>{
-      'P': palet.paletId,
-      'LINEAS_QR': palet.lineas,
-      ...palet.campos,
-    };
+    final data = snapshot.docs.first.data();
+    final pos = data['POSICION'];
+    if (pos is int) {
+      return pos;
+    }
+    if (pos is num) {
+      return pos.toInt();
+    }
+    return null;
   }
 }
