@@ -1,198 +1,295 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../features/qr/qr_parser.dart';
+class Result {
+  final bool ok;
+  final String? errorCode;
+  final String? message;
+  final Map<String, dynamic>? data;
 
-const String ubicacionRequeridaMessage =
-    'Ubicación requerida: escanea QR de cámara/estantería/nivel.';
+  const Result.ok({this.data})
+      : ok = true,
+        errorCode = null,
+        message = null;
 
-const kOcupado = 'Ocupado';
-const kLibre = 'Libre';
-
-final ubicacionPendienteProvider = StateProvider<Ubicacion?>((ref) => null);
-
-final stockServiceProvider = Provider<StockService>((ref) {
-  final firestore = FirebaseFirestore.instance;
-  final auth = FirebaseAuth.instance;
-  return StockService(firestore, auth);
-});
-
-enum StockProcessAction { creadoOcupado, liberado, reubicado }
-
-class StockProcessResult {
-  const StockProcessResult({
-    required this.action,
-    this.ubicacion,
-    this.posicion,
-  });
-
-  final StockProcessAction action;
-  final Ubicacion? ubicacion;
-  final int? posicion;
+  const Result.err(this.errorCode, this.message)
+      : ok = false,
+        data = null;
 }
 
 class StockService {
-  StockService(FirebaseFirestore db, FirebaseAuth auth)
-      : _db = db,
-        _auth = auth;
+  StockService({FirebaseFirestore? firestore})
+      : _db = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
-  final FirebaseAuth _auth;
 
-  StockProcessResult? _lastResult;
-
-  StockProcessResult? get lastResult => _lastResult;
-
-  Future<void> procesarLecturaPalet({
-    required String rawPaletQr,
-    Ubicacion? ubicacionPendiente,
+  /// Procesa la lógica de entrada, salida y reubicación de un palet.
+  Future<Result> procesarPalet({
+    required Map<String, String> camposQR,
+    Map<String, String>? ubicacionQR,
   }) async {
     try {
-      final palet = parsePaletQr(rawPaletQr);
-      final docRef = _db.collection('Stock').doc(palet.docId);
-      final uid = _auth.currentUser?.uid;
-      StockProcessResult? operationResult;
+      debugPrint('Procesar palet con camposQR=$camposQR ubicacionQR=$ubicacionQR');
 
-      final docSnapshot = await docRef.get();
-      final baseData = _buildBaseData(palet);
-      final serverTimestamp = FieldValue.serverTimestamp();
+      final Map<String, dynamic> datosPalet = _normalizarCamposQR(camposQR);
+      final String? p = datosPalet['P'] as String?;
+      final int linea = (datosPalet['LINEA'] as int?) ?? 0;
 
-      if (!docSnapshot.exists) {
-        final ubicacion =
-            ubicacionPendiente ?? (throw Exception(ubicacionRequeridaMessage));
-        final nextPos = await _getNextPos(ubicacion);
-        final payload = <String, dynamic>{
-          ...baseData,
-          ..._buildUbicacionData(ubicacion, nextPos),
-          'HUECO': kOcupado,
-          'createdAt': serverTimestamp,
-          'updatedAt': serverTimestamp,
-          'createdBy': uid,
-          'updatedBy': uid,
-        };
-        await docRef.set(payload, SetOptions(merge: true));
-        operationResult = StockProcessResult(
-          action: StockProcessAction.creadoOcupado,
-          ubicacion: ubicacion,
-          posicion: nextPos,
+      if (p == null || p.isEmpty || linea <= 0) {
+        return const Result.err(
+          'bad_qr',
+          'El QR del palet no incluye valores válidos para LINEA y P.',
         );
-        _lastResult = operationResult;
-        return;
       }
 
-      final data = docSnapshot.data()!;
-      final currentHueco = data['HUECO']?.toString().toUpperCase();
+      final String docId = '$linea$p';
+      final DocumentReference<Map<String, dynamic>> docRef =
+          _db.collection('Stock').doc(docId);
 
-      if (currentHueco != kLibre.toUpperCase()) {
-        final update = <String, dynamic>{
-          'HUECO': kLibre,
-          'updatedAt': serverTimestamp,
-          'updatedBy': uid,
-        };
-        await docRef.set(update, SetOptions(merge: true));
-        operationResult = const StockProcessResult(
-          action: StockProcessAction.liberado,
+      final _Ubicacion? ubicacion = _normalizarUbicacion(ubicacionQR);
+
+      debugPrint('Comprobando documento Stock/$docId');
+      final DocumentSnapshot<Map<String, dynamic>> snapshot = await docRef.get();
+
+      if (!snapshot.exists) {
+        debugPrint('Documento no existe. Se trata de una entrada.');
+        if (ubicacion == null) {
+          return const Result.err(
+            'requires_location',
+            'Escanea primero el QR de la cámara para ubicar el palet.',
+          );
+        }
+
+        final int siguientePosicion = await _siguientePosicion(
+          camara: ubicacion.camara,
+          estanteria: ubicacion.estanteria,
+          nivel: ubicacion.nivel,
         );
-        _lastResult = operationResult;
-        return;
+        debugPrint(
+          'Entrada en ${ubicacion.camara}/${ubicacion.estanteria}/${ubicacion.nivel} -> POSICION $siguientePosicion',
+        );
+
+        await _db.runTransaction((transaction) async {
+          transaction.set(docRef, {
+            ...datosPalet,
+            'CAMARA': ubicacion.camara,
+            'ESTANTERIA': ubicacion.estanteria,
+            'NIVEL': ubicacion.nivel,
+            'POSICION': siguientePosicion,
+            'HUECO': 'Ocupado',
+          });
+        });
+
+        return Result.ok(
+          data: {
+            'accion': 'entrada',
+            'docId': docId,
+            'CAMARA': ubicacion.camara,
+            'ESTANTERIA': ubicacion.estanteria,
+            'NIVEL': ubicacion.nivel,
+            'POSICION': siguientePosicion,
+          },
+        );
       }
 
-      final ubicacion =
-          ubicacionPendiente ?? (throw Exception(ubicacionRequeridaMessage));
-      final nextPos = await _getNextPos(ubicacion);
-      final updateData = <String, dynamic>{
-        ...baseData,
-        ..._buildUbicacionData(ubicacion, nextPos),
-        'HUECO': kOcupado,
-        'updatedAt': serverTimestamp,
-        'updatedBy': uid,
-      };
-      await docRef.set(updateData, SetOptions(merge: true));
-      operationResult = StockProcessResult(
-        action: StockProcessAction.reubicado,
-        ubicacion: ubicacion,
-        posicion: nextPos,
+      final Map<String, dynamic> datosActuales = snapshot.data() ?? <String, dynamic>{};
+      final String huecoActual =
+          (datosActuales['HUECO']?.toString().toLowerCase() ?? 'ocupado');
+
+      if (huecoActual == 'ocupado') {
+        debugPrint('Documento existente con HUECO=Ocupado. Se procesa salida.');
+        await _db.runTransaction((transaction) async {
+          transaction.update(docRef, {'HUECO': 'Libre'});
+        });
+
+        return Result.ok(
+          data: {
+            'accion': 'salida',
+            'docId': docId,
+          },
+        );
+      }
+
+      debugPrint('Documento existente con HUECO=Libre. Se requiere reubicación.');
+      if (ubicacion == null) {
+        return const Result.err(
+          'requires_location',
+          'El palet está Libre. Escanea el QR de ubicación para reubicarlo.',
+        );
+      }
+
+      final int siguientePosicion = await _siguientePosicion(
+        camara: ubicacion.camara,
+        estanteria: ubicacion.estanteria,
+        nivel: ubicacion.nivel,
+      );
+      debugPrint(
+        'Reubicación a ${ubicacion.camara}/${ubicacion.estanteria}/${ubicacion.nivel} -> POSICION $siguientePosicion',
       );
 
-      _lastResult = operationResult;
+      await _db.runTransaction((transaction) async {
+        transaction.update(docRef, {
+          ...datosPalet,
+          'CAMARA': ubicacion.camara,
+          'ESTANTERIA': ubicacion.estanteria,
+          'NIVEL': ubicacion.nivel,
+          'POSICION': siguientePosicion,
+          'HUECO': 'Ocupado',
+        });
+      });
+
+      return Result.ok(
+        data: {
+          'accion': 'reubicacion',
+          'docId': docId,
+          'CAMARA': ubicacion.camara,
+          'ESTANTERIA': ubicacion.estanteria,
+          'NIVEL': ubicacion.nivel,
+          'POSICION': siguientePosicion,
+        },
+      );
     } on FirebaseException catch (e, st) {
-      debugPrint('🔥 Firestore Error: ${e.code} -> ${e.message}');
-      debugPrintStack(label: '🔥 Firestore stack', stackTrace: st);
-      rethrow;
+      debugPrint('Firestore error [${e.code}]: ${e.message}');
+      debugPrintStack(label: 'Firestore stack', stackTrace: st);
+      final String friendly = _friendlyMessage(e.code, e.message);
+      return Result.err(e.code, friendly);
     } catch (e, st) {
-      debugPrint('⚠️ Error inesperado: $e');
-      debugPrintStack(label: '⚠️ Stack', stackTrace: st);
-      rethrow;
+      debugPrint('Error inesperado al procesar palet: $e');
+      debugPrintStack(label: 'Stack', stackTrace: st);
+      return const Result.err('unknown', 'No se pudo completar la operación.');
     }
   }
 
-  Future<int> _getNextPos(Ubicacion ubicacion) async {
-    final nivel = _parseIntValue(ubicacion.nivel, fieldName: 'NIVEL');
-    final query = _db
+  Future<int> _siguientePosicion({
+    required String camara,
+    required String estanteria,
+    required int nivel,
+  }) async {
+    final QuerySnapshot<Map<String, dynamic>> q = await _db
         .collection('Stock')
-        .where('CAMARA', isEqualTo: ubicacion.camara)
-        .where('ESTANTERIA', isEqualTo: ubicacion.estanteria)
+        .where('CAMARA', isEqualTo: camara)
+        .where('ESTANTERIA', isEqualTo: estanteria)
         .where('NIVEL', isEqualTo: nivel)
-        .where('HUECO', isEqualTo: kOcupado)
+        .where('HUECO', isEqualTo: 'Ocupado')
         .orderBy('POSICION', descending: true)
-        .limit(1);
+        .limit(1)
+        .get();
 
-    final qSnap = await query.get();
-    if (qSnap.docs.isEmpty) {
+    if (q.docs.isEmpty) {
       return 1;
     }
 
-    final rawPos = qSnap.docs.first.data()['POSICION'];
-    final currentPos = rawPos is int
-        ? rawPos
-        : int.tryParse(rawPos.toString()) ??
-            (throw const FormatException('POSICION almacenada no válida.'));
+    final Map<String, dynamic> lastData = q.docs.first.data();
+    final dynamic rawPosicion = lastData['POSICION'];
+    final int posicion = rawPosicion is int
+        ? rawPosicion
+        : int.tryParse(rawPosicion?.toString() ?? '') ?? 0;
 
-    return currentPos + 1;
+    return posicion <= 0 ? 1 : posicion + 1;
   }
 
-  Map<String, dynamic> _buildBaseData(PaletQr palet) {
-    final data = <String, dynamic>{
-      'P': palet.paletId,
-      'LINEAS_QR': palet.lineas,
-    };
+  Map<String, dynamic> _normalizarCamposQR(Map<String, String> campos) {
+    final Map<String, dynamic> normalizados = <String, dynamic>{};
 
-    palet.campos.forEach((key, value) {
-      switch (key) {
+    campos.forEach((key, value) {
+      final String campo = key.trim();
+      if (campo.isEmpty) {
+        return;
+      }
+      final String valor = value.trim();
+      switch (campo) {
+        case 'LINEA':
         case 'CAJAS':
         case 'NETO':
-        case 'LINEA':
-          data[key] = _parseIntValue(value, fieldName: key);
+        case 'NIVEL':
+        case 'POSICION':
+          normalizados[campo] = _intValue(valor);
           break;
         case 'VIDA':
-          data[key] = value;
+          normalizados[campo] = valor;
           break;
         default:
-          data[key] = value;
+          if (campo == 'P') {
+            final String? p = _stringValue(valor);
+            if (p != null) {
+              normalizados[campo] = p;
+            }
+          } else if (valor.isNotEmpty) {
+            normalizados[campo] = valor;
+          }
       }
     });
 
-    return data;
-  }
+    normalizados['LINEA'] = _intValue(campos['LINEA']);
+    normalizados['CAJAS'] = _intValue(campos['CAJAS']);
+    normalizados['NETO'] = _intValue(campos['NETO']);
+    normalizados['NIVEL'] = _intValue(campos['NIVEL']);
+    normalizados['POSICION'] = _intValue(campos['POSICION']);
+    normalizados['VIDA'] = _stringValue(campos['VIDA']) ?? '';
 
-  Map<String, dynamic> _buildUbicacionData(Ubicacion ubicacion, int posicion) {
-    final nivel = _parseIntValue(ubicacion.nivel, fieldName: 'NIVEL');
-    return <String, dynamic>{
-      'CAMARA': ubicacion.camara,
-      'ESTANTERIA': ubicacion.estanteria,
-      'NIVEL': nivel,
-      'POSICION': posicion,
-    };
-  }
-
-  int _parseIntValue(String rawValue, {required String fieldName}) {
-    final normalized = rawValue.trim();
-    final parsed = int.tryParse(normalized);
-    if (parsed == null) {
-      throw FormatException('El campo $fieldName requiere un entero. Valor: "$rawValue"');
+    final String? p = _stringValue(campos['P']);
+    if (p != null) {
+      normalizados['P'] = p;
     }
-    return parsed;
+
+    return normalizados;
   }
+
+  _Ubicacion? _normalizarUbicacion(Map<String, String>? ubicacionQR) {
+    if (ubicacionQR == null) {
+      return null;
+    }
+    final String? camara = _stringValue(ubicacionQR['CAMARA']);
+    final String? estanteria = _stringValue(ubicacionQR['ESTANTERIA']);
+    final int nivel = _intValue(ubicacionQR['NIVEL']);
+
+    if (camara == null || estanteria == null || nivel <= 0) {
+      return null;
+    }
+
+    return _Ubicacion(
+      camara: camara,
+      estanteria: estanteria,
+      nivel: nivel,
+    );
+  }
+
+  int _intValue(String? value) => int.tryParse(value?.trim() ?? '') ?? 0;
+
+  String? _stringValue(String? value) {
+    final String? trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+    return trimmed;
+  }
+
+  String _friendlyMessage(String code, String? rawMessage) {
+    switch (code) {
+      case 'permission-denied':
+        return 'Permiso denegado por las reglas de seguridad.';
+      case 'unavailable':
+        return 'Servicio no disponible. Revisa tu conexión.';
+      case 'failed-precondition':
+        return 'Operación no válida en el estado actual.';
+      case 'aborted':
+        return 'La transacción fue abortada. Intenta de nuevo.';
+      default:
+        return rawMessage?.isNotEmpty == true
+            ? rawMessage!
+            : 'No se pudo completar la operación.';
+    }
+  }
+}
+
+class _Ubicacion {
+  const _Ubicacion({
+    required this.camara,
+    required this.estanteria,
+    required this.nivel,
+  });
+
+  final String camara;
+  final String estanteria;
+  final int nivel;
 }
