@@ -72,7 +72,7 @@ class StockService {
           'createdBy': uid,
           'updatedBy': uid,
         };
-        await docRef.set(payload, const SetOptions(merge: true));
+        await docRef.set(payload, SetOptions(merge: true));
         operationResult = StockProcessResult(
           action: StockProcessAction.creadoOcupado,
           ubicacion: ubicacion,
@@ -91,7 +91,7 @@ class StockService {
           'updatedAt': serverTimestamp,
           'updatedBy': uid,
         };
-        await docRef.set(update, const SetOptions(merge: true));
+        await docRef.set(update, SetOptions(merge: true));
         operationResult = const StockProcessResult(
           action: StockProcessAction.liberado,
         );
@@ -109,7 +109,7 @@ class StockService {
         'updatedAt': serverTimestamp,
         'updatedBy': uid,
       };
-      await docRef.set(updateData, const SetOptions(merge: true));
+      await docRef.set(updateData, SetOptions(merge: true));
       operationResult = StockProcessResult(
         action: StockProcessAction.reubicado,
         ubicacion: ubicacion,
