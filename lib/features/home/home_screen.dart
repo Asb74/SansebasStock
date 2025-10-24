@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../auth/auth_service.dart';
+import '../settings/settings_home_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -41,11 +42,13 @@ class HomeScreen extends ConsumerWidget {
               onTap: () => _showComingSoon(context),
             ),
             _HomeActionCard(
-              title: 'Ajustes (próx.)',
+              title: 'Ajustes',
               subtitle: 'Preferencias de la aplicación',
               icon: Icons.settings_outlined,
               color: theme.colorScheme.primary,
-              onTap: () => _showComingSoon(context),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SettingsHomeScreen()),
+              ),
             ),
           ],
         ),
