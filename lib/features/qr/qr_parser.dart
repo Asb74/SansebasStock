@@ -14,26 +14,33 @@ class Ubicacion {
   String get etiqueta => 'C$camara-E$estanteria-N$nivel';
 }
 
-class PaletQr {
-  PaletQr({
-    required this.paletId,
+class ParsedQr {
+  ParsedQr({
+    required this.p,
+    required this.linea,
+    required this.cajas,
+    required this.neto,
+    required this.nivel,
+    required this.posicion,
+    required this.vida,
     required this.lineas,
-    required Map<String, String> campos,
-  }) : campos = UnmodifiableMapView<String, String>(
-            Map<String, String>.from(campos),
-          );
+    required Map<String, dynamic> data,
+    required Map<String, String> rawFields,
+  })  : data = UnmodifiableMapView(Map<String, dynamic>.from(data)),
+        rawFields = UnmodifiableMapView(Map<String, String>.from(rawFields));
 
-  final String paletId;
+  final int p;
+  final int linea;
+  final int cajas;
+  final int neto;
+  final int nivel;
+  final int posicion;
+  final String vida;
   final int lineas;
-  final Map<String, String> campos;
+  final Map<String, dynamic> data;
+  final Map<String, String> rawFields;
 
-  String get docId {
-    final linea = campos['LINEA'];
-    if (linea == null || linea.isEmpty) {
-      throw StateError('Campo LINEA ausente para calcular docId.');
-    }
-    return '$linea$paletId';
-  }
+  Map<String, dynamic> toData() => Map<String, dynamic>.from(data);
 }
 
 Ubicacion parseUbicacionQr(String raw) {
@@ -81,32 +88,36 @@ Ubicacion parseUbicacionQr(String raw) {
   return Ubicacion(camara: camara!, estanteria: estanteria!, nivel: nivel!);
 }
 
-PaletQr parsePaletQr(String raw) {
+ParsedQr parseQr(String raw) {
   final trimmed = raw.trim();
   if (trimmed.isEmpty) {
-    throw const FormatException('QR de palet no válido (cabecera).');
+    throw const FormatException('QR de palet no válido.');
   }
 
-  final headerRegExp = RegExp(r'^P=([^^]+)\^#(\d+)(.*)$');
-  final match = headerRegExp.firstMatch(trimmed);
-  if (match == null) {
-    throw const FormatException('QR de palet no válido (cabecera).');
+  final pMatch = RegExp(r'P=([0-9]{10})').firstMatch(trimmed);
+  if (pMatch == null) {
+    throw const FormatException('P no encontrado');
   }
+  final int p = int.parse(pMatch.group(1)!);
 
-  final paletId = match.group(1)!.trim();
-  final lineasStr = match.group(2)!.trim();
-  final lineas = int.tryParse(lineasStr);
-  if (paletId.isEmpty || lineas == null) {
-    throw const FormatException('QR de palet no válido (cabecera).');
+  final lineaMatch = RegExp(r'\|LINEA=(\d+)(?:\||$)').firstMatch('$trimmed|');
+  if (lineaMatch == null) {
+    throw const FormatException('LINEA no encontrada');
   }
+  final int linea = int.parse(lineaMatch.group(1)!);
 
-  final body = (match.group(3) ?? '').replaceAll('^#', '|');
-  final campos = <String, String>{};
+  final lineasMatch = RegExp(r'\^#(\d+)').firstMatch(trimmed);
+  final int lineas =
+      lineasMatch != null ? int.tryParse(lineasMatch.group(1)!.trim()) ?? 0 : 0;
 
-  final tokens = body.split('|');
+  final normalized = trimmed.replaceAll('^#', '|');
+  final tokens = normalized.split('|');
+
+  final Map<String, String> rawFields = <String, String>{};
+
   for (final token in tokens) {
     final trimmedToken = token.trim();
-    if (trimmedToken.isEmpty) {
+    if (trimmedToken.isEmpty || trimmedToken == '#') {
       continue;
     }
 
@@ -115,41 +126,72 @@ PaletQr parsePaletQr(String raw) {
       continue;
     }
 
-    final rawKey =
+    final key =
         trimmedToken.substring(0, separatorIndex).trim().toUpperCase();
-    final key = _normalizePaletKey(rawKey);
     final value = trimmedToken.substring(separatorIndex + 1).trim();
 
-    if (key.isEmpty) {
+    if (key.isEmpty || value.isEmpty) {
       continue;
     }
 
-    campos[key] = value;
+    rawFields[key] = value;
   }
 
-  if (!campos.containsKey('LINEA') || campos['LINEA']!.isEmpty) {
-    throw const FormatException('QR de palet no válido (falta LINEA).');
-  }
+  rawFields['P'] = p.toString();
+  rawFields['LINEA'] = linea.toString();
 
-  return PaletQr(paletId: paletId, lineas: lineas, campos: campos);
-}
+  int _intField(String? value) => int.tryParse(value?.trim() ?? '') ?? 0;
+  String _stringField(String? value) => value?.trim() ?? '';
 
-String _normalizePaletKey(String key) {
-  switch (key) {
-    case 'LIN':
-      return 'LINEA';
-    case 'CAL':
-      return 'CALIBRE';
-    case 'CAT':
-      return 'CATEGORIA';
-    default:
-      return key;
-  }
-}
+  final int cajas = _intField(rawFields['CAJAS']);
+  final int neto = _intField(rawFields['NETO']);
+  final int nivel = _intField(rawFields['NIVEL']);
+  final int posicion = _intField(rawFields['POSICION']);
+  final String vida = _stringField(rawFields['VIDA']);
 
-// Devuelve solo los dígitos de una cadena (ej: "2026001331^#1" -> "2026001331").
-String onlyDigits(String? v) {
-  if (v == null) return '';
-  final it = RegExp(r'\d+').allMatches(v);
-  return it.map((m) => m.group(0)!).join();
+  final Map<String, dynamic> data = <String, dynamic>{
+    'P': p,
+    'LINEA': linea,
+    'CAJAS': cajas,
+    'NETO': neto,
+    'NIVEL': nivel,
+    'POSICION': posicion,
+    'VIDA': vida,
+  };
+
+  rawFields.forEach((key, value) {
+    final trimmedValue = value.trim();
+    if (trimmedValue.isEmpty) {
+      return;
+    }
+
+    switch (key) {
+      case 'P':
+      case 'LINEA':
+      case 'CAJAS':
+      case 'NETO':
+      case 'NIVEL':
+      case 'POSICION':
+        data[key] = _intField(trimmedValue);
+        break;
+      case 'VIDA':
+        data[key] = _stringField(trimmedValue);
+        break;
+      default:
+        data[key] = trimmedValue;
+    }
+  });
+
+  return ParsedQr(
+    p: p,
+    linea: linea,
+    cajas: cajas,
+    neto: neto,
+    nivel: nivel,
+    posicion: posicion,
+    vida: vida,
+    lineas: lineas,
+    data: data,
+    rawFields: rawFields,
+  );
 }

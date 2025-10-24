@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:sansebas_stock/features/ops/ops_providers.dart';
+import 'package:sansebas_stock/features/qr/qr_parser.dart';
+import 'package:sansebas_stock/services/stock_service.dart';
 
 class QrScanScreen extends ConsumerStatefulWidget {
   const QrScanScreen({super.key});
@@ -74,65 +76,44 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   }
 
   Future<void> _onScanPalet(String raw) async {
-    final camposQR = _parsePaletQR(raw);
-    if (camposQR.isEmpty) {
-      _showError('QR de palet inválido');
+    ParsedQr parsed;
+    try {
+      parsed = parseQr(raw);
+    } on FormatException catch (e) {
+      _showError(e.message);
       return;
     }
 
     final stockService = ref.read(stockServiceProvider);
     final ubicacionPendiente = ref.read(ubicacionPendienteProvider);
 
-    final result = await stockService.procesarPalet(
-      camposQR: camposQR,
-      ubicacionQR: _ubicacionToServiceMap(ubicacionPendiente),
-    );
+    StockLocation? ubicacion;
+    if (ubicacionPendiente != null) {
+      ubicacion = StockLocation(
+        camara: ubicacionPendiente.camara,
+        estanteria: ubicacionPendiente.estanteria,
+        nivel: ubicacionPendiente.nivel,
+      );
+    }
 
-    if (!result.ok) {
-      if (result.errorCode == 'requires_location') {
+    try {
+      final result = await stockService.procesarPalet(
+        qr: parsed,
+        ubicacion: ubicacion,
+      );
+
+      switch (result.action) {
+        case StockProcessAction.creadoOcupado:
+        case StockProcessAction.reubicado:
+        case StockProcessAction.liberado:
+          await _handleSuccess(result);
+          break;
+      }
+    } on StockProcessException catch (e) {
+      if (e.code == StockProcessException.requiresLocationCode) {
         _showError(ubicacionRequeridaMessage);
       } else {
-        _showError(result.message ?? 'No se pudo completar la operación');
-      }
-      return;
-    }
-
-    final String accion = (result.data?['accion'] as String?)?.toLowerCase() ?? '';
-    final dynamic posicionRaw =
-        result.data?['POSICION'] ?? result.data?['posicion'];
-    final String? posicion = posicionRaw?.toString();
-
-    var shouldClose = false;
-
-    switch (accion) {
-      case 'entrada':
-        if (posicion != null && posicion.isNotEmpty) {
-          _showSuccess('Palet registrado correctamente (posición $posicion)');
-        } else {
-          _showSuccess('Palet registrado correctamente');
-        }
-        shouldClose = true;
-        break;
-      case 'salida':
-        _showSuccess('Palet marcado como Libre');
-        shouldClose = true;
-        break;
-      case 'reubicacion':
-        if (posicion != null && posicion.isNotEmpty) {
-          _showSuccess('Palet reubicado correctamente (posición $posicion)');
-        } else {
-          _showSuccess('Palet reubicado correctamente');
-        }
-        shouldClose = true;
-        break;
-      default:
-        _showSuccess('Operación completada');
-    }
-
-    if (shouldClose) {
-      ref.read(ubicacionPendienteProvider.notifier).state = null;
-      if (context.mounted) {
-        Navigator.of(context).pop();
+        _showError(e.message);
       }
     }
   }
@@ -158,7 +139,7 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
         } else if (key == 'ESTANTERIA') {
           estanteria = value;
         } else if (key == 'NIVEL') {
-          nivel = int.tryParse(value);
+          nivel = int.tryParse(value.trim());
         }
       }
       if (camara != null && estanteria != null && nivel != null) {
@@ -174,23 +155,20 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
     return raw.toUpperCase().contains('P=');
   }
 
-  Map<String, String> _parsePaletQR(String raw) {
-    final map = <String, String>{};
-    for (final part in raw.split('|')) {
-      final kv = part.split('=');
-      if (kv.length == 2) {
-        map[kv[0].trim().toUpperCase()] = kv[1].trim();
-      }
-    }
-    return map;
-  }
+  Future<void> _handleSuccess(StockProcessResult result) async {
+    ref.read(ubicacionPendienteProvider.notifier).state = null;
+    try {
+      await _controller.stop();
+    } catch (_) {}
 
-  Map<String, String>? _ubicacionToServiceMap(Ubicacion? ubicacion) {
-    if (ubicacion == null) {
-      return null;
+    if (!mounted) {
+      return;
     }
-    final rawMap = ubicacion.toMap();
-    return rawMap.map((key, value) => MapEntry(key, value.toString()));
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.userMessage)),
+    );
+    Navigator.of(context).pop();
   }
 
   void _showError(String msg) {
