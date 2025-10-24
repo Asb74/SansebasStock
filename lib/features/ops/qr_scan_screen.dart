@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:sansebas_stock/features/ops/ops_providers.dart';
-import 'package:sansebas_stock/features/qr/qr_parser.dart';
+import 'package:sansebas_stock/features/qr/qr_parser.dart' as qr;
 import 'package:sansebas_stock/services/stock_service.dart';
 
 class QrScanScreen extends ConsumerStatefulWidget {
@@ -76,9 +76,9 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   }
 
   Future<void> _onScanPalet(String raw) async {
-    ParsedQr parsed;
+    qr.ParsedQr parsed;
     try {
-      parsed = parseQr(raw);
+      parsed = qr.parseQr(raw);
     } on FormatException catch (e) {
       _showError(e.message);
       return;
