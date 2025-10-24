@@ -24,6 +24,19 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /Storage/{camaraId} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null
+        && request.resource.data.CAMARA is string
+        && request.resource.data.ESTANTERIAS is int
+        && request.resource.data.NIVELES is int
+        && request.resource.data.CAMARA.size() == 2
+        && int(request.resource.data.CAMARA) > 0
+        && request.resource.data.ESTANTERIAS > 0
+        && request.resource.data.NIVELES > 0;
+      allow delete: if request.auth != null;
+    }
+
     // Bloquear cualquier otra colección por defecto
     match /{document=**} {
       allow read, write: if false;
