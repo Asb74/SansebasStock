@@ -146,3 +146,10 @@ String _normalizePaletKey(String key) {
       return key;
   }
 }
+
+// Devuelve solo los dígitos de una cadena (ej: "2026001331^#1" -> "2026001331").
+String onlyDigits(String? v) {
+  if (v == null) return '';
+  final it = RegExp(r'\d+').allMatches(v);
+  return it.map((m) => m.group(0)!).join();
+}

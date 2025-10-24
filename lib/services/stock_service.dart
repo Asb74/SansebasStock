@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:sansebas_stock/features/qr/qr_parser.dart';
 
 class Result {
   final bool ok;
@@ -32,10 +33,12 @@ class StockService {
       debugPrint('Procesar palet con camposQR=$camposQR ubicacionQR=$ubicacionQR');
 
       final Map<String, dynamic> datosPalet = _normalizarCamposQR(camposQR);
-      final String? p = datosPalet['P'] as String?;
-      final int linea = (datosPalet['LINEA'] as int?) ?? 0;
+      final int lineaNumero = (datosPalet['LINEA'] as int?) ?? 0;
+      final String linea = lineaNumero > 0 ? lineaNumero.toString() : '';
+      final String? pRaw = datosPalet['P']?.toString();
+      final String p = onlyDigits(pRaw);
 
-      if (p == null || p.isEmpty || linea <= 0) {
+      if (linea.isEmpty || p.isEmpty) {
         return const Result.err(
           'bad_qr',
           'El QR del palet no incluye valores válidos para LINEA y P.',
