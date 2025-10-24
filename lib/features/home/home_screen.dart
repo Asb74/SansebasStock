@@ -31,7 +31,7 @@ class HomeScreen extends ConsumerWidget {
               subtitle: 'Escanea palets y revisa su contenido',
               icon: Icons.qr_code_scanner,
               color: theme.colorScheme.secondary,
-              onTap: () => context.go('/qr'),
+              onTap: () => context.push('/qr'),
             ),
             _HomeActionCard(
               title: 'Mapa (próx.)',
