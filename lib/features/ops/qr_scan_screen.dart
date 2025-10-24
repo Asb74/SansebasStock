@@ -102,6 +102,8 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
         result.data?['POSICION'] ?? result.data?['posicion'];
     final String? posicion = posicionRaw?.toString();
 
+    var shouldClose = false;
+
     switch (accion) {
       case 'entrada':
         if (posicion != null && posicion.isNotEmpty) {
@@ -109,10 +111,11 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
         } else {
           _showSuccess('Palet registrado correctamente');
         }
-        ref.read(ubicacionPendienteProvider.notifier).state = null;
+        shouldClose = true;
         break;
       case 'salida':
         _showSuccess('Palet marcado como Libre');
+        shouldClose = true;
         break;
       case 'reubicacion':
         if (posicion != null && posicion.isNotEmpty) {
@@ -120,10 +123,17 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
         } else {
           _showSuccess('Palet reubicado correctamente');
         }
-        ref.read(ubicacionPendienteProvider.notifier).state = null;
+        shouldClose = true;
         break;
       default:
         _showSuccess('Operación completada');
+    }
+
+    if (shouldClose) {
+      ref.read(ubicacionPendienteProvider.notifier).state = null;
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
     }
   }
 
