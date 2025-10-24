@@ -1,11 +1,25 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /UsuariosAutorizados/{uid} {
-      function isSignedIn() {
-        return request.auth != null;
-      }
+    function isSignedIn() {
+      return request.auth != null;
+    }
 
+    function hasField(field) {
+      return request.resource.data.keys().hasAny([field]);
+    }
+
+    function optionalPositiveInt(field) {
+      return !hasField(field) ||
+          (request.resource.data[field] is int && request.resource.data[field] >= 0);
+    }
+
+    function optionalPositiveString(field) {
+      return !hasField(field) ||
+          (request.resource.data[field] is string && request.resource.data[field].size() > 0);
+    }
+
+    match /UsuariosAutorizados/{uid} {
       function isSameUser() {
         return request.auth.uid == uid;
       }
@@ -22,6 +36,26 @@ service cloud.firestore {
       allow read: if isSignedIn() && (isSameUser() || emailMatches());
       // Bloquear escrituras desde la app
       allow write: if false;
+    }
+
+    match /Stock/{docId} {
+      function isValidStockPayload() {
+        return optionalPositiveInt('P') &&
+               optionalPositiveInt('LINEA') &&
+               optionalPositiveInt('CAJAS') &&
+               optionalPositiveInt('NETO') &&
+               optionalPositiveInt('NIVEL') &&
+               optionalPositiveInt('POSICION') &&
+               optionalPositiveInt('LINEAS') &&
+               optionalPositiveString('VIDA') &&
+               optionalPositiveString('HUECO') &&
+               optionalPositiveString('CAMARA') &&
+               optionalPositiveString('ESTANTERIA');
+      }
+
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidStockPayload();
+      allow delete: if isSignedIn();
     }
 
     match /Storage/{camaraId} {
