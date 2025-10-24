@@ -103,73 +103,86 @@ class StorageListScreen extends ConsumerWidget {
         ),
         child: Form(
           key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                camara == null ? 'Nueva cámara' : 'Editar cámara',
-                style: Theme.of(ctx).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: camaraCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Número de cámara (01,02,...)',
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  camara == null ? 'Nueva cámara' : 'Editar cámara',
+                  style: Theme.of(ctx).textTheme.titleLarge,
                 ),
-                keyboardType: TextInputType.number,
-                maxLength: 2,
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Requerido';
-                  final n = int.tryParse(v);
-                  if (n == null || n <= 0) return 'Valor inválido';
-                  return null;
-                },
-              ),
-              TextFormField(
-                controller: estCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Número de estanterías',
-                ),
-                keyboardType: TextInputType.number,
-                validator: (v) {
-                  final n = int.tryParse(v ?? '');
-                  if (n == null || n <= 0) return 'Valor inválido';
-                  return null;
-                },
-              ),
-              TextFormField(
-                controller: nivCtrl,
-                decoration: const InputDecoration(labelText: 'Niveles'),
-                keyboardType: TextInputType.number,
-                validator: (v) {
-                  final n = int.tryParse(v ?? '');
-                  if (n == null || n <= 0) return 'Valor inválido';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: () async {
-                        if (!formKey.currentState!.validate()) return;
-                        final id = camaraCtrl.text.padLeft(2, '0');
-                        await svc.upsert(
-                          camara: id,
-                          estanterias: int.parse(estCtrl.text),
-                          niveles: int.parse(nivCtrl.text),
-                        );
-                        if (context.mounted) Navigator.pop(ctx);
-                        ref.invalidate(storageListProvider);
-                      },
-                      child: const Text('Guardar'),
-                    ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: camaraCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Número de cámara (01,02,...)',
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    isDense: false,
                   ),
-                ],
-              ),
-              const SizedBox(height: 8),
-            ],
+                  keyboardType: TextInputType.number,
+                  maxLength: 2,
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Requerido';
+                    final n = int.tryParse(v);
+                    if (n == null || n <= 0) return 'Valor inválido';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: estCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Número de estanterías',
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    isDense: false,
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: (v) {
+                    final n = int.tryParse(v ?? '');
+                    if (n == null || n <= 0) return 'Valor inválido';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: nivCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Niveles',
+                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    isDense: false,
+                  ),
+                  keyboardType: TextInputType.number,
+                  validator: (v) {
+                    final n = int.tryParse(v ?? '');
+                    if (n == null || n <= 0) return 'Valor inválido';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: () async {
+                          if (!formKey.currentState!.validate()) return;
+                          final id = camaraCtrl.text.padLeft(2, '0');
+                          await svc.upsert(
+                            camara: id,
+                            estanterias: int.parse(estCtrl.text),
+                            niveles: int.parse(nivCtrl.text),
+                          );
+                          if (context.mounted) Navigator.pop(ctx);
+                          ref.invalidate(storageListProvider);
+                        },
+                        child: const Text('Guardar'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
           ),
         ),
       ),

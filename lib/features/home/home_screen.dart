@@ -35,11 +35,11 @@ class HomeScreen extends ConsumerWidget {
               onTap: () => context.push('/qr'),
             ),
             _HomeActionCard(
-              title: 'Mapa (próx.)',
+              title: 'Mapa',
               subtitle: 'Consulta ubicaciones en planta',
               icon: Icons.map_outlined,
               color: theme.colorScheme.primary,
-              onTap: () => _showComingSoon(context),
+              onTap: () => context.push('/map'),
             ),
             _HomeActionCard(
               title: 'Ajustes',
@@ -56,13 +56,6 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  void _showComingSoon(BuildContext context) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(content: Text('Disponible próximamente')), 
-      );
-  }
 }
 
 class _HomeActionCard extends StatelessWidget {

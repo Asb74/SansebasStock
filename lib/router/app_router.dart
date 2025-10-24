@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../features/auth/auth_service.dart';
 import '../features/auth/login_screen.dart';
 import '../features/home/home_screen.dart';
+import '../features/map/camera_map_screen.dart';
+import '../features/map/cameras_list_screen.dart';
 import '../features/ops/qr_scan_screen.dart';
 import '../features/splash/splash_screen.dart';
 
@@ -32,6 +34,17 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/qr',
       builder: (context, state) => const QrScanScreen(),
+    ),
+    GoRoute(
+      path: '/map',
+      builder: (context, state) => const CamerasListScreen(),
+    ),
+    GoRoute(
+      path: '/map/:camaraId',
+      builder: (context, state) {
+        final camaraId = state.pathParameters['camaraId'] ?? '01';
+        return CameraMapScreen(camara: camaraId);
+      },
     ),
   ],
 );
