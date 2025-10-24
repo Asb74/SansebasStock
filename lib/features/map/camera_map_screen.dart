@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sansebas_stock/features/settings/storage/models/camera_storage.dart';
 import 'package:sansebas_stock/features/settings/storage/storage_providers.dart';
 
-import 'widgets/palet_tile.dart';
+import 'widgets/camera_plan.dart';
 
 class CameraMapScreen extends ConsumerStatefulWidget {
   const CameraMapScreen({super.key, required this.camara});
@@ -142,51 +142,24 @@ class _PaletsView extends StatelessWidget {
             final posB = (b.data()['POSICION'] as num?)?.toInt() ?? 0;
             return posA.compareTo(posB);
           });
-        if (docs.isEmpty) {
-          return const Center(child: Text('Sin palets en este nivel'));
-        }
+        final ocupados = docs.map((doc) {
+          final data = Map<String, dynamic>.from(doc.data());
+          final estanteria = (data['ESTANTERIA'] as num?)?.toInt() ?? 0;
+          final posicion = (data['POSICION'] as num?)?.toInt() ?? 0;
+          final pallet = (data['P'] as String?)?.trim() ?? '';
+          return HuecoOcupado(
+            estanteria: estanteria,
+            posicion: posicion,
+            pallet: pallet,
+            data: data,
+            documentId: doc.id,
+          );
+        }).toList();
 
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: List.generate(camara.estanterias, (index) {
-              final estanteria = index + 1;
-              final ocupados = docs
-                  .where((doc) => (doc.data()['ESTANTERIA'] as num?)?.toInt() == estanteria)
-                  .toList();
-
-              return Padding(
-                padding: EdgeInsets.only(right: index == camara.estanterias - 1 ? 0 : 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text('E$estanteria', style: Theme.of(context).textTheme.titleSmall),
-                    const SizedBox(height: 12),
-                    if (ocupados.isEmpty)
-                      const SizedBox(height: 60)
-                    else
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: ocupados.map((doc) {
-                          final pos = (doc.data()['POSICION'] as num?)?.toInt() ?? 0;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: PaletTile(
-                              camara: camara.camara,
-                              estanteria: estanteria,
-                              posicion: pos,
-                              document: doc,
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                  ],
-                ),
-              );
-            }),
-          ),
+        return CameraPlan(
+          estanterias: camara.estanterias,
+          huecosPorEst: camara.huecosPorEstanteria,
+          ocupados: ocupados,
         );
       },
     );
