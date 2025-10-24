@@ -1,6 +1,10 @@
+import 'dart:math' as math;
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:sansebas_stock/features/ops/ops_providers.dart';
 import 'package:sansebas_stock/features/qr/qr_parser.dart' as qr;
@@ -15,7 +19,9 @@ class QrScanScreen extends ConsumerStatefulWidget {
 
 class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   final MobileScannerController _controller = MobileScannerController();
+  final ImagePicker _imagePicker = ImagePicker();
   bool _busy = false;
+  bool _analyzingFromGallery = false;
   DateTime? _lastDetection;
 
   static const Duration _detectionCooldown = Duration(milliseconds: 1200);
@@ -26,6 +32,52 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
     super.dispose();
   }
 
+  Future<void> _scanFromGallery() async {
+    if (_busy || _analyzingFromGallery) {
+      return;
+    }
+
+    try {
+      final XFile? file = await _imagePicker.pickImage(source: ImageSource.gallery);
+      if (file == null) {
+        return;
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _analyzingFromGallery = true;
+      });
+
+      await _controller.analyzeImage(file.path);
+    } on Exception {
+      if (!mounted) {
+        return;
+      }
+      _showError('No se pudo procesar la imagen seleccionada.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _analyzingFromGallery = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _closeScanner() async {
+    try {
+      await _controller.stop();
+    } catch (_) {}
+
+    if (!mounted) {
+      return;
+    }
+
+    context.go('/');
+  }
+
   Future<void> _handle(String raw) async {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) {
@@ -34,6 +86,7 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
 
     setState(() {
       _busy = true;
+      _analyzingFromGallery = false;
     });
 
     try {
@@ -155,6 +208,21 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
     return raw.toUpperCase().contains('P=');
   }
 
+  Widget _buildTorchButton() {
+    return ValueListenableBuilder<TorchState>(
+      valueListenable: _controller.torchState,
+      builder: (context, state, _) {
+        final bool isOn = state == TorchState.on;
+        return _ScannerControlButton(
+          icon: isOn ? Icons.flash_on : Icons.flash_off,
+          label: 'Linterna',
+          onTap: _busy ? null : () => _controller.toggleTorch(),
+          active: isOn,
+        );
+      },
+    );
+  }
+
   Future<void> _handleSuccess(StockProcessResult result) async {
     ref.read(ubicacionPendienteProvider.notifier).state = null;
     try {
@@ -165,10 +233,18 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(result.userMessage)),
-    );
-    Navigator.of(context).pop();
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(result.userMessage)),
+      );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.go('/');
+      }
+    });
   }
 
   void _showError(String msg) {
@@ -191,14 +267,13 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Lectura QR'),
-      ),
+      backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
         children: <Widget>[
           MobileScanner(
             controller: _controller,
+            fit: BoxFit.cover,
             onDetect: (capture) async {
               if (_busy) {
                 return;
@@ -224,24 +299,261 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
               await _handle(raw);
             },
           ),
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              margin: const EdgeInsets.all(24),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Text(
-                'Escanea primero la ubicación y después el palet.',
-                style: TextStyle(color: Colors.white, fontSize: 16),
-                textAlign: TextAlign.center,
-              ),
+          const Positioned.fill(
+            child: CustomPaint(
+              painter: _ScannerOverlayPainter(),
             ),
           ),
+          SafeArea(
+            child: Stack(
+              children: <Widget>[
+                Align(
+                  alignment: Alignment.topLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: _ScannerBackButton(
+                      enabled: !_busy && !_analyzingFromGallery,
+                      onPressed: () => _closeScanner(),
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.topCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 32, left: 32, right: 32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const <Widget>[
+                        Text(
+                          'Busca un código QR',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        SizedBox(height: 12),
+                        Text(
+                          'Escanea primero la ubicación y después el palet.',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 15,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 32),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: <Widget>[
+                        _buildTorchButton(),
+                        _ScannerControlButton(
+                          icon: Icons.image_outlined,
+                          label: 'Galería',
+                          onTap: _busy || _analyzingFromGallery
+                              ? null
+                              : () => _scanFromGallery(),
+                          active: _analyzingFromGallery,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_busy || _analyzingFromGallery)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black38,
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
+}
+
+class _ScannerControlButton extends StatelessWidget {
+  const _ScannerControlButton({
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.active = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool enabled = onTap != null;
+    return Opacity(
+      opacity: enabled ? 1 : 0.5,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Container(
+              decoration: BoxDecoration(
+                color: active
+                    ? Colors.white.withOpacity(0.18)
+                    : Colors.black.withOpacity(0.55),
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: active ? Colors.white : Colors.white24,
+                  width: 1.4,
+                ),
+              ),
+              padding: const EdgeInsets.all(16),
+              child: Icon(
+                icon,
+                size: 28,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScannerBackButton extends StatelessWidget {
+  const _ScannerBackButton({
+    required this.enabled,
+    required this.onPressed,
+  });
+
+  final bool enabled;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: enabled ? 1 : 0.5,
+      child: Material(
+        color: Colors.black54,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: enabled ? onPressed : null,
+          child: const Padding(
+            padding: EdgeInsets.all(10),
+            child: Icon(Icons.close, color: Colors.white),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ScannerOverlayPainter extends CustomPainter {
+  const _ScannerOverlayPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final double cutOut = math.min(size.width, size.height) * 0.68;
+    final double left = (size.width - cutOut) / 2;
+    final double top = (size.height - cutOut) / 2;
+    final Rect cutOutRect = Rect.fromLTWH(left, top, cutOut, cutOut);
+    final RRect cutOutRRect = RRect.fromRectXY(cutOutRect, 24, 24);
+
+    final Path background = Path()
+      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+    final Path cutPath = Path()..addRRect(cutOutRRect);
+    final Path overlay = Path.combine(PathOperation.difference, background, cutPath);
+
+    final Paint overlayPaint = Paint()
+      ..color = Colors.black.withOpacity(0.6)
+      ..style = PaintingStyle.fill;
+
+    canvas.drawPath(overlay, overlayPaint);
+
+    final Paint borderPaint = Paint()
+      ..color = Colors.white
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    final double cornerLength = math.min(cutOut / 4.5, 48.0);
+    final double right = cutOutRect.right;
+    final double bottom = cutOutRect.bottom;
+    final double leftEdge = cutOutRect.left;
+    final double topEdge = cutOutRect.top;
+
+    // Top-left corner
+    canvas.drawLine(
+      Offset(leftEdge, topEdge),
+      Offset(leftEdge + cornerLength, topEdge),
+      borderPaint,
+    );
+    canvas.drawLine(
+      Offset(leftEdge, topEdge),
+      Offset(leftEdge, topEdge + cornerLength),
+      borderPaint,
+    );
+
+    // Top-right corner
+    canvas.drawLine(
+      Offset(right - cornerLength, topEdge),
+      Offset(right, topEdge),
+      borderPaint,
+    );
+    canvas.drawLine(
+      Offset(right, topEdge),
+      Offset(right, topEdge + cornerLength),
+      borderPaint,
+    );
+
+    // Bottom-left corner
+    canvas.drawLine(
+      Offset(leftEdge, bottom - cornerLength),
+      Offset(leftEdge, bottom),
+      borderPaint,
+    );
+    canvas.drawLine(
+      Offset(leftEdge, bottom),
+      Offset(leftEdge + cornerLength, bottom),
+      borderPaint,
+    );
+
+    // Bottom-right corner
+    canvas.drawLine(
+      Offset(right - cornerLength, bottom),
+      Offset(right, bottom),
+      borderPaint,
+    );
+    canvas.drawLine(
+      Offset(right, bottom - cornerLength),
+      Offset(right, bottom),
+      borderPaint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
