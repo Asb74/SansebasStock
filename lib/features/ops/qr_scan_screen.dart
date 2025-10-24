@@ -22,6 +22,7 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   final ImagePicker _imagePicker = ImagePicker();
   bool _busy = false;
   bool _analyzingFromGallery = false;
+  TorchState _torchState = TorchState.off;
   DateTime? _lastDetection;
 
   static const Duration _detectionCooldown = Duration(milliseconds: 1200);
@@ -208,18 +209,32 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
     return raw.toUpperCase().contains('P=');
   }
 
+  Future<void> _toggleTorch() async {
+    if (_busy) {
+      return;
+    }
+
+    try {
+      await _controller.toggleTorch();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _torchState =
+            _torchState == TorchState.on ? TorchState.off : TorchState.on;
+      });
+    } on Exception {
+      _showError('No se pudo alternar la linterna.');
+    }
+  }
+
   Widget _buildTorchButton() {
-    return ValueListenableBuilder<TorchState>(
-      valueListenable: _controller.torchState,
-      builder: (context, state, _) {
-        final bool isOn = state == TorchState.on;
-        return _ScannerControlButton(
-          icon: isOn ? Icons.flash_on : Icons.flash_off,
-          label: 'Linterna',
-          onTap: _busy ? null : () => _controller.toggleTorch(),
-          active: isOn,
-        );
-      },
+    final bool isOn = _torchState == TorchState.on;
+    return _ScannerControlButton(
+      icon: isOn ? Icons.flash_on : Icons.flash_off,
+      label: 'Linterna',
+      onTap: _busy ? null : _toggleTorch,
+      active: isOn,
     );
   }
 
