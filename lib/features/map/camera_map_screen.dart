@@ -141,7 +141,8 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen> {
 
         final cameraNumero = camera.displayNumero;
         final nivelController = ref.watch(selectedLevelProvider(cameraNumero));
-        final nivelActual = nivelController.clamp(1, math.max(camera.niveles, 1));
+        final nivelActual =
+            nivelController.clamp(1, math.max(camera.niveles, 1)).toInt();
         if (nivelActual != nivelController) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
