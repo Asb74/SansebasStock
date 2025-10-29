@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'storage/storage_list_screen.dart';
+import 'cameras_list_screen.dart';
 
 class SettingsHomeScreen extends StatelessWidget {
   const SettingsHomeScreen({super.key});
@@ -17,7 +17,7 @@ class SettingsHomeScreen extends StatelessWidget {
             subtitle: const Text('Crear y dimensionar cámaras'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const StorageListScreen()),
+              MaterialPageRoute(builder: (_) => const CamerasListScreen()),
             ),
           ),
         ],
