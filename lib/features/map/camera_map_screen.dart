@@ -197,30 +197,72 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen> {
                       ),
                     ),
                     data: (occupied) {
-                      return InteractiveViewer(
-                        transformationController: _controller,
-                        minScale: 0.6,
-                        maxScale: 3.0,
-                        boundaryMargin: const EdgeInsets.all(200),
-                        child: ValueListenableBuilder<Matrix4>(
-                          valueListenable: _controller,
-                          builder: (context, matrix, _) {
-                            final painter = StorageMapPainter(
-                              camera: camera,
-                              occupied: occupied,
-                              scale: matrix.getMaxScaleOnAxis(),
-                              onLayout: (hits) => _hits = hits,
-                            );
-                            return GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onTapDown: (details) => _handleTap(context, details.localPosition),
-                              child: CustomPaint(
-                                size: painter.size,
-                                painter: painter,
+                      final filasPorLado = camera.filas;
+                      final posMax = camera.posicionesMax;
+
+                      const cell = CameraPainter.cell;
+                      const gap = CameraPainter.gap;
+                      const headerH = CameraPainter.headerH;
+                      const rowLabelW = CameraPainter.rowLabelW;
+                      const aisleW = CameraPainter.aisleW;
+                      const outerPad = CameraPainter.outerPad;
+
+                      final colsLado = posMax;
+                      final gridWidth = (colsLado * cell) + ((colsLado - 1) * gap);
+                      final anchoBloque = rowLabelW + gridWidth;
+                      final altoCuadricula = (filasPorLado * cell) + ((filasPorLado - 1) * gap);
+                      final altoTotal = headerH + altoCuadricula;
+
+                      final double canvasWidth;
+                      if (camera.pasillo == CameraPasillo.central) {
+                        canvasWidth =
+                            outerPad + anchoBloque + gap + aisleW + gap + anchoBloque + outerPad;
+                      } else {
+                        canvasWidth = outerPad + aisleW + gap + anchoBloque + outerPad;
+                      }
+                      final canvasHeight = outerPad + altoTotal + outerPad;
+
+                      final canvasSize = Size(canvasWidth, canvasHeight);
+
+                      return Stack(
+                        children: [
+                          InteractiveViewer(
+                            transformationController: _controller,
+                            minScale: 0.6,
+                            maxScale: 3.0,
+                            boundaryMargin: const EdgeInsets.all(200),
+                            child: SizedBox(
+                              width: canvasSize.width,
+                              height: canvasSize.height,
+                              child: ValueListenableBuilder<Matrix4>(
+                                valueListenable: _controller,
+                                builder: (context, matrix, _) {
+                                  final painter = CameraPainter(
+                                    camera: camera,
+                                    occupied: occupied,
+                                    scale: matrix.getMaxScaleOnAxis(),
+                                    canvasSize: canvasSize,
+                                    onLayout: (hits) => _hits = hits,
+                                  );
+                                  return GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTapDown: (details) =>
+                                        _handleTap(context, details.localPosition),
+                                    child: CustomPaint(
+                                      size: canvasSize,
+                                      painter: painter,
+                                    ),
+                                  );
+                                },
                               ),
-                            );
-                          },
-                        ),
+                            ),
+                          ),
+                          const Positioned(
+                            top: 8,
+                            left: 8,
+                            child: _LegendCard(),
+                          ),
+                        ],
                       );
                     },
                   ),
@@ -234,67 +276,153 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen> {
   }
 }
 
-class StorageMapPainter extends CustomPainter {
-  StorageMapPainter({
+class _LegendCard extends StatelessWidget {
+  const _LegendCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final borderColor = Colors.blueGrey.shade200;
+    final textStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: Colors.blueGrey.shade700,
+        );
+
+    Widget buildRow({required Color color, required String label}) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(3),
+                border: Border.all(color: borderColor),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(label, style: textStyle),
+          ],
+        ),
+      );
+    }
+
+    return Card(
+      color: Colors.white.withOpacity(0.92),
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            buildRow(color: Colors.grey.shade300, label: 'Libre'),
+            buildRow(color: const Color(0xFF8BC34A), label: 'Ocupado'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class CameraPainter extends CustomPainter {
+  CameraPainter({
     required this.camera,
     required this.occupied,
     required this.scale,
+    required this.canvasSize,
     this.onLayout,
-  }) : size = _computeSize(camera);
+  });
 
   final CameraModel camera;
   final Map<StorageSlotCoordinate, StockEntry> occupied;
   final double scale;
+  final Size canvasSize;
   final void Function(List<_SlotHit>)? onLayout;
-  final Size size;
 
-  static const double slotSize = 46;
-  static const double slotSpacing = 8;
-  static const double walkwayWidth = 54;
-  static const double horizontalMargin = 32;
-  static const double verticalMargin = 40;
-  static const double topLabelHeight = 32;
-  static const double rowLabelWidth = 44;
+  static const double cell = 46;
+  static const double gap = 8;
+  static const double headerH = 20;
+  static const double rowLabelW = 22;
+  static const double aisleW = 54;
+  static const double outerPad = 24;
 
-  static Size _computeSize(CameraModel camera) {
-    final blockWidth = camera.posicionesMax * slotSize +
-        math.max(0, camera.posicionesMax - 1) * slotSpacing;
-    final blockHeight = camera.filas * slotSize +
-        math.max(0, camera.filas - 1) * slotSpacing;
+  int get _filasPorLado => camera.filas;
+  int get _filasTotales =>
+      camera.pasillo == CameraPasillo.central ? _filasPorLado * 2 : _filasPorLado;
+  int get _posMax => camera.posicionesMax;
 
+  double get _gridWidth => (_posMax * cell) + ((_posMax - 1) * gap);
+  double get _altoCuadricula => (_filasPorLado * cell) + ((_filasPorLado - 1) * gap);
+  double get _altoTotal => headerH + _altoCuadricula;
+
+  double get _xStartLeftBlock => outerPad + rowLabelW;
+  double get _xStartRightBlock {
     if (camera.pasillo == CameraPasillo.central) {
-      final width = horizontalMargin * 2 +
-          blockWidth * 2 +
-          walkwayWidth +
-          rowLabelWidth * 2;
-      final height = verticalMargin * 2 + topLabelHeight + blockHeight;
-      return Size(width, height);
-    } else {
-      final width = horizontalMargin * 2 + walkwayWidth + rowLabelWidth + blockWidth;
-      final height = verticalMargin * 2 + topLabelHeight + blockHeight;
-      return Size(width, height);
+      return outerPad + (rowLabelW + _gridWidth) + gap + aisleW + gap;
     }
+    return outerPad + aisleW + gap;
+  }
+
+  double get _walkwayLeft {
+    if (camera.pasillo == CameraPasillo.central) {
+      return outerPad + (rowLabelW + _gridWidth) + gap;
+    }
+    return outerPad;
+  }
+
+  bool _isRightBlockForFila(int fila) {
+    if (camera.pasillo == CameraPasillo.central) {
+      return fila > _filasPorLado;
+    }
+    return true;
+  }
+
+  Offset _topLeftForCell({
+    required bool isRightBlock,
+    required int fila,
+    required int pos,
+  }) {
+    final int colIndex = pos - 1;
+
+    final double x;
+    if (isRightBlock) {
+      x = _xStartRightBlock + (_posMax - pos) * (cell + gap);
+    } else {
+      x = _xStartLeftBlock + colIndex * (cell + gap);
+    }
+
+    final int filaIndexEnBloque;
+    if (camera.pasillo == CameraPasillo.central && isRightBlock) {
+      filaIndexEnBloque = (fila - _filasPorLado) - 1;
+    } else {
+      filaIndexEnBloque = fila - 1;
+    }
+
+    final double y = outerPad + headerH + filaIndexEnBloque * (cell + gap);
+    return Offset(x, y);
   }
 
   @override
   void paint(Canvas canvas, Size size) {
     final hits = <_SlotHit>[];
-    final paintBackground = Paint()..color = Colors.white;
-    canvas.drawRect(Offset.zero & size, paintBackground);
+    final backgroundPaint = Paint()..color = Colors.white;
+    canvas.drawRect(Offset.zero & size, backgroundPaint);
 
-    final blockWidth = camera.posicionesMax * slotSize +
-        math.max(0, camera.posicionesMax - 1) * slotSpacing;
-    final blockHeight = camera.filas * slotSize +
-        math.max(0, camera.filas - 1) * slotSpacing;
+    final entriesByCoordinate = <String, StockEntry>{};
+    for (final entry in occupied.values) {
+      entriesByCoordinate['${entry.fila}-${entry.posicion}'] = entry;
+    }
 
-    final top = verticalMargin + topLabelHeight;
-
-    final slotPaint = Paint()..color = const Color(0xFF8BC34A);
-    final slotBorder = Paint()
+    final emptyPaint = Paint()..color = Colors.grey.shade200;
+    final occupiedPaint = Paint()..color = const Color(0xFF8BC34A);
+    final borderPaint = Paint()
       ..color = Colors.blueGrey.shade400
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
-    final emptyPaint = Paint()..color = Colors.grey.shade200;
     final walkwayPaint = Paint()..color = Colors.grey.shade300;
 
     final textPainter = TextPainter(
@@ -302,35 +430,44 @@ class StorageMapPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
     );
 
-    final double fontScale = scale.clamp(0.75, 1.8);
-    final pLabelStyle = TextStyle(
+    final double labelScale = scale.clamp(0.75, 1.8);
+    final columnLabelStyle = TextStyle(
+      fontSize: 12 * labelScale,
       fontWeight: FontWeight.w600,
-      fontSize: 12 * fontScale,
       color: Colors.blueGrey.shade700,
     );
-    final fLabelStyle = TextStyle(
+    final rowLabelStyle = TextStyle(
+      fontSize: 11 * labelScale,
       fontWeight: FontWeight.w600,
-      fontSize: 11 * fontScale,
       color: Colors.blueGrey.shade600,
     );
+
+    final double palletFontSize = math.min(cell * 0.35, 12) * scale.clamp(0.9, 1.4);
     final palletStyle = TextStyle(
-      fontWeight: FontWeight.bold,
-      fontSize: 12 * fontScale,
-      color: Colors.white,
-    );
-    final metaStyle = TextStyle(
-      fontSize: 10 * fontScale,
+      fontSize: palletFontSize,
+      fontWeight: FontWeight.w700,
       color: Colors.white,
     );
 
-    void drawColumnLabels({required double startX, required StorageSide side}) {
-      for (var index = 0; index < camera.posicionesMax; index++) {
-        final position = index + 1;
-        final x = side == StorageSide.right
-            ? startX + index * (slotSize + slotSpacing)
-            : startX + (camera.posicionesMax - index - 1) * (slotSize + slotSpacing);
-        final rect = Rect.fromLTWH(x, verticalMargin, slotSize, topLabelHeight - 8);
-        textPainter.text = TextSpan(text: 'P$position', style: pLabelStyle);
+    // Walkway
+    final walkwayRect = Rect.fromLTWH(
+      _walkwayLeft,
+      outerPad,
+      aisleW,
+      _altoTotal,
+    );
+    canvas.drawRect(walkwayRect, walkwayPaint);
+
+    void drawColumnHeaders({required bool isRightBlock}) {
+      for (var pos = 1; pos <= _posMax; pos++) {
+        final double x;
+        if (isRightBlock) {
+          x = _xStartRightBlock + (_posMax - pos) * (cell + gap);
+        } else {
+          x = _xStartLeftBlock + (pos - 1) * (cell + gap);
+        }
+        final rect = Rect.fromLTWH(x, outerPad, cell, headerH);
+        textPainter.text = TextSpan(text: 'P$pos', style: columnLabelStyle);
         textPainter.layout(minWidth: 0, maxWidth: rect.width);
         final offset = Offset(
           rect.left + (rect.width - textPainter.width) / 2,
@@ -340,171 +477,62 @@ class StorageMapPainter extends CustomPainter {
       }
     }
 
-    void drawRowLabels({
-      required double startX,
-    }) {
-      for (var row = 0; row < camera.filas; row++) {
-        final filaNumero = row + 1;
-        final label = 'F$filaNumero';
-        final y = top + row * (slotSize + slotSpacing) + slotSize / 2;
-        textPainter.text = TextSpan(text: label, style: fLabelStyle);
-        textPainter.layout();
-        final dx = startX + (rowLabelWidth - textPainter.width) / 2;
-        final dy = y - textPainter.height / 2;
-        textPainter.paint(canvas, Offset(dx, dy));
-      }
+    if (camera.pasillo == CameraPasillo.central) {
+      drawColumnHeaders(isRightBlock: false);
+      drawColumnHeaders(isRightBlock: true);
+    } else {
+      drawColumnHeaders(isRightBlock: true);
     }
 
-    void drawBlock({
-      required Offset origin,
-      required StorageSide side,
-      required Rect rowLabelArea,
-    }) {
-      drawColumnLabels(startX: origin.dx, side: side);
-      drawRowLabels(startX: rowLabelArea.left);
+    for (var fila = 1; fila <= _filasTotales; fila++) {
+      final bool isRightBlock = _isRightBlockForFila(fila);
+      final offset = _topLeftForCell(isRightBlock: isRightBlock, fila: fila, pos: 1);
+      final double centerY = offset.dy + cell / 2;
 
-      for (var row = 0; row < camera.filas; row++) {
-        final filaNumero = row + 1;
-        final y = top + row * (slotSize + slotSpacing);
+      textPainter.text = TextSpan(text: 'F$fila', style: rowLabelStyle);
+      textPainter.layout();
 
-        for (var col = 0; col < camera.posicionesMax; col++) {
-          final posicion = col + 1;
-          final slotX = side == StorageSide.right
-              ? origin.dx + col * (slotSize + slotSpacing)
-              : origin.dx + (camera.posicionesMax - col - 1) * (slotSize + slotSpacing);
-          final rect = Rect.fromLTWH(slotX, y, slotSize, slotSize);
-          final key = StorageSlotCoordinate(side: side, fila: filaNumero, posicion: posicion);
-          final entry = occupied[key];
-          canvas.drawRect(rect, entry != null ? slotPaint : emptyPaint);
-          canvas.drawRect(rect, slotBorder);
+      if (!isRightBlock) {
+        final double dx = outerPad + (rowLabelW - textPainter.width) / 2;
+        final double dy = centerY - textPainter.height / 2;
+        textPainter.paint(canvas, Offset(dx, dy));
+      }
 
-          if (entry != null) {
-            hits.add(_SlotHit(rect: rect, entry: entry));
-            textPainter.text = TextSpan(text: entry.palletCode, style: palletStyle);
-            textPainter.layout(minWidth: 0, maxWidth: rect.width - 4);
-            final textOffset = Offset(
-              rect.left + (rect.width - textPainter.width) / 2,
-              rect.top + 4,
-            );
-            textPainter.paint(canvas, textOffset);
+      final double rightLabelStart = _xStartRightBlock + _gridWidth;
+      if (isRightBlock) {
+        final double dx = rightLabelStart + (rowLabelW - textPainter.width) / 2;
+        final double dy = centerY - textPainter.height / 2;
+        textPainter.paint(canvas, Offset(dx, dy));
+      }
 
-            final metaLabel = 'F${entry.fila}·P${entry.posicion}';
-            textPainter.text = TextSpan(text: metaLabel, style: metaStyle);
-            textPainter.layout(minWidth: 0, maxWidth: rect.width - 4);
-            final metaOffset = Offset(
-              rect.left + (rect.width - textPainter.width) / 2,
-              rect.bottom - textPainter.height - 4,
-            );
-            textPainter.paint(canvas, metaOffset);
-          }
+      for (var pos = 1; pos <= _posMax; pos++) {
+        final topLeft = _topLeftForCell(isRightBlock: isRightBlock, fila: fila, pos: pos);
+        final rect = Rect.fromLTWH(topLeft.dx, topLeft.dy, cell, cell);
+        final key = '${fila}-$pos';
+        final entry = entriesByCoordinate[key];
+        canvas.drawRect(rect, entry != null ? occupiedPaint : emptyPaint);
+        canvas.drawRect(rect, borderPaint);
+
+        if (entry != null) {
+          hits.add(_SlotHit(rect: rect, entry: entry));
+          textPainter.text = TextSpan(text: entry.palletCode, style: palletStyle);
+          textPainter.layout(minWidth: 0, maxWidth: rect.width - 4);
+          final dx = rect.left + (rect.width - textPainter.width) / 2;
+          final dy = rect.top + (rect.height - textPainter.height) / 2;
+          textPainter.paint(canvas, Offset(dx, dy));
         }
       }
     }
 
-    if (camera.pasillo == CameraPasillo.central) {
-      final leftBlockOrigin = Offset(horizontalMargin, verticalMargin);
-      final leftRowLabelArea = Rect.fromLTWH(
-        horizontalMargin + blockWidth,
-        top,
-        rowLabelWidth,
-        blockHeight,
-      );
-      final walkwayLeft = leftRowLabelArea.right;
-      final walkwayRect = Rect.fromLTWH(walkwayLeft, verticalMargin, walkwayWidth, topLabelHeight + blockHeight);
-      canvas.drawRect(walkwayRect, walkwayPaint);
-
-      final rightRowLabelArea = Rect.fromLTWH(
-        walkwayRect.right,
-        top,
-        rowLabelWidth,
-        blockHeight,
-      );
-      final rightBlockOrigin = Offset(rightRowLabelArea.right, verticalMargin);
-
-      drawBlock(origin: leftBlockOrigin, side: StorageSide.left, rowLabelArea: leftRowLabelArea);
-      drawBlock(origin: rightBlockOrigin, side: StorageSide.right, rowLabelArea: rightRowLabelArea);
-    } else {
-      final walkwayRect = Rect.fromLTWH(horizontalMargin, verticalMargin, walkwayWidth,
-          topLabelHeight + blockHeight);
-      canvas.drawRect(walkwayRect, walkwayPaint);
-
-      final rowLabelArea = Rect.fromLTWH(
-        walkwayRect.right,
-        top,
-        rowLabelWidth,
-        blockHeight,
-      );
-      final blockOrigin = Offset(rowLabelArea.right, verticalMargin);
-
-      drawBlock(origin: blockOrigin, side: StorageSide.right, rowLabelArea: rowLabelArea);
-    }
-
-    _drawLegend(canvas, size, textPainter, fontScale);
     onLayout?.call(List<_SlotHit>.unmodifiable(hits));
   }
 
-  void _drawLegend(Canvas canvas, Size size, TextPainter textPainter, double fontScale) {
-    final legendSize = const Size(160, 56);
-    final legendRect = Rect.fromLTWH(
-      size.width - horizontalMargin - legendSize.width,
-      verticalMargin / 2,
-      legendSize.width,
-      legendSize.height,
-    );
-    final paint = Paint()..color = Colors.white.withOpacity(0.9);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(legendRect, const Radius.circular(12)),
-      paint,
-    );
-    final border = Paint()
-      ..color = Colors.blueGrey.shade200
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1;
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(legendRect, const Radius.circular(12)),
-      border,
-    );
-
-    final boxSize = 16.0;
-    final freePaint = Paint()..color = Colors.grey.shade300;
-    final occupiedPaint = Paint()..color = const Color(0xFF8BC34A);
-
-    final textStyle = TextStyle(
-      fontSize: 12 * fontScale,
-      color: Colors.blueGrey.shade700,
-    );
-
-    final freeRect = Rect.fromLTWH(legendRect.left + 16, legendRect.top + 12, boxSize, boxSize);
-    canvas.drawRect(freeRect, freePaint);
-    canvas.drawRect(freeRect, border);
-    textPainter.text = TextSpan(text: 'Libre', style: textStyle);
-    textPainter.layout();
-    textPainter.paint(
-      canvas,
-      Offset(freeRect.right + 8, freeRect.top + (boxSize - textPainter.height) / 2),
-    );
-
-    final occupiedRect = Rect.fromLTWH(
-      legendRect.left + 16,
-      freeRect.bottom + 12,
-      boxSize,
-      boxSize,
-    );
-    canvas.drawRect(occupiedRect, occupiedPaint);
-    canvas.drawRect(occupiedRect, border);
-    textPainter.text = TextSpan(text: 'Ocupado', style: textStyle);
-    textPainter.layout();
-    textPainter.paint(
-      canvas,
-      Offset(occupiedRect.right + 8, occupiedRect.top + (boxSize - textPainter.height) / 2),
-    );
-  }
-
   @override
-  bool shouldRepaint(covariant StorageMapPainter oldDelegate) {
+  bool shouldRepaint(covariant CameraPainter oldDelegate) {
     return oldDelegate.camera != camera ||
         oldDelegate.occupied != occupied ||
-        oldDelegate.scale != scale;
+        oldDelegate.scale != scale ||
+        oldDelegate.canvasSize != canvasSize;
   }
 }
 
