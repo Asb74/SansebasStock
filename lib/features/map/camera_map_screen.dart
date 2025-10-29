@@ -7,6 +7,33 @@ import '../../models/camera_model.dart';
 import '../../providers/camera_providers.dart';
 import 'widgets/pallet_tile.dart';
 
+int labelForPosition({
+  required bool isLeftSide,
+  required int colIndex,
+  required int posMax,
+  required bool aisleIsCentral,
+}) {
+  if (aisleIsCentral) {
+    return isLeftSide ? (colIndex + 1) : (posMax - colIndex);
+  } else {
+    return posMax - colIndex;
+  }
+}
+
+int positionIndexForLookup({
+  required bool isLeftSide,
+  required int colIndex,
+  required int posMax,
+  required bool aisleIsCentral,
+}) {
+  return labelForPosition(
+    isLeftSide: isLeftSide,
+    colIndex: colIndex,
+    posMax: posMax,
+    aisleIsCentral: aisleIsCentral,
+  );
+}
+
 final selectedLevelProvider =
     StateProvider.autoDispose.family<int, String>((ref, numero) => 1);
 
@@ -441,19 +468,24 @@ class _CameraCanvas extends StatelessWidget {
   Widget _buildHeaderRow(TextStyle style) {
     final children = <Widget>[];
 
-    Widget header(bool invert) {
-      final order = List<int>.generate(_posicionesMax, (i) => i + 1);
-      final displayOrder = (invert ? order.reversed : order).toList();
+    Widget header({required bool isLeftSide}) {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (int i = 0; i < displayOrder.length; i++)
+          for (int colIndex = 0; colIndex < _posicionesMax; colIndex++)
             Padding(
-              padding: EdgeInsets.only(right: i == displayOrder.length - 1 ? 0 : gap),
+              padding: EdgeInsets.only(
+                right: colIndex == _posicionesMax - 1 ? 0 : gap,
+              ),
               child: SizedBox(
                 width: cell,
                 child: Text(
-                  'P${displayOrder[i]}',
+                  'P${labelForPosition(
+                        isLeftSide: isLeftSide,
+                        colIndex: colIndex,
+                        posMax: _posicionesMax,
+                        aisleIsCentral: _isCentral,
+                      )}',
                   textAlign: TextAlign.center,
                   style: style,
                 ),
@@ -466,18 +498,18 @@ class _CameraCanvas extends StatelessWidget {
     if (_isCentral) {
       children
         ..add(const SizedBox(width: rowLabelWidth))
-        ..add(header(true))
+        ..add(header(isLeftSide: true))
         ..add(SizedBox(width: gap))
         ..add(SizedBox(width: aisleWidth))
         ..add(SizedBox(width: gap))
         ..add(const SizedBox(width: rowLabelWidth))
-        ..add(header(false));
+        ..add(header(isLeftSide: false));
     } else {
       children
         ..add(SizedBox(width: aisleWidth))
         ..add(SizedBox(width: gap))
         ..add(const SizedBox(width: rowLabelWidth))
-        ..add(header(false));
+        ..add(header(isLeftSide: false));
     }
 
     return Row(
@@ -503,14 +535,17 @@ class _CameraCanvas extends StatelessWidget {
   Widget _buildPalletRow({
     required StorageSide side,
     required int fila,
-    required bool invert,
+    required bool isLeftSide,
   }) {
-    final order = List<int>.generate(_posicionesMax, (i) => i + 1);
-    final displayOrder = (invert ? order.reversed : order).toList();
     final tiles = <Widget>[];
-    for (var i = 0; i < displayOrder.length; i++) {
-      final pos = displayOrder[i];
-      final entry = _entryFor(side, fila, pos);
+    for (var colIndex = 0; colIndex < _posicionesMax; colIndex++) {
+      final logicalPos = positionIndexForLookup(
+        isLeftSide: isLeftSide,
+        colIndex: colIndex,
+        posMax: _posicionesMax,
+        aisleIsCentral: _isCentral,
+      );
+      final entry = _entryFor(side, fila, logicalPos);
       final digits = entry != null ? _digitsForEntry(entry) : null;
       Widget tile = SizedBox(
         width: cell,
@@ -527,7 +562,7 @@ class _CameraCanvas extends StatelessWidget {
         );
       }
       tiles.add(tile);
-      if (i != displayOrder.length - 1) {
+      if (colIndex != _posicionesMax - 1) {
         tiles.add(SizedBox(width: gap));
       }
     }
@@ -566,12 +601,20 @@ class _CameraCanvas extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 _buildRowLabel('F$leftFila'),
-                _buildPalletRow(side: StorageSide.left, fila: leftFila, invert: true),
+                _buildPalletRow(
+                  side: StorageSide.left,
+                  fila: leftFila,
+                  isLeftSide: true,
+                ),
                 SizedBox(width: gap),
                 _buildWalkway(cell),
                 SizedBox(width: gap),
                 _buildRowLabel('F$rightFila', alignment: Alignment.centerLeft),
-                _buildPalletRow(side: StorageSide.right, fila: rightFila, invert: false),
+                _buildPalletRow(
+                  side: StorageSide.right,
+                  fila: rightFila,
+                  isLeftSide: false,
+                ),
               ],
             ),
           ),
@@ -590,7 +633,11 @@ class _CameraCanvas extends StatelessWidget {
                 _buildWalkway(cell),
                 SizedBox(width: gap),
                 _buildRowLabel('F$fila'),
-                _buildPalletRow(side: StorageSide.right, fila: fila, invert: false),
+                _buildPalletRow(
+                  side: StorageSide.right,
+                  fila: fila,
+                  isLeftSide: false,
+                ),
               ],
             ),
           ),
