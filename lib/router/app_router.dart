@@ -5,9 +5,10 @@ import '../features/auth/auth_service.dart';
 import '../features/auth/login_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/map/camera_map_screen.dart';
-import '../features/map/cameras_list_screen.dart';
+import '../features/map/map_cameras_screen.dart';
 import '../features/ops/qr_scan_screen.dart';
 import '../features/splash/splash_screen.dart';
+import '../models/camera_model.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
@@ -37,13 +38,17 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       path: '/map',
-      builder: (context, state) => const CamerasListScreen(),
+      builder: (context, state) => const MapCamerasScreen(),
     ),
     GoRoute(
       path: '/map/:camaraId',
       builder: (context, state) {
-        final camaraId = state.pathParameters['camaraId'] ?? '01';
-        return CameraMapScreen(camara: camaraId);
+        final numero = state.pathParameters['camaraId'] ?? '01';
+        final extra = state.extra;
+        if (extra is CameraModel) {
+          return CameraMapScreen.fromCamera(extra);
+        }
+        return CameraMapScreen(numero: numero);
       },
     ),
   ],
