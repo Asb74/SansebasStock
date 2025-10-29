@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/camera_model.dart';
 import '../../providers/camera_providers.dart';
+import 'widgets/pallet_tile.dart';
 
 final selectedLevelProvider =
     StateProvider.autoDispose.family<int, String>((ref, numero) => 1);
@@ -28,30 +29,24 @@ class CameraMapScreen extends ConsumerStatefulWidget {
 }
 
 class _CameraMapScreenState extends ConsumerState<CameraMapScreen> {
-  late final TransformationController _controller;
-  List<_SlotHit> _hits = const [];
+  final _hCtrl = ScrollController();
+  final _vCtrl = ScrollController();
+  final _ivController = TransformationController();
 
-  @override
-  void initState() {
-    super.initState();
-    _controller = TransformationController();
-  }
+  Size? _lastViewportSize;
+  Size? _lastCanvasSize;
+  bool _matrixSet = false;
+
+  static const double cell = 44;
+  static const double gap = 8;
+  static const double aisleWidth = 24;
 
   @override
   void dispose() {
-    _controller.dispose();
+    _hCtrl.dispose();
+    _vCtrl.dispose();
+    _ivController.dispose();
     super.dispose();
-  }
-
-  void _handleTap(BuildContext context, Offset localPosition) {
-    if (_hits.isEmpty) return;
-    final scenePoint = _controller.toScene(localPosition);
-    for (final hit in _hits) {
-      if (hit.rect.contains(scenePoint)) {
-        _showSlotDetails(context, hit.entry);
-        break;
-      }
-    }
   }
 
   void _showSlotDetails(BuildContext context, StockEntry entry) {
@@ -185,84 +180,116 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen> {
                 ),
                 const SizedBox(height: 24),
                 Expanded(
-                  child: stockAsync.when(
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (error, __) => Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          'No se pudo cargar el stock.\n$error',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
-                    data: (occupied) {
-                      final filasPorLado = camera.filas;
-                      final posMax = camera.posicionesMax;
-
-                      const cell = CameraPainter.cell;
-                      const gap = CameraPainter.gap;
-                      const headerH = CameraPainter.headerH;
-                      const rowLabelW = CameraPainter.rowLabelW;
-                      const aisleW = CameraPainter.aisleW;
-                      const outerPad = CameraPainter.outerPad;
-
-                      final colsLado = posMax;
-                      final gridWidth = (colsLado * cell) + ((colsLado - 1) * gap);
-                      final anchoBloque = rowLabelW + gridWidth;
-                      final altoCuadricula = (filasPorLado * cell) + ((filasPorLado - 1) * gap);
-                      final altoTotal = headerH + altoCuadricula;
-
-                      final double canvasWidth;
-                      if (camera.pasillo == CameraPasillo.central) {
-                        canvasWidth =
-                            outerPad + anchoBloque + gap + aisleW + gap + anchoBloque + outerPad;
-                      } else {
-                        canvasWidth = outerPad + aisleW + gap + anchoBloque + outerPad;
-                      }
-                      final canvasHeight = outerPad + altoTotal + outerPad;
-
-                      final canvasSize = Size(canvasWidth, canvasHeight);
-
-                      return Stack(
-                        children: [
-                          InteractiveViewer(
-                            transformationController: _controller,
-                            minScale: 0.6,
-                            maxScale: 3.0,
-                            boundaryMargin: const EdgeInsets.all(200),
-                            child: SizedBox(
-                              width: canvasSize.width,
-                              height: canvasSize.height,
-                              child: ValueListenableBuilder<Matrix4>(
-                                valueListenable: _controller,
-                                builder: (context, matrix, _) {
-                                  final painter = CameraPainter(
-                                    camera: camera,
-                                    occupied: occupied,
-                                    scale: matrix.getMaxScaleOnAxis(),
-                                    canvasSize: canvasSize,
-                                    onLayout: (hits) => _hits = hits,
-                                  );
-                                  return GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTapDown: (details) =>
-                                        _handleTap(context, details.localPosition),
-                                    child: CustomPaint(
-                                      size: canvasSize,
-                                      painter: painter,
-                                    ),
-                                  );
-                                },
-                              ),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      return stockAsync.when(
+                        loading: () => const Center(child: CircularProgressIndicator()),
+                        error: (error, __) => Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text(
+                              'No se pudo cargar el stock.\n$error',
+                              textAlign: TextAlign.center,
                             ),
                           ),
-                          const Positioned(
-                            top: 8,
-                            left: 8,
-                            child: _LegendCard(),
-                          ),
-                        ],
+                        ),
+                        data: (occupied) {
+                          final filasPorLado = camera.filas;
+                          final colsPorLado = camera.posicionesMax;
+
+                          final canvasSize = _CameraCanvas.computeSize(
+                            pasillo: camera.pasillo,
+                            filasPorLado: filasPorLado,
+                            colsPorLado: colsPorLado,
+                            cell: cell,
+                            gap: gap,
+                            aisleWidth: aisleWidth,
+                          );
+
+                          final viewport = Size(constraints.maxWidth, constraints.maxHeight);
+                          if (_lastViewportSize == null ||
+                              _lastViewportSize!.width != viewport.width ||
+                              _lastViewportSize!.height != viewport.height) {
+                            _matrixSet = false;
+                            _lastViewportSize = viewport;
+                          }
+
+                          if (_lastCanvasSize == null ||
+                              _lastCanvasSize!.width != canvasSize.width ||
+                              _lastCanvasSize!.height != canvasSize.height) {
+                            _matrixSet = false;
+                            _lastCanvasSize = canvasSize;
+                          }
+
+                          if (!_matrixSet &&
+                              viewport.width > 0 &&
+                              viewport.height > 0 &&
+                              canvasSize.width > 0 &&
+                              canvasSize.height > 0) {
+                            final initScale = math.min(
+                                  viewport.width / canvasSize.width,
+                                  viewport.height / canvasSize.height,
+                                ) *
+                                0.95;
+                            _ivController.value =
+                                Matrix4.diagonal3Values(initScale, initScale, 1);
+                            _matrixSet = true;
+                          }
+
+                          final canvas = _CameraCanvas(
+                            camera: camera,
+                            occupied: occupied,
+                            cell: cell,
+                            gap: gap,
+                            aisleWidth: aisleWidth,
+                            onEntryTap: (entry) => _showSlotDetails(context, entry),
+                          );
+
+                          return Stack(
+                            children: [
+                              Scrollbar(
+                                controller: _vCtrl,
+                                thumbVisibility: true,
+                                child: Scrollbar(
+                                  controller: _hCtrl,
+                                  thumbVisibility: true,
+                                  notificationPredicate: (notif) =>
+                                      notif.metrics.axis == Axis.horizontal,
+                                  child: SingleChildScrollView(
+                                    controller: _vCtrl,
+                                    scrollDirection: Axis.vertical,
+                                    child: SingleChildScrollView(
+                                      controller: _hCtrl,
+                                      scrollDirection: Axis.horizontal,
+                                      child: SizedBox(
+                                        width: canvasSize.width,
+                                        height: canvasSize.height,
+                                        child: InteractiveViewer(
+                                          constrained: false,
+                                          panEnabled: false,
+                                          scaleEnabled: true,
+                                          minScale: 0.2,
+                                          maxScale: 6.0,
+                                          boundaryMargin: const EdgeInsets.all(200),
+                                          transformationController: _ivController,
+                                          child: canvas,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                left: 0,
+                                top: 0,
+                                child: SafeArea(
+                                  minimum: const EdgeInsets.only(left: 16, top: 8),
+                                  child: const _LegendCard(),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       );
                     },
                   ),
@@ -281,37 +308,20 @@ class _LegendCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = Colors.blueGrey.shade200;
-    final textStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
-          fontWeight: FontWeight.w600,
-          color: Colors.blueGrey.shade700,
-        );
-
-    Widget buildRow({required Color color, required String label}) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 16,
-              height: 16,
-              decoration: BoxDecoration(
-                color: color,
-                borderRadius: BorderRadius.circular(3),
-                border: Border.all(color: borderColor),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(label, style: textStyle),
-          ],
+    Widget dot(Color color) {
+      return Container(
+        width: 18,
+        height: 18,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: Colors.black12),
         ),
       );
     }
 
     return Card(
-      color: Colors.white.withOpacity(0.92),
-      elevation: 3,
+      elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -319,8 +329,23 @@ class _LegendCard extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            buildRow(color: Colors.grey.shade300, label: 'Libre'),
-            buildRow(color: const Color(0xFF8BC34A), label: 'Ocupado'),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                dot(const Color(0xFFF2F3F5)),
+                const SizedBox(width: 8),
+                const Text('Libre'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                dot(const Color(0xFF8BC34A)),
+                const SizedBox(width: 8),
+                const Text('Ocupado'),
+              ],
+            ),
           ],
         ),
       ),
@@ -328,217 +353,265 @@ class _LegendCard extends StatelessWidget {
   }
 }
 
-class CameraPainter extends CustomPainter {
-  CameraPainter({
+class _CameraCanvas extends StatelessWidget {
+  const _CameraCanvas({
     required this.camera,
     required this.occupied,
-    required this.scale,
-    required this.canvasSize,
-    this.onLayout,
+    required this.cell,
+    required this.gap,
+    required this.aisleWidth,
+    required this.onEntryTap,
   });
 
   final CameraModel camera;
   final Map<StorageSlotCoordinate, StockEntry> occupied;
-  final double scale;
-  final Size canvasSize;
-  final void Function(List<_SlotHit>)? onLayout;
+  final double cell;
+  final double gap;
+  final double aisleWidth;
+  final ValueChanged<StockEntry>? onEntryTap;
 
-  static const double cell = 46;
-  static const double gap = 8;
-  static const double headerH = 20;
-  static const double rowLabelW = 22;
-  static const double aisleW = 54;
-  static const double outerPad = 24;
+  static const double rowLabelWidth = 36;
+  static const double headerHeight = 20;
+  static const double outerPadding = 16;
+  static const Color walkwayColor = Color(0xFFD3D6DA);
+
+  static Size computeSize({
+    required CameraPasillo pasillo,
+    required int filasPorLado,
+    required int colsPorLado,
+    required double cell,
+    required double gap,
+    required double aisleWidth,
+  }) {
+    final blockWidth = colsPorLado * cell + math.max(0, colsPorLado - 1) * gap;
+    final blockHeight = filasPorLado * cell + math.max(0, filasPorLado - 1) * gap;
+    final vertical = outerPadding * 2 + headerHeight + (filasPorLado > 0 ? gap : 0) + blockHeight;
+
+    final horizontal = pasillo == CameraPasillo.central
+        ? outerPadding * 2 +
+            rowLabelWidth +
+            blockWidth +
+            gap +
+            aisleWidth +
+            gap +
+            rowLabelWidth +
+            blockWidth
+        : outerPadding * 2 +
+            aisleWidth +
+            gap +
+            rowLabelWidth +
+            blockWidth;
+
+    return Size(horizontal, vertical);
+  }
+
+  bool get _isCentral => camera.pasillo == CameraPasillo.central;
 
   int get _filasPorLado => camera.filas;
-  int get _filasTotales =>
-      camera.pasillo == CameraPasillo.central ? _filasPorLado * 2 : _filasPorLado;
-  int get _posMax => camera.posicionesMax;
 
-  double get _gridWidth => (_posMax * cell) + ((_posMax - 1) * gap);
-  double get _altoCuadricula => (_filasPorLado * cell) + ((_filasPorLado - 1) * gap);
-  double get _altoTotal => headerH + _altoCuadricula;
+  int get _filasTotales => _isCentral ? _filasPorLado * 2 : _filasPorLado;
 
-  double get _xStartLeftBlock => outerPad + rowLabelW;
-  double get _xStartRightBlock {
-    if (camera.pasillo == CameraPasillo.central) {
-      return outerPad + (rowLabelW + _gridWidth) + gap + aisleW + gap;
+  int get _posicionesMax => camera.posicionesMax;
+
+  StockEntry? _entryFor(StorageSide side, int fila, int posicion) {
+    final key = StorageSlotCoordinate(side: side, fila: fila, posicion: posicion);
+    final found = occupied[key];
+    if (found != null) {
+      return found;
     }
-    return outerPad + aisleW + gap;
+    for (final entry in occupied.entries) {
+      if (entry.key.fila == fila && entry.key.posicion == posicion) {
+        return entry.value;
+      }
+    }
+    return null;
   }
 
-  double get _walkwayLeft {
-    if (camera.pasillo == CameraPasillo.central) {
-      return outerPad + (rowLabelW + _gridWidth) + gap;
+  String? _digitsForEntry(StockEntry entry) {
+    final digits = RegExp(r'\d+').allMatches(entry.palletCode).map((m) => m.group(0)!).join();
+    if (digits.isEmpty) {
+      return null;
     }
-    return outerPad;
+    if (digits.length <= 10) {
+      return digits;
+    }
+    return digits.substring(digits.length - 10);
   }
 
-  bool _isRightBlockForFila(int fila) {
-    if (camera.pasillo == CameraPasillo.central) {
-      return fila > _filasPorLado;
+  Widget _buildHeaderRow(TextStyle style) {
+    final children = <Widget>[];
+
+    Widget header(bool invert) {
+      final order = List<int>.generate(_posicionesMax, (i) => i + 1);
+      final displayOrder = (invert ? order.reversed : order).toList();
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (int i = 0; i < displayOrder.length; i++)
+            Padding(
+              padding: EdgeInsets.only(right: i == displayOrder.length - 1 ? 0 : gap),
+              child: SizedBox(
+                width: cell,
+                child: Text(
+                  'P${displayOrder[i]}',
+                  textAlign: TextAlign.center,
+                  style: style,
+                ),
+              ),
+            ),
+        ],
+      );
     }
-    return true;
+
+    if (_isCentral) {
+      children
+        ..add(const SizedBox(width: rowLabelWidth))
+        ..add(header(true))
+        ..add(SizedBox(width: gap))
+        ..add(SizedBox(width: aisleWidth))
+        ..add(SizedBox(width: gap))
+        ..add(const SizedBox(width: rowLabelWidth))
+        ..add(header(false));
+    } else {
+      children
+        ..add(SizedBox(width: aisleWidth))
+        ..add(SizedBox(width: gap))
+        ..add(const SizedBox(width: rowLabelWidth))
+        ..add(header(false));
+    }
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: children,
+    );
   }
 
-  Offset _topLeftForCell({
-    required bool isRightBlock,
+  Widget _buildRowLabel(String text, {Alignment alignment = Alignment.centerRight}) {
+    return SizedBox(
+      width: rowLabelWidth,
+      child: Align(
+        alignment: alignment,
+        child: Text(
+          text,
+          style: const TextStyle(fontSize: 11, color: Colors.black54, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPalletRow({
+    required StorageSide side,
     required int fila,
-    required int pos,
+    required bool invert,
   }) {
-    final int colIndex = pos - 1;
-
-    final double x;
-    if (isRightBlock) {
-      x = _xStartRightBlock + (_posMax - pos) * (cell + gap);
-    } else {
-      x = _xStartLeftBlock + colIndex * (cell + gap);
-    }
-
-    final int filaIndexEnBloque;
-    if (camera.pasillo == CameraPasillo.central && isRightBlock) {
-      filaIndexEnBloque = (fila - _filasPorLado) - 1;
-    } else {
-      filaIndexEnBloque = fila - 1;
-    }
-
-    final double y = outerPad + headerH + filaIndexEnBloque * (cell + gap);
-    return Offset(x, y);
-  }
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final hits = <_SlotHit>[];
-    final backgroundPaint = Paint()..color = Colors.white;
-    canvas.drawRect(Offset.zero & size, backgroundPaint);
-
-    final entriesByCoordinate = <String, StockEntry>{};
-    for (final entry in occupied.values) {
-      entriesByCoordinate['${entry.fila}-${entry.posicion}'] = entry;
-    }
-
-    final emptyPaint = Paint()..color = Colors.grey.shade200;
-    final occupiedPaint = Paint()..color = const Color(0xFF8BC34A);
-    final borderPaint = Paint()
-      ..color = Colors.blueGrey.shade400
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
-    final walkwayPaint = Paint()..color = Colors.grey.shade300;
-
-    final textPainter = TextPainter(
-      textAlign: TextAlign.center,
-      textDirection: TextDirection.ltr,
-    );
-
-    final double labelScale = scale.clamp(0.75, 1.8);
-    final columnLabelStyle = TextStyle(
-      fontSize: 12 * labelScale,
-      fontWeight: FontWeight.w600,
-      color: Colors.blueGrey.shade700,
-    );
-    final rowLabelStyle = TextStyle(
-      fontSize: 11 * labelScale,
-      fontWeight: FontWeight.w600,
-      color: Colors.blueGrey.shade600,
-    );
-
-    final double palletFontSize = math.min(cell * 0.35, 12) * scale.clamp(0.9, 1.4);
-    final palletStyle = TextStyle(
-      fontSize: palletFontSize,
-      fontWeight: FontWeight.w700,
-      color: Colors.white,
-    );
-
-    // Walkway
-    final walkwayRect = Rect.fromLTWH(
-      _walkwayLeft,
-      outerPad,
-      aisleW,
-      _altoTotal,
-    );
-    canvas.drawRect(walkwayRect, walkwayPaint);
-
-    void drawColumnHeaders({required bool isRightBlock}) {
-      for (var pos = 1; pos <= _posMax; pos++) {
-        final double x;
-        if (isRightBlock) {
-          x = _xStartRightBlock + (_posMax - pos) * (cell + gap);
-        } else {
-          x = _xStartLeftBlock + (pos - 1) * (cell + gap);
-        }
-        final rect = Rect.fromLTWH(x, outerPad, cell, headerH);
-        textPainter.text = TextSpan(text: 'P$pos', style: columnLabelStyle);
-        textPainter.layout(minWidth: 0, maxWidth: rect.width);
-        final offset = Offset(
-          rect.left + (rect.width - textPainter.width) / 2,
-          rect.top + (rect.height - textPainter.height) / 2,
+    final order = List<int>.generate(_posicionesMax, (i) => i + 1);
+    final displayOrder = (invert ? order.reversed : order).toList();
+    final tiles = <Widget>[];
+    for (var i = 0; i < displayOrder.length; i++) {
+      final pos = displayOrder[i];
+      final entry = _entryFor(side, fila, pos);
+      final digits = entry != null ? _digitsForEntry(entry) : null;
+      Widget tile = SizedBox(
+        width: cell,
+        height: cell,
+        child: PalletTile(
+          ocupado: entry != null,
+          p: digits,
+        ),
+      );
+      if (entry != null && onEntryTap != null) {
+        tile = GestureDetector(
+          onTap: () => onEntryTap!(entry),
+          child: tile,
         );
-        textPainter.paint(canvas, offset);
+      }
+      tiles.add(tile);
+      if (i != displayOrder.length - 1) {
+        tiles.add(SizedBox(width: gap));
       }
     }
+    return Row(mainAxisSize: MainAxisSize.min, children: tiles);
+  }
 
-    if (camera.pasillo == CameraPasillo.central) {
-      drawColumnHeaders(isRightBlock: false);
-      drawColumnHeaders(isRightBlock: true);
-    } else {
-      drawColumnHeaders(isRightBlock: true);
-    }
-
-    for (var fila = 1; fila <= _filasTotales; fila++) {
-      final bool isRightBlock = _isRightBlockForFila(fila);
-      final offset = _topLeftForCell(isRightBlock: isRightBlock, fila: fila, pos: 1);
-      final double centerY = offset.dy + cell / 2;
-
-      textPainter.text = TextSpan(text: 'F$fila', style: rowLabelStyle);
-      textPainter.layout();
-
-      if (!isRightBlock) {
-        final double dx = outerPad + (rowLabelW - textPainter.width) / 2;
-        final double dy = centerY - textPainter.height / 2;
-        textPainter.paint(canvas, Offset(dx, dy));
-      }
-
-      final double rightLabelStart = _xStartRightBlock + _gridWidth;
-      if (isRightBlock) {
-        final double dx = rightLabelStart + (rowLabelW - textPainter.width) / 2;
-        final double dy = centerY - textPainter.height / 2;
-        textPainter.paint(canvas, Offset(dx, dy));
-      }
-
-      for (var pos = 1; pos <= _posMax; pos++) {
-        final topLeft = _topLeftForCell(isRightBlock: isRightBlock, fila: fila, pos: pos);
-        final rect = Rect.fromLTWH(topLeft.dx, topLeft.dy, cell, cell);
-        final key = '${fila}-$pos';
-        final entry = entriesByCoordinate[key];
-        canvas.drawRect(rect, entry != null ? occupiedPaint : emptyPaint);
-        canvas.drawRect(rect, borderPaint);
-
-        if (entry != null) {
-          hits.add(_SlotHit(rect: rect, entry: entry));
-          textPainter.text = TextSpan(text: entry.palletCode, style: palletStyle);
-          textPainter.layout(minWidth: 0, maxWidth: rect.width - 4);
-          final dx = rect.left + (rect.width - textPainter.width) / 2;
-          final dy = rect.top + (rect.height - textPainter.height) / 2;
-          textPainter.paint(canvas, Offset(dx, dy));
-        }
-      }
-    }
-
-    onLayout?.call(List<_SlotHit>.unmodifiable(hits));
+  Widget _buildWalkway(double height) {
+    return Container(
+      width: aisleWidth,
+      height: height,
+      decoration: BoxDecoration(
+        color: walkwayColor,
+        borderRadius: BorderRadius.circular(6),
+      ),
+    );
   }
 
   @override
-  bool shouldRepaint(covariant CameraPainter oldDelegate) {
-    return oldDelegate.camera != camera ||
-        oldDelegate.occupied != occupied ||
-        oldDelegate.scale != scale ||
-        oldDelegate.canvasSize != canvasSize;
+  Widget build(BuildContext context) {
+    if (_posicionesMax <= 0 || _filasPorLado <= 0) {
+      return const SizedBox.shrink();
+    }
+
+    final headerStyle = const TextStyle(fontSize: 11, color: Colors.black54, fontWeight: FontWeight.w600);
+
+    final rows = <Widget>[];
+    if (_isCentral) {
+      for (var index = 0; index < _filasPorLado; index++) {
+        final leftFila = index + 1;
+        final rightFila = _filasPorLado + index + 1;
+        rows.add(
+          Padding(
+            padding: EdgeInsets.only(bottom: index == _filasPorLado - 1 ? 0 : gap),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _buildRowLabel('F$leftFila'),
+                _buildPalletRow(side: StorageSide.left, fila: leftFila, invert: true),
+                SizedBox(width: gap),
+                _buildWalkway(cell),
+                SizedBox(width: gap),
+                _buildRowLabel('F$rightFila', alignment: Alignment.centerLeft),
+                _buildPalletRow(side: StorageSide.right, fila: rightFila, invert: false),
+              ],
+            ),
+          ),
+        );
+      }
+    } else {
+      for (var index = 0; index < _filasTotales; index++) {
+        final fila = index + 1;
+        rows.add(
+          Padding(
+            padding: EdgeInsets.only(bottom: index == _filasTotales - 1 ? 0 : gap),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _buildWalkway(cell),
+                SizedBox(width: gap),
+                _buildRowLabel('F$fila'),
+                _buildPalletRow(side: StorageSide.right, fila: fila, invert: false),
+              ],
+            ),
+          ),
+        );
+      }
+    }
+
+    return DecoratedBox(
+      decoration: const BoxDecoration(color: Colors.white),
+      child: Padding(
+        padding: const EdgeInsets.all(outerPadding),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(height: headerHeight, child: _buildHeaderRow(headerStyle)),
+            SizedBox(height: gap),
+            ...rows,
+          ],
+        ),
+      ),
+    );
   }
-}
-
-class _SlotHit {
-  const _SlotHit({required this.rect, required this.entry});
-
-  final Rect rect;
-  final StockEntry entry;
 }
