@@ -596,7 +596,7 @@ class _DraggableLegendState extends State<DraggableLegend> {
           borderRadius: BorderRadius.circular(12),
           color: Theme.of(context).cardColor,
           child: ConstrainedBox(
-            constraints: const BoxConstraints.tight(_legendSize),
+            constraints: BoxConstraints.tight(_legendSize),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               child: Column(
