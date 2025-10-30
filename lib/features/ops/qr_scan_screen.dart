@@ -1,3 +1,4 @@
+import 'dart:io' show Platform; // DESKTOP-GUARD
 import 'dart:math' as math;
 
 import 'package:firebase_core/firebase_core.dart';
@@ -17,9 +18,14 @@ class QrScanScreen extends ConsumerStatefulWidget {
   ConsumerState<QrScanScreen> createState() => _QrScanScreenState();
 }
 
+final bool _isDesktop =
+    Platform.isWindows || Platform.isLinux || Platform.isMacOS; // DESKTOP-GUARD
+final bool _isMobile =
+    Platform.isAndroid || Platform.isIOS; // DESKTOP-GUARD
+
 class _QrScanScreenState extends ConsumerState<QrScanScreen> {
-  final MobileScannerController _controller = MobileScannerController();
-  final ImagePicker _imagePicker = ImagePicker();
+  MobileScannerController? _controller;
+  ImagePicker? _imagePicker;
   bool _busy = false;
   bool _analyzingFromGallery = false;
   TorchState _torchState = TorchState.off;
@@ -28,8 +34,17 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   static const Duration _detectionCooldown = Duration(milliseconds: 1200);
 
   @override
+  void initState() {
+    super.initState();
+    if (_isMobile) {
+      _controller = MobileScannerController();
+      _imagePicker = ImagePicker();
+    }
+  }
+
+  @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     super.dispose();
   }
 
@@ -38,8 +53,14 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
       return;
     }
 
+    final picker = _imagePicker;
+    final controller = _controller;
+    if (picker == null || controller == null) {
+      return;
+    }
+
     try {
-      final XFile? file = await _imagePicker.pickImage(source: ImageSource.gallery);
+      final XFile? file = await picker.pickImage(source: ImageSource.gallery);
       if (file == null) {
         return;
       }
@@ -52,7 +73,7 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
         _analyzingFromGallery = true;
       });
 
-      await _controller.analyzeImage(file.path);
+      await controller.analyzeImage(file.path);
     } on Exception {
       if (!mounted) {
         return;
@@ -69,7 +90,7 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
 
   Future<void> _closeScanner() async {
     try {
-      await _controller.stop();
+      await _controller?.stop();
     } catch (_) {}
 
     if (!mounted) {
@@ -210,12 +231,16 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   }
 
   Future<void> _toggleTorch() async {
+    final controller = _controller;
+    if (controller == null) {
+      return;
+    }
     if (_busy) {
       return;
     }
 
     try {
-      await _controller.toggleTorch();
+      await controller.toggleTorch();
       if (!mounted) {
         return;
       }
@@ -241,7 +266,7 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   Future<void> _handleSuccess(StockProcessResult result) async {
     ref.read(ubicacionPendienteProvider.notifier).state = null;
     try {
-      await _controller.stop();
+      await _controller?.stop();
     } catch (_) {}
 
     if (!mounted) {
@@ -281,13 +306,25 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isDesktop) {
+      // DESKTOP-GUARD
+      return _DesktopQrPlaceholder(
+        onClose: () => context.go('/'),
+      );
+    }
+
+    final controller = _controller;
+    if (controller == null) {
+      return const SizedBox.shrink();
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         fit: StackFit.expand,
         children: <Widget>[
           MobileScanner(
-            controller: _controller,
+            controller: controller,
             fit: BoxFit.cover,
             onDetect: (capture) async {
               if (_busy) {
@@ -395,6 +432,47 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _DesktopQrPlaceholder extends StatelessWidget {
+  const _DesktopQrPlaceholder({required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Lectura QR'),
+        leading: IconButton(
+          onPressed: onClose,
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Volver',
+        ),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.desktop_windows, size: 72),
+              SizedBox(height: 24),
+              Text(
+                'El escaneo de códigos QR está disponible solo en móvil.',
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 12),
+              Text(
+                'Accede desde un dispositivo Android o iOS para usar la cámara.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
