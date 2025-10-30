@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/camera_model.dart';
 import '../../providers/camera_providers.dart';
@@ -55,25 +56,172 @@ class CameraMapScreen extends ConsumerStatefulWidget {
   ConsumerState<CameraMapScreen> createState() => _CameraMapScreenState();
 }
 
-class _CameraMapScreenState extends ConsumerState<CameraMapScreen> {
-  final _hCtrl = ScrollController();
-  final _vCtrl = ScrollController();
-  final _ivController = TransformationController();
+class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
+    with SingleTickerProviderStateMixin {
+  static const double _minZoom = 0.5;
+  static const double _maxZoom = 6.0;
 
-  Size? _lastViewportSize;
-  Size? _lastCanvasSize;
-  bool _matrixSet = false;
+  static final Map<String, Matrix4> _matrixCache = {};
+
+  final TransformationController _ivController = TransformationController();
+  late final AnimationController _animCtrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 180),
+  );
+
+  Animation<Matrix4>? _matrixAnimation;
+  final GlobalKey<_DraggableLegendState> _legendKey =
+      GlobalKey<_DraggableLegendState>();
+
+  String? _activeCameraKey;
+  Size? _viewportSize;
+  Size? _canvasSize;
+  Matrix4? _fitMatrix;
+  bool _matrixInitialized = false;
+  TapDownDetails? _doubleTapDetails;
 
   static const double cell = 44;
   static const double gap = 8;
   static const double aisleWidth = 24;
 
   @override
+  void initState() {
+    super.initState();
+    _animCtrl.addStatusListener((status) {
+      if (status == AnimationStatus.completed ||
+          status == AnimationStatus.dismissed) {
+        _legendKey.currentState?.setFaded(false);
+        _storeMatrix();
+      }
+    });
+  }
+
+  @override
   void dispose() {
-    _hCtrl.dispose();
-    _vCtrl.dispose();
+    _storeMatrix();
+    _matrixAnimation?.removeListener(_handleAnimationTick);
+    _animCtrl.dispose();
     _ivController.dispose();
     super.dispose();
+  }
+
+  void _storeMatrix() {
+    final cameraKey = _activeCameraKey;
+    if (cameraKey == null) {
+      return;
+    }
+    _matrixCache[cameraKey] = Matrix4.copy(_ivController.value);
+  }
+
+  void _handleAnimationTick() {
+    final animation = _matrixAnimation;
+    if (animation != null) {
+      _ivController.value = animation.value;
+    }
+  }
+
+  void _animateTo(Matrix4 target) {
+    _matrixAnimation?.removeListener(_handleAnimationTick);
+    _matrixAnimation = Matrix4Tween(
+      begin: _ivController.value,
+      end: target,
+    ).animate(
+      CurvedAnimation(parent: _animCtrl, curve: Curves.easeOut),
+    );
+    _matrixAnimation!.addListener(_handleAnimationTick);
+    _legendKey.currentState?.setFaded(true);
+    _animCtrl
+      ..stop()
+      ..reset()
+      ..forward();
+  }
+
+  void _zoomBy(double factor, Size viewport) {
+    if (viewport.isEmpty) {
+      return;
+    }
+    final current = _ivController.value.getMaxScaleOnAxis();
+    final target = (current * factor).clamp(_minZoom, _maxZoom);
+    _zoomToPoint(
+      Offset(viewport.width / 2, viewport.height / 2),
+      viewport,
+      target,
+    );
+  }
+
+  void _zoomToPoint(Offset focalPoint, Size viewport, double targetScale) {
+    if (viewport.isEmpty) {
+      return;
+    }
+    final clampedScale = targetScale.clamp(_minZoom, _maxZoom);
+    final scenePoint = _ivController.toScene(focalPoint);
+    final matrix = Matrix4.identity()
+      ..scale(clampedScale)
+      ..translate(
+        -scenePoint.dx + viewport.width / clampedScale / 2,
+        -scenePoint.dy + viewport.height / clampedScale / 2,
+      );
+    _animateTo(matrix);
+  }
+
+  Matrix4 _buildFitMatrix(Size viewport, Size content) {
+    if (viewport.isEmpty || content.width <= 0 || content.height <= 0) {
+      return Matrix4.identity();
+    }
+    final fitScale = math.min(
+      viewport.width / content.width,
+      viewport.height / content.height,
+    );
+    final baseScale = fitScale.isFinite ? fitScale * 0.95 : 1.0;
+    final scale = baseScale.clamp(_minZoom, _maxZoom);
+    final matrix = Matrix4.identity()
+      ..scale(scale)
+      ..translate(
+        (viewport.width / scale - content.width) / 2,
+        (viewport.height / scale - content.height) / 2,
+      );
+    return matrix;
+  }
+
+  void _fitToScreen() {
+    final matrix = _fitMatrix;
+    if (matrix != null) {
+      _animateTo(Matrix4.copy(matrix));
+    }
+  }
+
+  void _handleDoubleTapDown(TapDownDetails details) {
+    _doubleTapDetails = details;
+  }
+
+  void _handleDoubleTap(Size viewport) {
+    final details = _doubleTapDetails;
+    if (details == null || viewport.isEmpty) {
+      return;
+    }
+    final currentScale = _ivController.value.getMaxScaleOnAxis();
+    if (currentScale < 2.0) {
+      final targetScale = (currentScale * 2).clamp(_minZoom, _maxZoom);
+      _zoomToPoint(details.localPosition, viewport, targetScale);
+    } else {
+      _fitToScreen();
+    }
+    _doubleTapDetails = null;
+  }
+
+  void _handleInteractionStart(ScaleStartDetails details) {
+    if (_animCtrl.isAnimating) {
+      _animCtrl.stop();
+      _matrixAnimation?.removeListener(_handleAnimationTick);
+      _matrixAnimation = null;
+      _storeMatrix();
+    }
+    _legendKey.currentState?.setFaded(true);
+  }
+
+  void _handleInteractionEnd(ScaleEndDetails details) {
+    _legendKey.currentState?.setFaded(false);
+    _storeMatrix();
   }
 
   void _showSlotDetails(BuildContext context, StockEntry entry) {
@@ -234,33 +382,27 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen> {
                           );
 
                           final viewport = Size(constraints.maxWidth, constraints.maxHeight);
-                          if (_lastViewportSize == null ||
-                              _lastViewportSize!.width != viewport.width ||
-                              _lastViewportSize!.height != viewport.height) {
-                            _matrixSet = false;
-                            _lastViewportSize = viewport;
+                          if (_activeCameraKey != cameraNumero) {
+                            _activeCameraKey = cameraNumero;
+                            _matrixInitialized = false;
                           }
 
-                          if (_lastCanvasSize == null ||
-                              _lastCanvasSize!.width != canvasSize.width ||
-                              _lastCanvasSize!.height != canvasSize.height) {
-                            _matrixSet = false;
-                            _lastCanvasSize = canvasSize;
+                          if (_viewportSize != viewport ||
+                              _canvasSize != canvasSize) {
+                            _viewportSize = viewport;
+                            _canvasSize = canvasSize;
+                            _fitMatrix = _buildFitMatrix(viewport, canvasSize);
+                            _matrixInitialized = false;
                           }
 
-                          if (!_matrixSet &&
-                              viewport.width > 0 &&
-                              viewport.height > 0 &&
-                              canvasSize.width > 0 &&
-                              canvasSize.height > 0) {
-                            final initScale = math.min(
-                                  viewport.width / canvasSize.width,
-                                  viewport.height / canvasSize.height,
-                                ) *
-                                0.95;
-                            _ivController.value =
-                                Matrix4.diagonal3Values(initScale, initScale, 1);
-                            _matrixSet = true;
+                          if (!_matrixInitialized && _fitMatrix != null) {
+                            final cached = _matrixCache[_activeCameraKey!];
+                            if (cached != null) {
+                              _ivController.value = Matrix4.copy(cached);
+                            } else {
+                              _ivController.value = Matrix4.copy(_fitMatrix!);
+                            }
+                            _matrixInitialized = true;
                           }
 
                           final canvas = _CameraCanvas(
@@ -274,45 +416,54 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen> {
 
                           return Stack(
                             children: [
-                              Scrollbar(
-                                controller: _vCtrl,
-                                thumbVisibility: true,
-                                child: Scrollbar(
-                                  controller: _hCtrl,
-                                  thumbVisibility: true,
-                                  notificationPredicate: (notif) =>
-                                      notif.metrics.axis == Axis.horizontal,
-                                  child: SingleChildScrollView(
-                                    controller: _vCtrl,
-                                    scrollDirection: Axis.vertical,
-                                    child: SingleChildScrollView(
-                                      controller: _hCtrl,
-                                      scrollDirection: Axis.horizontal,
-                                      child: SizedBox(
-                                        width: canvasSize.width,
-                                        height: canvasSize.height,
-                                        child: InteractiveViewer(
-                                          constrained: false,
-                                          panEnabled: false,
-                                          scaleEnabled: true,
-                                          minScale: 0.2,
-                                          maxScale: 6.0,
-                                          boundaryMargin: const EdgeInsets.all(200),
-                                          transformationController: _ivController,
-                                          child: canvas,
-                                        ),
-                                      ),
+                              Positioned.fill(
+                                child: GestureDetector(
+                                  onDoubleTapDown: _handleDoubleTapDown,
+                                  onDoubleTap: () => _handleDoubleTap(viewport),
+                                  child: InteractiveViewer(
+                                    constrained: false,
+                                    panEnabled: true,
+                                    scaleEnabled: true,
+                                    minScale: _minZoom,
+                                    maxScale: _maxZoom,
+                                    boundaryMargin: const EdgeInsets.all(200),
+                                    clipBehavior: Clip.none,
+                                    transformationController: _ivController,
+                                    onInteractionStart: _handleInteractionStart,
+                                    onInteractionEnd: _handleInteractionEnd,
+                                    child: SizedBox(
+                                      width: canvasSize.width,
+                                      height: canvasSize.height,
+                                      child: canvas,
                                     ),
                                   ),
                                 ),
                               ),
                               Positioned(
-                                left: 0,
-                                top: 0,
-                                child: SafeArea(
-                                  minimum: const EdgeInsets.only(left: 16, top: 8),
-                                  child: const _LegendCard(),
+                                right: 12,
+                                bottom: 20,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    _ZoomButton(
+                                      icon: Icons.add,
+                                      onTap: () => _zoomBy(1.2, viewport),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _ZoomButton(
+                                      icon: Icons.remove,
+                                      onTap: () => _zoomBy(1 / 1.2, viewport),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    _ZoomButton(
+                                      icon: Icons.crop_square,
+                                      onTap: _fitToScreen,
+                                    ),
+                                  ],
                                 ),
+                              ),
+                              Positioned.fill(
+                                child: DraggableLegend(key: _legendKey),
                               ),
                             ],
                           );
@@ -330,51 +481,209 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen> {
   }
 }
 
-class _LegendCard extends StatelessWidget {
-  const _LegendCard();
+class _ZoomButton extends StatelessWidget {
+  const _ZoomButton({
+    required this.icon,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    Widget dot(Color color) {
-      return Container(
-        width: 18,
-        height: 18,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: Colors.black12),
-        ),
-      );
-    }
-
-    return Card(
+    return Material(
+      color: Colors.black.withOpacity(0.55),
+      shape: const CircleBorder(),
       elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                dot(const Color(0xFFF2F3F5)),
-                const SizedBox(width: 8),
-                const Text('Libre'),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                dot(const Color(0xFF8BC34A)),
-                const SizedBox(width: 8),
-                const Text('Ocupado'),
-              ],
-            ),
-          ],
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Icon(icon, color: Colors.white),
         ),
+      ),
+    );
+  }
+}
+
+class DraggableLegend extends StatefulWidget {
+  const DraggableLegend({super.key});
+
+  @override
+  State<DraggableLegend> createState() => _DraggableLegendState();
+}
+
+class _DraggableLegendState extends State<DraggableLegend> {
+  Offset pos = const Offset(16, 120);
+  bool visible = true;
+  bool faded = false;
+
+  static const Size _legendSize = Size(180, 120);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPosition();
+  }
+
+  Future<void> _loadPosition() async {
+    final prefs = await SharedPreferences.getInstance();
+    final dx = prefs.getDouble('legend_dx') ?? pos.dx;
+    final dy = prefs.getDouble('legend_dy') ?? pos.dy;
+    if (!mounted) return;
+    setState(() {
+      pos = Offset(dx, dy);
+    });
+  }
+
+  Future<void> _savePosition() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('legend_dx', pos.dx);
+    await prefs.setDouble('legend_dy', pos.dy);
+  }
+
+  void _toggleVisibility() {
+    setState(() {
+      visible = !visible;
+      faded = false;
+    });
+  }
+
+  void setFaded(bool value) {
+    if (!visible || faded == value) {
+      return;
+    }
+    setState(() {
+      faded = value;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const minX = 8.0;
+        const minY = 8.0;
+        final maxX = math.max(minX, constraints.maxWidth - _legendSize.width - 8);
+        final maxY = math.max(minY, constraints.maxHeight - _legendSize.height - 8);
+        final adjustedPos = Offset(
+          pos.dx.clamp(minX, maxX),
+          pos.dy.clamp(minY, maxY),
+        );
+        if (adjustedPos != pos) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            setState(() {
+              pos = adjustedPos;
+            });
+            _savePosition();
+          });
+        }
+
+        void clampAndSet(Offset next) {
+          setState(() {
+            pos = Offset(
+              next.dx.clamp(minX, maxX),
+              next.dy.clamp(minY, maxY),
+            );
+          });
+        }
+
+        final legendCard = Material(
+          elevation: 4,
+          borderRadius: BorderRadius.circular(12),
+          color: Theme.of(context).cardColor,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints.tight(_legendSize),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _LegendDot(color: const Color(0xFFF2F3F5)),
+                      const SizedBox(width: 8),
+                      const Text('Libre'),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _LegendDot(color: const Color(0xFF8BC34A)),
+                      const SizedBox(width: 8),
+                      const Text('Ocupado'),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: IconButton(
+                      onPressed: _toggleVisibility,
+                      icon: const Icon(Icons.close, size: 18),
+                      padding: EdgeInsets.zero,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+
+        return Stack(
+          children: [
+            if (visible)
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 200),
+                left: adjustedPos.dx,
+                top: adjustedPos.dy,
+                child: GestureDetector(
+                  onPanUpdate: (details) => clampAndSet(pos + details.delta),
+                  onPanEnd: (_) => _savePosition(),
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 200),
+                    opacity: faded ? 0.6 : 1.0,
+                    child: legendCard,
+                  ),
+                ),
+              ),
+            if (!visible)
+              Positioned(
+                left: 16,
+                bottom: 32,
+                child: ElevatedButton.icon(
+                  onPressed: _toggleVisibility,
+                  icon: const Icon(Icons.visibility, size: 18),
+                  label: const Text('Mostrar leyenda'),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _LegendDot extends StatelessWidget {
+  const _LegendDot({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 18,
+      height: 18,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.black12),
       ),
     );
   }
