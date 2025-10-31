@@ -38,3 +38,14 @@ target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
+
+# Ensure that any running instance of the application is stopped before the
+# linker tries to overwrite the executable. Without this step Windows keeps the
+# file handle open, which results in "LNK1168: cannot open ... for writing"
+# errors during `flutter run` after a previous debug session.
+if(WIN32)
+  add_custom_command(TARGET ${BINARY_NAME} PRE_BUILD
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command
+            "Get-Process -Name '${BINARY_NAME}' -ErrorAction SilentlyContinue | Stop-Process -Force"
+    COMMENT "Stopping running instance of ${BINARY_NAME}.exe to avoid linker write errors.")
+endif()
