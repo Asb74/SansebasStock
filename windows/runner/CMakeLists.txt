@@ -49,3 +49,12 @@ if(WIN32)
             "Get-Process -Name '${BINARY_NAME}' -ErrorAction SilentlyContinue | Stop-Process -Force"
     COMMENT "Stopping running instance of ${BINARY_NAME}.exe to avoid linker write errors.")
 endif()
+
+# Pre-kill target que nunca falla para evitar MSB3073
+add_custom_target(pre_kill ALL
+  COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_LIST_DIR}/../tools/kill_prev.ps1"
+  VERBATIM
+)
+
+# Asegura que el runner depende de 'pre_kill' para ejecutarlo antes de compilar/enlazar
+add_dependencies(${BINARY_NAME} pre_kill)
