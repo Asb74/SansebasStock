@@ -44,17 +44,12 @@ add_dependencies(${BINARY_NAME} flutter_assemble)
 # file handle open, which results in "LNK1168: cannot open ... for writing"
 # errors during `flutter run` after a previous debug session.
 if(WIN32)
-  add_custom_command(TARGET ${BINARY_NAME} PRE_BUILD
-    COMMAND powershell -NoProfile -ExecutionPolicy Bypass -Command
-            "Get-Process -Name '${BINARY_NAME}' -ErrorAction SilentlyContinue | Stop-Process -Force"
-    COMMENT "Stopping running instance of ${BINARY_NAME}.exe to avoid linker write errors.")
+  # Pre-kill target que nunca falla
+  add_custom_target(pre_kill ALL
+    COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_LIST_DIR}/../tools/kill_prev.ps1"
+    VERBATIM
+  )
+
+  # Asegura que el binario depende de pre_kill para ejecutarlo antes
+  add_dependencies(${BINARY_NAME} pre_kill)
 endif()
-
-# Pre-kill target que nunca falla para evitar MSB3073
-add_custom_target(pre_kill ALL
-  COMMAND powershell -NoProfile -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_LIST_DIR}/../tools/kill_prev.ps1"
-  VERBATIM
-)
-
-# Asegura que el runner depende de 'pre_kill' para ejecutarlo antes de compilar/enlazar
-add_dependencies(${BINARY_NAME} pre_kill)
