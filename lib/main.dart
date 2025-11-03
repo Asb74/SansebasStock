@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:developer' as dev;
 import 'dart:io' show Platform;
 
 import 'package:firebase_core/firebase_core.dart';
@@ -27,25 +29,13 @@ void _swallowLockKeys() {
   };
 }
 
-// DESKTOP FIX: Surface uncaught Flutter and platform dispatcher errors.
-void _installGlobalErrorHandlers() {
-  FlutterError.onError = (details) {
-    debugPrint('FlutterError: ${details.exceptionAsString()}');
-    debugPrintStack(stackTrace: details.stack);
-  };
-  PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('Uncaught: $error');
-    debugPrintStack(stackTrace: stack);
-    return true;
-  };
-}
-
-Future<void> main() async {
+Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
-  _installGlobalErrorHandlers(); // DESKTOP FIX: Capture unhandled errors early.
+
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     _swallowLockKeys(); // DESKTOP FIX: Avoid crashes from lock keys on desktop.
   }
+
   try {
     if (Firebase.apps.isEmpty) {
       await Firebase.initializeApp(
@@ -59,7 +49,32 @@ Future<void> main() async {
     Firebase.app();
   }
 
-  runApp(const ProviderScope(child: SansebasStockApp()));
+  FlutterError.onError = (details) {
+    dev.log('FlutterError', error: details.exception, stackTrace: details.stack);
+    FlutterError.presentError(details);
+  };
+  PlatformDispatcher.instance.onError = (error, stack) {
+    dev.log('PlatformError', error: error, stackTrace: stack);
+    return true; // evita que se cierre el proceso en desktop
+  };
+}
+
+void main() {
+  runZonedGuarded(() async {
+    await _bootstrap();
+    runApp(const MyApp());
+  }, (e, st) {
+    dev.log('ZoneError', error: e, stackTrace: st);
+  });
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const ProviderScope(child: SansebasStockApp());
+  }
 }
 
 class SansebasStockApp extends StatelessWidget {

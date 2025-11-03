@@ -1,7 +1,9 @@
+import 'dart:developer' as dev;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final authServiceProvider = Provider<AuthService>((ref) {
@@ -34,15 +36,21 @@ class AuthService {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _firebaseAuth;
 
-  Future<AppUser> login(String correo, String password) async {
+  Future<AppUser> login(
+    BuildContext context,
+    String correo,
+    String password,
+  ) async {
     try {
       final trimmedCorreo = correo.trim().toLowerCase();
       final trimmedPassword = password.trim();
 
-      final credential = await _firebaseAuth.signInWithEmailAndPassword(
+      dev.log('SignIn start', name: 'Auth', error: {'email': trimmedCorreo});
+      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: trimmedCorreo,
         password: trimmedPassword,
       );
+      dev.log('SignIn OK', name: 'Auth', error: {'uid': credential.user?.uid});
 
       final user = credential.user;
       if (user == null) {
@@ -92,12 +100,25 @@ class AuthService {
         correo: data['correo']?.toString() ?? trimmedCorreo,
         valor: isEnabled,
       );
-    } on FirebaseAuthException catch (e) {
-      throw AuthException(e.message ?? 'Error de autenticación.');
+    } on FirebaseAuthException catch (e, st) {
+      dev.log('FirebaseAuthException',
+          name: 'Auth',
+          error: {'code': e.code, 'message': e.message},
+          stackTrace: st);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Auth error: ${e.code} - ${e.message}')),
+      );
+      throw AuthException('Auth error: ${e.code} - ${e.message}');
     } on FirebaseException catch (e) {
       throw AuthException('Error en Firestore: ${e.message}');
-    } catch (e) {
-      throw AuthException('Error inesperado: $e');
+    } on AuthException {
+      rethrow;
+    } catch (e, st) {
+      dev.log('UnknownSignInError', name: 'Auth', error: e, stackTrace: st);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Unknown error: $e')),
+      );
+      throw AuthException('Unknown error: $e');
     }
   }
 
@@ -130,8 +151,12 @@ class AuthService {
     await _firebaseAuth.signOut();
   }
 
-  Future<AppUser> signInWithCollection(String correo, String password) {
-    return login(correo, password);
+  Future<AppUser> signInWithCollection(
+    BuildContext context,
+    String correo,
+    String password,
+  ) {
+    return login(context, correo, password);
   }
 }
 

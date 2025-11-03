@@ -42,6 +42,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     try {
       final user = await authService.signInWithCollection(
+        context,
         _emailController.text,
         _passwordController.text,
       );
@@ -59,7 +60,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       context.go('/', extra: user);
     } on AuthException catch (e) {
       await SessionStore.clear();
-      _showError(e.message);
+      if (!e.message.startsWith('Auth error:') &&
+          !e.message.startsWith('Unknown error:')) {
+        _showError(e.message);
+      }
     } catch (_) {
       _showError('Ha ocurrido un error inesperado.');
     } finally {
