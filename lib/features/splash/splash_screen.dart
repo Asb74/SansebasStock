@@ -35,6 +35,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
     try {
       final user = await authService.signInWithCollection(
+        context,
         credentials.email,
         credentials.password,
       );
