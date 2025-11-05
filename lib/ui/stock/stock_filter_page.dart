@@ -22,26 +22,31 @@ class StockFilterPage extends ConsumerStatefulWidget {
 class _StockFilterPageState extends ConsumerState<StockFilterPage> {
   late final TextEditingController _netoMinController;
   late final TextEditingController _netoMaxController;
+  ProviderSubscription<PaletFilters>? _filtersSubscription;
 
   @override
   void initState() {
     super.initState();
     _netoMinController = TextEditingController();
     _netoMaxController = TextEditingController();
-    ref.listen<PaletFilters>(paletFiltersProvider, (previous, next) {
-      final minText = next.netoMin?.toString() ?? '';
-      final maxText = next.netoMax?.toString() ?? '';
-      if (_netoMinController.text != minText) {
-        _netoMinController.text = minText;
-      }
-      if (_netoMaxController.text != maxText) {
-        _netoMaxController.text = maxText;
-      }
-    });
+    _filtersSubscription = ref.listenManual<PaletFilters>(
+      paletFiltersProvider,
+      (previous, next) {
+        final minText = next.netoMin?.toString() ?? '';
+        final maxText = next.netoMax?.toString() ?? '';
+        if (_netoMinController.text != minText) {
+          _netoMinController.text = minText;
+        }
+        if (_netoMaxController.text != maxText) {
+          _netoMaxController.text = maxText;
+        }
+      },
+    );
   }
 
   @override
   void dispose() {
+    _filtersSubscription?.close();
     _netoMinController.dispose();
     _netoMaxController.dispose();
     super.dispose();
