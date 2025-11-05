@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -165,7 +166,7 @@ class _StockFilterPageState extends ConsumerState<StockFilterPage> {
                         ),
                       ),
                       error: (error, stackTrace) => _ErrorMessage(
-                        message: error.toString(),
+                        error: error,
                       ),
                     ),
                   ],
@@ -237,7 +238,7 @@ class _StockFilterPageState extends ConsumerState<StockFilterPage> {
               error: (error, stackTrace) => SliverFillRemaining(
                 hasScrollBody: false,
                 child: Center(
-                  child: _ErrorMessage(message: error.toString()),
+                  child: _ErrorMessage(error: error),
                 ),
               ),
             ),
@@ -860,12 +861,20 @@ class _ResultsHeader extends StatelessWidget {
 }
 
 class _ErrorMessage extends StatelessWidget {
-  const _ErrorMessage({required this.message});
+  const _ErrorMessage({required this.error});
 
-  final String message;
+  final Object error;
+
+  String _formatMessage(Object error) {
+    if (error is FirebaseException && error.code == 'permission-denied') {
+      return 'No tienes permisos para leer estos datos. Comprueba tu usuario o las reglas.';
+    }
+    return 'Error: $error';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final message = _formatMessage(error);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

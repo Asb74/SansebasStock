@@ -1,16 +1,40 @@
-# sansebas_stock
+# Sansebas Stock
 
-A new Flutter project.
+Aplicación Flutter conectada a Firebase para la gestión de stock.
 
-## Getting Started
+## Configuración del proyecto
 
-This project is a starting point for a Flutter application.
+1. Instala las dependencias de Flutter:
+   ```bash
+   flutter pub get
+   ```
+2. Configura los ficheros de Firebase (`google-services.json`, `GoogleService-Info.plist`, etc.) para cada plataforma.
+3. Inicia sesión en Firebase CLI y selecciona el proyecto correspondiente:
+   ```bash
+   firebase login
+   firebase use <tu-proyecto>
+   ```
 
-A few resources to get you started if this is your first Flutter project:
+## Reglas e índices de Firestore
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+El repositorio incluye las reglas e índices mínimos para Firestore en la carpeta `firebase/`.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+- Reglas: `firebase/firestore.rules`
+- Índices: `firebase/firestore.indexes.json`
+
+Después de realizar cambios en estos ficheros, despliega la configuración con los siguientes comandos:
+
+```bash
+firebase deploy --only firestore:rules
+firebase deploy --only firestore:indexes
+```
+
+## Ejecución en desarrollo
+
+Lanza la aplicación en un dispositivo o emulador:
+
+```bash
+flutter run
+```
+
+Utiliza `flutter test` para ejecutar la batería de pruebas cuando sea necesario.
