@@ -46,9 +46,11 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'REEMPLAZAR',
-    appId: 'REEMPLAZAR',
-    messagingSenderId: 'REEMPLAZAR',
-    projectId: 'REEMPLAZAR',
+    apiKey: 'AIzaSyA_chMtYyRHZ24g_XJzXqcAghxtfcP8AM',
+    appId: '1:88209968141:web:ed3e5fdbe6914c5fd6944',
+    messagingSenderId: '88209968141',
+    projectId: 'sansebasstock',
+    authDomain: 'sansebasstock.firebaseapp.com',
+    storageBucket: 'sansebasstock.appspot.com',
   );
 }
