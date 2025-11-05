@@ -127,21 +127,28 @@ class AuthService {
   ) async {
     final collection = _firestore.collection('UsuariosAutorizados');
 
-    final docByEmail = await collection.doc(correo).get();
-    if (docByEmail.exists) {
-      return docByEmail;
-    }
+    try {
+      final docByEmail = await collection.doc(correo).get();
+      if (docByEmail.exists) {
+        return docByEmail;
+      }
 
-    final lowerQuery =
-        await collection.where('correo', isEqualTo: correo).limit(1).get();
-    if (lowerQuery.docs.isNotEmpty) {
-      return lowerQuery.docs.first;
-    }
+      final lowerQuery =
+          await collection.where('correo', isEqualTo: correo).limit(1).get();
+      if (lowerQuery.docs.isNotEmpty) {
+        return lowerQuery.docs.first;
+      }
 
-    final capitalizedQuery =
-        await collection.where('Correo', isEqualTo: correo).limit(1).get();
-    if (capitalizedQuery.docs.isNotEmpty) {
-      return capitalizedQuery.docs.first;
+      final capitalizedQuery =
+          await collection.where('Correo', isEqualTo: correo).limit(1).get();
+      if (capitalizedQuery.docs.isNotEmpty) {
+        return capitalizedQuery.docs.first;
+      }
+    } on FirebaseException catch (e) {
+      if (e.code == 'permission-denied') {
+        return null;
+      }
+      rethrow;
     }
 
     return null;
@@ -170,4 +177,4 @@ class AuthException implements Exception {
 }
 
 // Para desplegar las reglas en Firebase:
-// firebase deploy --only firestore:rules --rules firebase/firestore.rules.prod
+// firebase deploy --only firestore:rules

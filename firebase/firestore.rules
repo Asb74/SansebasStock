@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1) UsuariosAutorizados: cada usuario solo su doc y subcolecciones
+    match /UsuariosAutorizados/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      // subcolecciones (p. ej. Vistas)
+      match /{sub=**} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // 2) Stock: lectura para usuarios autenticados (ajusta si necesitas escribir)
+    match /Stock/{docId} {
+      allow read: if request.auth != null;
+      allow write: if false; // cambia a condición real si necesitas escribir
+    }
+
+    // 3) Storage (metadatos de cámaras/estanterías): lectura autenticada
+    match /Storage/{camaraId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+      match /{sub=**} {
+        allow read: if request.auth != null;
+        allow write: if false;
+      }
+    }
+  }
+}

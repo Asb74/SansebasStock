@@ -1,0 +1,29 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "Stock",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "CAMARA", "order": "ASCENDING" },
+        { "fieldPath": "HUECO", "order": "ASCENDING" },
+        { "fieldPath": "CULTIVO", "order": "ASCENDING" },
+        { "fieldPath": "VARIEDAD", "order": "ASCENDING" },
+        { "fieldPath": "CALIBRE", "order": "ASCENDING" },
+        { "fieldPath": "CATEGORIA", "order": "ASCENDING" },
+        { "fieldPath": "MARCA", "order": "ASCENDING" },
+        { "fieldPath": "VIDA", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "Stock",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "CAMARA", "order": "ASCENDING" },
+        { "fieldPath": "ESTANTERIA", "order": "ASCENDING" },
+        { "fieldPath": "NIVEL", "order": "ASCENDING" },
+        { "fieldPath": "POSICION", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
