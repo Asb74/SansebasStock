@@ -46,8 +46,8 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyA_chMtYyRHZ24g_XJzXqcAghxtfcP8AM',
-    appId: '1:88209968141:web:ed3e5fdbe6914c5fd6944',
+    apiKey: 'AIzaSyA_ch0MtYRjHZ24g_xJ2xqcAghtxftP8AM',
+    appId: '1:88209968141:web:ed3e5fdb6e5914c5f6d944',
     messagingSenderId: '88209968141',
     projectId: 'sansebasstock',
     authDomain: 'sansebasstock.firebaseapp.com',

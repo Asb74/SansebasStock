@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "88209968141",
+    "project_id": "sansebasstock",
+    "storage_bucket": "sansebasstock.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:88209968141:android:5727b29bc0249983f6d944",
+        "android_client_info": {
+          "package_name": "com.sansebas.stock"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAcWtdoz7roKQo2GfeufjfiXCAs9KCOP9A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
