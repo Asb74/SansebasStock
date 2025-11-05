@@ -9,6 +9,7 @@ import '../features/map/map_cameras_screen.dart';
 import '../features/ops/qr_scan_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../models/camera_model.dart';
+import '../ui/stock/stock_filter_page.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
@@ -50,6 +51,10 @@ final GoRouter appRouter = GoRouter(
         }
         return CameraMapScreen(numero: numero);
       },
+    ),
+    GoRoute(
+      path: '/informe-stock',
+      builder: (context, state) => const StockFilterPage(),
     ),
   ],
 );

@@ -24,6 +24,13 @@ class HomeScreen extends ConsumerWidget {
         title: Text(
           user?.nombre.isNotEmpty == true ? 'Hola, ${user!.nombre}' : 'Inicio',
         ),
+        actions: [
+          IconButton(
+            onPressed: () => context.push('/informe-stock'),
+            icon: const Icon(Icons.assessment_outlined),
+            tooltip: 'Informe de stock',
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
@@ -57,6 +64,13 @@ class HomeScreen extends ConsumerWidget {
                   icon: Icons.map_outlined,
                   color: theme.colorScheme.primary,
                   onTap: () => context.push('/map'),
+                ),
+                _HomeActionCard(
+                  title: 'Informe de stock',
+                  subtitle: 'Filtra palets y exporta resultados',
+                  icon: Icons.inventory_outlined,
+                  color: theme.colorScheme.tertiary,
+                  onTap: () => context.push('/informe-stock'),
                 ),
                 _HomeActionCard(
                   title: 'Ajustes',
