@@ -1,0 +1,80 @@
+# Codemagic workflow configuration for iOS release builds
+workflows:
+  ios_release:
+    name: iOS Release (Xcode 16.2)
+    environment:
+      xcode: 16.2
+      flutter: stable
+      vars:
+        BUNDLE_ID: com.sansebas.sansebasstock   # nuevo identificador
+        APPLE_TEAM_ID: 7QWJ8R3ZB5
+      groups:
+        - app_store_connect
+    scripts:
+      - name: Check App Store Connect API key
+        script: |
+          set -euo pipefail
+          mkdir -p artifacts
+          ASC_KEY_SANITIZED="$(printf '%s\n' "$APP_STORE_CONNECT_PRIVATE_KEY" | tr -d '\r')"
+          if ! printf '%s\n' "$ASC_KEY_SANITIZED" | grep -q -- '-----BEGIN PRIVATE KEY-----'; then
+            echo "❌ APP_STORE_CONNECT_PRIVATE_KEY no contiene BEGIN"; exit 2; fi
+          if ! printf '%s\n' "$ASC_KEY_SANITIZED" | grep -q -- '-----END PRIVATE KEY-----'; then
+            echo "❌ APP_STORE_CONNECT_PRIVATE_KEY no contiene END"; exit 2; fi
+          echo "Validando API key y acceso al bundle ${BUNDLE_ID} ..."
+          app-store-connect list-bundle-ids \
+            --bundle-id-identifier "$BUNDLE_ID" \
+            --strict-match-identifier \
+            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --private-key "$ASC_KEY_SANITIZED" \
+            --json > artifacts/asc_check.json
+          if grep -q "\"identifier\": \"${BUNDLE_ID}\"" artifacts/asc_check.json; then
+            echo "✅ API key válida y acceso al bundle."
+          else
+            echo "⚠️ API key OK pero el bundle no existe o no hay acceso."; fi
+
+      - name: Setup signing
+        script: |
+          chmod +x setup-signing.sh
+          ./setup-signing.sh
+
+      - name: Recreate GoogleService-Info.plist
+        script: |
+          python3 - <<'PY'
+          import os, base64, pathlib, sys
+          b64 = os.environ.get("GOOGLE_SERVICE_INFO_PLIST_B64", "")
+          if not b64:
+              print("ERROR: Falta la variable GOOGLE_SERVICE_INFO_PLIST_B64", file=sys.stderr)
+              sys.exit(1)
+          path = pathlib.Path("ios/Runner/GoogleService-Info.plist")
+          path.parent.mkdir(parents=True, exist_ok=True)
+          path.write_bytes(base64.b64decode(b64))
+          print(f"Wrote {path} ({path.stat().st_size} bytes)")
+          PY
+          test -f ios/Runner/GoogleService-Info.plist || { echo "Plist no encontrado"; exit 1; }
+
+      - name: Patch iOS identifiers
+        script: |
+          chmod +x ios/patch-ios-identifiers.sh
+          ./ios/patch-ios-identifiers.sh
+
+      - name: Build IPA
+        script: |
+          chmod +x build-ipa.sh
+          ./build-ipa.sh
+
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - codemagic_prebuild.log
+      - codemagic_setup_signing.log
+      - codemagic_build_ipa.log
+      - artifacts/*
+
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        beta_groups:
+          - Internal Testers
