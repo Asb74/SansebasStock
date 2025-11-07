@@ -91,12 +91,80 @@ if [[ -f "$PROF_PATH" ]]; then
   rm -f "$TMP_PLIST"
   echo "Usando profile: NAME='${PROF_NAME:-?}'  UUID='${PROF_UUID:-?}'"
   if [[ -n "${PROF_NAME:-}" && -n "${PROF_UUID:-}" && -f "$PBX" ]]; then
-    /usr/bin/sed -i '' "s/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g" "$PBX"
-    /usr/bin/sed -i '' "s/DEVELOPMENT_TEAM = [A-Z0-9]\{10\}/DEVELOPMENT_TEAM = ${APPLE_TEAM_ID}/g" "$PBX"
-    /usr/bin/sed -i '' "s/PRODUCT_BUNDLE_IDENTIFIER = [^;]*;/PRODUCT_BUNDLE_IDENTIFIER = ${BUNDLE_ID};/g" "$PBX"
-    /usr/bin/sed -i '' "s/PROVISIONING_PROFILE_SPECIFIER = [^;]*;/PROVISIONING_PROFILE_SPECIFIER = ${PROF_NAME};/g" "$PBX"
-    /usr/bin/sed -i '' "s/PROVISIONING_PROFILE = [^;]*;/PROVISIONING_PROFILE = ${PROF_UUID};/g" "$PBX"
-    /usr/bin/perl -0777 -pe "s/(buildSettings = \{\n)([^}]*?CODE_SIGN_STYLE = Manual;)/\1\2\n\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = ${PROF_NAME};\n\t\t\t\tPROVISIONING_PROFILE = ${PROF_UUID};/g" -i '' "$PBX"
+    python3 - "$PBX" "$APPLE_TEAM_ID" "$BUNDLE_ID" "$PROF_NAME" "$PROF_UUID" <<'PY'
+import re
+import sys
+
+path, team, bundle, prof_name, prof_uuid = sys.argv[1:]
+
+with open(path, 'r', encoding='utf-8') as fh:
+    lines = fh.readlines()
+
+result = []
+inside = False
+settings_indent = ''
+seen_manual = False
+has_spec = False
+has_uuid = False
+
+for line in lines:
+    stripped = line.strip()
+
+    if stripped == 'buildSettings = {':
+        inside = True
+        block_indent = line[:len(line) - len(line.lstrip(' \t'))]
+        settings_indent = f"{block_indent}\t"
+        seen_manual = False
+        has_spec = False
+        has_uuid = False
+        result.append(line)
+        continue
+
+    if inside:
+        indent = line[:len(line) - len(line.lstrip(' \t'))]
+
+        if stripped.startswith('CODE_SIGN_STYLE ='):
+            line = f"{indent}CODE_SIGN_STYLE = Manual;\n"
+            seen_manual = True
+        elif stripped.startswith('DEVELOPMENT_TEAM ='):
+            line = f"{indent}DEVELOPMENT_TEAM = {team};\n"
+        elif stripped.startswith('PRODUCT_BUNDLE_IDENTIFIER ='):
+            line = f"{indent}PRODUCT_BUNDLE_IDENTIFIER = {bundle};\n"
+        elif stripped.startswith('PROVISIONING_PROFILE_SPECIFIER ='):
+            line = f"{indent}PROVISIONING_PROFILE_SPECIFIER = \"{prof_name}\";\n"
+            has_spec = True
+        elif stripped.startswith('PROVISIONING_PROFILE ='):
+            line = f"{indent}PROVISIONING_PROFILE = \"{prof_uuid}\";\n"
+            has_uuid = True
+        elif stripped == '};':
+            if seen_manual:
+                if not has_spec:
+                    result.append(f"{settings_indent}PROVISIONING_PROFILE_SPECIFIER = \"{prof_name}\";\n")
+                    has_spec = True
+                if not has_uuid:
+                    result.append(f"{settings_indent}PROVISIONING_PROFILE = \"{prof_uuid}\";\n")
+                    has_uuid = True
+            inside = False
+            result.append(line)
+            continue
+
+        result.append(line)
+        continue
+
+    if 'CODE_SIGN_STYLE = Automatic;' in line:
+        line = line.replace('CODE_SIGN_STYLE = Automatic;', 'CODE_SIGN_STYLE = Manual;')
+
+    if 'DEVELOPMENT_TEAM = ' in line:
+        line = re.sub(r'DEVELOPMENT_TEAM = [A-Z0-9]{10}', f'DEVELOPMENT_TEAM = {team}', line)
+
+    if 'PRODUCT_BUNDLE_IDENTIFIER = ' in line:
+        line = re.sub(r'PRODUCT_BUNDLE_IDENTIFIER = [^;]+;', f'PRODUCT_BUNDLE_IDENTIFIER = {bundle};', line)
+
+    result.append(line)
+
+with open(path, 'w', encoding='utf-8') as fh:
+    fh.writelines(result)
+PY
   else
     echo "⚠️ No se pudo extraer Name/UUID del profile."
   fi
