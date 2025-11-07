@@ -16,6 +16,9 @@ need BUNDLE_ID
 keychain initialize
 KEYCHAIN_PATH="$(keychain get-default | awk 'END{print $NF}')"
 echo "Default keychain: $KEYCHAIN_PATH"
+security list-keychains -s "$KEYCHAIN_PATH" login.keychain 2>/dev/null || true
+security default-keychain -s "$KEYCHAIN_PATH" || true
+security unlock-keychain -p "" "$KEYCHAIN_PATH" || true
 
 # --- Preparar clave privada para 'fetch-signing-files' ---
 # 1) Si ya viene en PEM sin passphrase (como en SansebaSms):
@@ -30,8 +33,11 @@ elif [[ -n "${CERTIFICATE_P12_BASE64:-}" && -n "${CERTIFICATE_PASSWORD:-}" ]]; t
   P12=/tmp/signing.p12
   echo "$CERTIFICATE_P12_BASE64" | base64 --decode > "$P12"
   CERT_PEM=/tmp/apple_private_key.pem
-  # extrae la private key sin cifrar
-  openssl pkcs12 -in "$P12" -nodes -nocerts -out "$CERT_PEM" -passin pass:"$CERTIFICATE_PASSWORD" >/dev/null 2>&1
+  # extrae la private key sin cifrar (con diagnóstico si falla)
+  if ! openssl pkcs12 -in "$P12" -nodes -nocerts -out "$CERT_PEM" -passin pass:"$CERTIFICATE_PASSWORD"; then
+    echo "❌ Falló la conversión del P12. Revisa CERTIFICATE_PASSWORD y CERTIFICATE_P12_BASE64."
+    exit 3
+  fi
   # limpia cabeceras redundantes por si acaso
   awk 'BEGIN{p=0} /BEGIN PRIVATE KEY/{p=1} {if(p)print} /END PRIVATE KEY/{p=0}' "$CERT_PEM" > /tmp/clean.pem && mv /tmp/clean.pem "$CERT_PEM"
 else
@@ -65,9 +71,21 @@ app-store-connect fetch-signing-files "$BUNDLE_ID" \
   $CERT_FLAG "$(<"$CERT_PEM")" \
   --create
 
-# Importar certs al llavero y asociar perfiles al proyecto
+# Importar certs y asociar perfiles al proyecto
 keychain add-certificates || true
-xcode-project use-profiles
+xcode-project use-profiles || true
+
+# 🔎 Diagnóstico de identidades y perfiles
+echo "----- Keychains in search list -----"
+security list-keychains
+echo "----- Identities (codesigning) -----"
+security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
+COUNT="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -E 'Valid identities only' | tr -cd '0-9' || echo 0)"
+if [[ "${COUNT:-0}" -eq 0 ]]; then
+  echo "❌ No hay identidades de firma válidas visibles en el llavero de build."
+  echo "   Revisa CERTIFICATE_P12_BASE64 / CERTIFICATE_PASSWORD o usa APPLE_CERTIFICATE_PRIVATE_KEY (PEM)."
+  exit 4
+fi
 
 echo "Identidades de firma disponibles:"
 security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
