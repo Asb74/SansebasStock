@@ -1,33 +1,68 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-
 echo "== Build IPA (SansebasStock) =="
 
-# Mostrar versiones (útil en logs)
 flutter --version
 xcodebuild -version
 
-# Limpieza y dependencias
+# Limpieza y deps
 flutter clean
 flutter pub get
 
-# CocoaPods (por si hay cambios en plugins)
+# CocoaPods
 pushd ios >/dev/null
 pod repo update || true
 pod install
 popd >/dev/null
 
-# Verifica que el plist de Firebase se haya recreado por el paso anterior
-test -f ios/Runner/GoogleService-Info.plist || {
-  echo "❌ Falta ios/Runner/GoogleService-Info.plist (revisa GOOGLE_SERVICE_INFO_PLIST_B64)."
-  exit 2
-}
+# Firebase plist
+test -f ios/Runner/GoogleService-Info.plist || { echo "❌ Falta ios/Runner/GoogleService-Info.plist"; exit 2; }
 
-# Compila IPA (firma y perfiles ya preparados en pasos previos)
-# --no-tree-shake-icons se mantiene para evitar problemas con icon fonts
-flutter build ipa --release --no-tree-shake-icons
+# Detectar perfil de firma
+INSTALL_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+PROFILE_PATH="$(ls "$INSTALL_DIR"/*.mobileprovision 2>/dev/null | head -n1 || true)"
+if [[ -z "$PROFILE_PATH" ]]; then
+  echo "❌ No hay .mobileprovision en $INSTALL_DIR"; exit 3
+fi
 
-# Mostrar IPA generado y dSYMs
+TMP_PLIST="$(mktemp /tmp/profile.XXXXXX.plist)"
+/usr/bin/security cms -D -i "$PROFILE_PATH" > "$TMP_PLIST"
+PROFILE_NAME="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$TMP_PLIST")"
+TEAM_FROM_PROF="$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$TMP_PLIST" 2>/dev/null || true)"
+BUNDLE_ID_DETECTED="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$TMP_PLIST" | sed 's/^[^\.]*\.//')"
+rm -f "$TMP_PLIST"
+
+echo "Perfil detectado:"
+echo "  Name = $PROFILE_NAME"
+echo "  Team = ${TEAM_FROM_PROF:-$APPLE_TEAM_ID}"
+echo "  BID  = $BUNDLE_ID_DETECTED"
+
+# Export options para App Store
+cat > export_options.plist <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key><string>app-store</string>
+  <key>signingStyle</key><string>manual</string>
+  <key>teamID</key><string>${APPLE_TEAM_ID}</string>
+  <key>provisioningProfiles</key>
+  <dict>
+    <key>${BUNDLE_ID}</key><string>${PROFILE_NAME}</string>
+  </dict>
+  <key>uploadSymbols</key><true/>
+  <key>stripSwiftSymbols</key><true/>
+  <key>compileBitcode</key><false/>
+</dict>
+</plist>
+EOF
+
+echo "Export options:"
+cat export_options.plist
+
+# Build IPA con export options (manual signing)
+flutter build ipa --release --export-options-plist="$(pwd)/export_options.plist" --no-tree-shake-icons
+
 echo "== Artifacts generados =="
 find build/ios -type f -name "*.ipa" -print
 find build/ios -type d -name "*.dSYM" -print || true

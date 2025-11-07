@@ -1,13 +1,9 @@
-# --- write setup-signing.sh (no git push) ---
-cat > setup-signing.sh <<'SH'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
 echo "== Setup signing (SansebasStock) =="
 
 need(){ [ -n "${!1:-}" ] || { echo "ERROR: falta $1"; exit 2; }; }
-
-# Requisitos de App Store Connect y proyecto
 need APP_STORE_CONNECT_ISSUER_ID
 need APP_STORE_CONNECT_KEY_IDENTIFIER
 need APP_STORE_CONNECT_PRIVATE_KEY
@@ -42,7 +38,7 @@ else
   exit 2
 fi
 
-# --- Perfil de aprovisionamiento local (opcional) ---
+# --- Perfil local (opcional, por variable) ---
 INSTALL_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
 mkdir -p "$INSTALL_DIR"
 if [[ -n "${IOS_PROVISIONING_PROFILE_BASE64:-}" ]]; then
@@ -53,7 +49,7 @@ elif [[ -n "${IOS_APPSTORE_PROFILE_B64:-}" ]]; then
   echo "$IOS_APPSTORE_PROFILE_B64" | base64 --decode > "$INSTALL_DIR/appstore.mobileprovision"
 fi
 
-# --- Obtener/crear certificados y perfiles desde ASC ---
+# --- Descargar/crear desde App Store Connect ---
 CERT_FLAG="--certificate-key"
 app-store-connect fetch-signing-files --help | grep -q -- "--certificate-key" || CERT_FLAG="--cert-private-key"
 
@@ -65,7 +61,7 @@ app-store-connect fetch-signing-files "$BUNDLE_ID" \
   $CERT_FLAG "$(<"$CERT_PEM")" \
   --create
 
-# Importar certificados y aplicar perfiles
+# Importar y aplicar
 keychain add-certificates || true
 xcode-project use-profiles || true
 
@@ -83,7 +79,7 @@ echo "Perfiles disponibles:"
 ls -la "$INSTALL_DIR" || true
 echo "✅ Setup signing DONE"
 
-# --- Enforce firma manual con el profile instalado ---
+# --- Forzar firma manual con el profile instalado (specifier=Name, uuid=UUID) ---
 echo "== Enforcing manual signing with installed provisioning profile =="
 PBX="ios/Runner.xcodeproj/project.pbxproj"
 PROF_PATH="$(ls "$INSTALL_DIR"/*.mobileprovision 2>/dev/null | head -n1 || true)"
@@ -107,5 +103,4 @@ if [[ -f "$PROF_PATH" ]]; then
 else
   echo "⚠️ No se localizó .mobileprovision en $INSTALL_DIR"
 fi
-SH
-chmod +x setup-signing.sh
+
