@@ -64,6 +64,10 @@ app-store-connect fetch-signing-files "$BUNDLE_ID" \
 
 # Importar y aplicar
 keychain add-certificates || true
+# Ensure the imported certificates are usable by Xcode tools
+if [[ -n "${KEYCHAIN_PATH:-}" && -f "$KEYCHAIN_PATH" ]]; then
+  security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN_PATH" >/dev/null 2>&1 || true
+fi
 xcode-project use-profiles || true
 
 echo "----- Keychains in search list -----"
