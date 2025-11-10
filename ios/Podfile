@@ -53,13 +53,38 @@ post_install do |installer|
                      .strip
         bs[key] = value
       end
-      bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
 
       bs['CODE_SIGNING_ALLOWED'] = 'NO'
       bs['CODE_SIGNING_REQUIRED'] = 'NO'
       bs['CODE_SIGN_STYLE'] = 'Automatic'
       %w[PROVISIONING_PROFILE_SPECIFIER PROVISIONING_PROFILE DEVELOPMENT_TEAM CODE_SIGN_IDENTITY].each do |k|
         bs.delete(k)
+      end
+
+      bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      bs['GCC_C_LANGUAGE_STANDARD'] = 'gnu11'
+      bs['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
+      bs['CLANG_CXX_LIBRARY'] = 'libc++'
+      bs['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+
+      if ['leveldb-library',
+          'FirebaseFirestore',
+          'FirebaseFirestoreInternal',
+          'FirebaseCoreInternal'].include?(target.name)
+        bs['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
+
+        cxx = (bs['OTHER_CPLUSPLUSFLAGS'] || '').to_s
+        cxx = cxx.gsub(/\s-std=[^ \t]+/, '')
+        bs['OTHER_CPLUSPLUSFLAGS'] = (cxx + ' -std=gnu++17').strip
+
+        warn = (bs['WARNING_CFLAGS'] || '').to_s
+        warn = warn.gsub(/\s-Werror\b/, '')
+        bs['WARNING_CFLAGS'] = warn.strip
+
+        extra = (bs['OTHER_CFLAGS'] || '').to_s
+        extras = %w[-Wno-c++11-narrowing -Wno-deprecated-declarations]
+        extras.each { |flag| extra += " #{flag}" unless extra.include?(flag) }
+        bs['OTHER_CFLAGS'] = extra.strip
       end
     end
   end

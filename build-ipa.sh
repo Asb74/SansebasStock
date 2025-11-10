@@ -100,12 +100,28 @@ PBX="ios/Runner.xcodeproj/project.pbxproj"
 /usr/bin/sed -i '' "s/CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\] = iOS Development/CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution/g" "$PBX" || true
 /usr/bin/sed -i '' "s/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g" "$PBX" || true
 
+echo "== Limpieza Pods =="
+pushd ios
+rm -rf Pods Podfile.lock
+pod repo update
+pod install
+popd
+
+echo "== Archive con log detallado =="
+mkdir -p build
 xcodebuild -workspace ios/Runner.xcworkspace \
            -scheme Runner \
            -configuration Release \
            -destination "generic/platform=iOS" \
            -archivePath build/Runner.xcarchive archive \
-           OTHER_CFLAGS= OTHER_CPLUSPLUSFLAGS= OTHER_LDFLAGS= GCC_PREPROCESSOR_DEFINITIONS=
+           OTHER_CFLAGS= OTHER_CPLUSPLUSFLAGS= OTHER_LDFLAGS= GCC_PREPROCESSOR_DEFINITIONS= \
+           | tee build/xcodebuild-archive.log
+
+if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+  echo "==== Primeras líneas de error relevantes ===="
+  grep -nE "error:|note:" -m 20 build/xcodebuild-archive.log || true
+  exit 65
+fi
 
 rm -rf build/ipa
 mkdir -p build/ipa
