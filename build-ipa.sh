@@ -12,30 +12,27 @@ pod repo update
 pod install
 cd ..
 
-# Saneo agresivo en Pods.xcodeproj para evitar perfiles/teams/identities en Pods
+# === Saneo de firma en Pods ===
 PODSPROJ="ios/Pods/Pods.xcodeproj/project.pbxproj"
 
-# Elimina líneas de perfil/equipo/identidad si estuvieran
-sed -i '' '/PROVISIONING_PROFILE_SPECIFIER = /d' "$PODSPROJ" || true
-sed -i '' '/PROVISIONING_PROFILE = /d' "$PODSPROJ" || true
-sed -i '' '/DEVELOPMENT_TEAM = /d' "$PODSPROJ" || true
-sed -i '' '/CODE_SIGN_IDENTITY = /d' "$PODSPROJ" || true
+# Elimina cualquier rastro de perfil/equipo/identidad en Pods
+/usr/bin/sed -i '' '/PROVISIONING_PROFILE_SPECIFIER = /d' "$PODSPROJ" || true
+/usr/bin/sed -i '' '/PROVISIONING_PROFILE = /d' "$PODSPROJ" || true
+/usr/bin/sed -i '' '/DEVELOPMENT_TEAM = /d' "$PODSPROJ" || true
+/usr/bin/sed -i '' '/CODE_SIGN_IDENTITY = /d' "$PODSPROJ" || true
 
-# Asegura estilo automático en Pods (no obligatorio, pero ayuda)
-sed -i '' 's/CODE_SIGN_STYLE = Manual/CODE_SIGN_STYLE = Automatic/g' "$PODSPROJ" || true
-# Asegura que no se fuerce la firma en Pods
-sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' "$PODSPROJ" || true
-sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' "$PODSPROJ" || true
+# Asegura estilo automático y sin firma en todos los bloques de buildSettings
+/usr/bin/sed -i '' 's/CODE_SIGN_STYLE = Manual/CODE_SIGN_STYLE = Automatic/g' "$PODSPROJ" || true
+/usr/bin/sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' "$PODSPROJ" || true
+/usr/bin/sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' "$PODSPROJ" || true
 
-echo "== Diagnóstico -G =="
-grep -R --line-number --fixed-strings -- " -G" ios || true
-grep -R --line-number --fixed-strings -- "-G " ios || true
-grep -R --line-number --fixed-strings -- "= -G" ios || true
+# (opcional) Si existiera alguna clave residual con “SansebasStock IOs ios_app_store”, bórrala por si quedó en comentarios
+/usr/bin/sed -i '' '/SansebasStock IOs ios_app_store/d' "$PODSPROJ" || true
 
-echo "== Confirmación tras saneo =="
-grep -R --line-number --fixed-strings -- " -G" ios || true
-grep -R --line-number --fixed-strings -- "-G " ios || true
-grep -R --line-number --fixed-strings -- "= -G" ios || true
+# (opcional) saneo anti “-G” si teníamos ese problema
+find ios -type f \( -name "*.xcconfig" -o -name "project.pbxproj" \) -print0 | while IFS= read -r -d '' f; do
+  sed -i '' 's/[[:space:]]-G[[:space:]]/ /g; s/=-G[[:space:]]/=/g; s/[[:space:]]-G$//g; s/^-G[[:space:]]//g' "$f"
+done
 
 INSTALL_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
 PROFILE_PATH="$(ls "$INSTALL_DIR"/*.mobileprovision 2>/dev/null | head -n1 || true)"

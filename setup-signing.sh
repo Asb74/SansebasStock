@@ -68,7 +68,7 @@ keychain add-certificates || true
 if [[ -n "${KEYCHAIN_PATH:-}" && -f "$KEYCHAIN_PATH" ]]; then
   security set-key-partition-list -S apple-tool:,apple: -s -k "" "$KEYCHAIN_PATH" >/dev/null 2>&1 || true
 fi
-xcode-project use-profiles || true
+# xcode-project use-profiles || true
 
 echo "----- Keychains in search list -----"
 security list-keychains
