@@ -9,24 +9,26 @@ flutter build ios --release --no-codesign
 
 (cd ios && pod install)
 
-echo "== Sanitizar flags de entorno potencialmente problemáticos =="
-unset CFLAGS CXXFLAGS LDFLAGS OBJCFLAGS OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS
+echo "== Sanitizar flags de entorno =="
+unset CFLAGS CXXFLAGS LDFLAGS OBJCFLAGS OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS GCC_PREPROCESSOR_DEFINITIONS
 
-echo "== Buscar '-G' en configs iOS (diagnóstico) =="
+echo "== Buscar '-G' en ios (diagnóstico) =="
 grep -R --line-number --fixed-strings " -G" ios || true
 grep -R --line-number --fixed-strings "-G " ios || true
 grep -R --line-number --fixed-strings "= -G" ios || true
 
 echo "== Eliminar '-G' de xcconfig y pbxproj =="
 find ios -type f \( -name "*.xcconfig" -o -name "project.pbxproj" \) -print0 | while IFS= read -r -d '' f; do
-  # Quita '-G' como token suelto (al principio, medio o final)
   sed -i '' 's/[[:space:]]-G[[:space:]]/ /g' "$f"
   sed -i '' 's/=-G[[:space:]]/=/g' "$f"
   sed -i '' 's/[[:space:]]-G$//g' "$f"
+  sed -i '' 's/^-G[[:space:]]//g' "$f"
 done
 
 echo "== Confirmación tras saneo =="
 grep -R --line-number --fixed-strings " -G" ios || true
+grep -R --line-number --fixed-strings "-G " ios || true
+grep -R --line-number --fixed-strings "= -G" ios || true
 
 INSTALL_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
 PROFILE_PATH="$(ls "$INSTALL_DIR"/*.mobileprovision 2>/dev/null | head -n1 || true)"
