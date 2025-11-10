@@ -48,11 +48,20 @@ post_install do |installer|
       bs = config.build_settings
 
       %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS OTHER_SWIFT_FLAGS].each do |k|
-        v = (bs[k] || "").to_s
-        v = v.gsub(/\A-?G\s+/, "")
-             .gsub(/\s+-G(\s+|$)/, " ")
-             .gsub(/(\s+)-G(\s+)/, " ")
-        bs[k] = v.strip
+        value = bs[k]
+
+        if value.is_a?(Array)
+          bs[k] = value.reject do |item|
+            item.respond_to?(:to_s) && item.to_s.strip == '-G'
+          end
+        else
+          v = (value || "").to_s
+          v = v.gsub(/\A-?G\s+/, "")
+               .gsub(/\s+-G(\s+|$)/, " ")
+               .gsub(/(\s+)-G(\s+)/, " ")
+          v = v.split(/\s+/).reject { |item| item == '-G' }.join(' ')
+          bs[k] = v.strip
+        end
       end
 
       bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
