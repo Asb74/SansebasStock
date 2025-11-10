@@ -12,6 +12,21 @@ pod repo update
 pod install
 cd ..
 
+# Saneo agresivo en Pods.xcodeproj para evitar perfiles/teams/identities en Pods
+PODSPROJ="ios/Pods/Pods.xcodeproj/project.pbxproj"
+
+# Elimina líneas de perfil/equipo/identidad si estuvieran
+sed -i '' '/PROVISIONING_PROFILE_SPECIFIER = /d' "$PODSPROJ" || true
+sed -i '' '/PROVISIONING_PROFILE = /d' "$PODSPROJ" || true
+sed -i '' '/DEVELOPMENT_TEAM = /d' "$PODSPROJ" || true
+sed -i '' '/CODE_SIGN_IDENTITY = /d' "$PODSPROJ" || true
+
+# Asegura estilo automático en Pods (no obligatorio, pero ayuda)
+sed -i '' 's/CODE_SIGN_STYLE = Manual/CODE_SIGN_STYLE = Automatic/g' "$PODSPROJ" || true
+# Asegura que no se fuerce la firma en Pods
+sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' "$PODSPROJ" || true
+sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' "$PODSPROJ" || true
+
 echo "== Diagnóstico -G =="
 grep -R --line-number --fixed-strings -- " -G" ios || true
 grep -R --line-number --fixed-strings -- "-G " ios || true
