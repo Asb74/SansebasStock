@@ -100,14 +100,14 @@ PBX="ios/Runner.xcodeproj/project.pbxproj"
 /usr/bin/sed -i '' "s/CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\] = iOS Development/CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution/g" "$PBX" || true
 /usr/bin/sed -i '' "s/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g" "$PBX" || true
 
-echo "== Limpieza Pods =="
+echo "== Pods clean =="
 pushd ios
 rm -rf Pods Podfile.lock
 pod repo update
 pod install
 popd
 
-echo "== Archive con log detallado =="
+echo "== Archive con log =="
 mkdir -p build
 xcodebuild -workspace ios/Runner.xcworkspace \
            -scheme Runner \
@@ -119,7 +119,7 @@ xcodebuild -workspace ios/Runner.xcworkspace \
 
 if [ "${PIPESTATUS[0]}" -ne 0 ]; then
   echo "==== Primeras líneas de error relevantes ===="
-  grep -nE "error:|note:" -m 20 build/xcodebuild-archive.log || true
+  grep -nE "error:|fatal error:|undefined reference|ld:|clang:" -m 40 build/xcodebuild-archive.log || true
   exit 65
 fi
 

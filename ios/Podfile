@@ -46,6 +46,7 @@ post_install do |installer|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
       bs = config.build_settings
+
       %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS GCC_PREPROCESSOR_DEFINITIONS].each do |key|
         value = (bs[key] || '').to_s
         value = value.gsub(/\A-?G(\s+|$)/, '')
@@ -54,6 +55,7 @@ post_install do |installer|
         bs[key] = value
       end
 
+      # --- (mantener) Pods sin firma ---
       bs['CODE_SIGNING_ALLOWED'] = 'NO'
       bs['CODE_SIGNING_REQUIRED'] = 'NO'
       bs['CODE_SIGN_STYLE'] = 'Automatic'
@@ -61,30 +63,35 @@ post_install do |installer|
         bs.delete(k)
       end
 
+      # --- Estándares modernos por defecto (Xcode 16) ---
       bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-      bs['GCC_C_LANGUAGE_STANDARD'] = 'gnu11'
+      bs['GCC_C_LANGUAGE_STANDARD']    = 'gnu11'
       bs['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
-      bs['CLANG_CXX_LIBRARY'] = 'libc++'
+      bs['CLANG_CXX_LIBRARY']          = 'libc++'
       bs['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
 
+      # Targets más sensibles (forzar extra)
       if ['leveldb-library',
           'FirebaseFirestore',
           'FirebaseFirestoreInternal',
-          'FirebaseCoreInternal'].include?(target.name)
-        bs['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
-
+          'FirebaseCoreInternal',
+          'gRPC-Core',
+          'gRPC-C++',
+          'abseil'].include?(target.name)
         cxx = (bs['OTHER_CPLUSPLUSFLAGS'] || '').to_s
         cxx = cxx.gsub(/\s-std=[^ \t]+/, '')
-        bs['OTHER_CPLUSPLUSFLAGS'] = (cxx + ' -std=gnu++17').strip
+        cxx = (cxx + ' -std=gnu++17 -stdlib=libc++').strip
+        bs['OTHER_CPLUSPLUSFLAGS'] = cxx
 
         warn = (bs['WARNING_CFLAGS'] || '').to_s
         warn = warn.gsub(/\s-Werror\b/, '')
         bs['WARNING_CFLAGS'] = warn.strip
 
-        extra = (bs['OTHER_CFLAGS'] || '').to_s
-        extras = %w[-Wno-c++11-narrowing -Wno-deprecated-declarations]
-        extras.each { |flag| extra += " #{flag}" unless extra.include?(flag) }
-        bs['OTHER_CFLAGS'] = extra.strip
+        c = (bs['OTHER_CFLAGS'] || '').to_s
+        %w[-Wno-c++11-narrowing -Wno-range-loop-analysis -Wno-deprecated-declarations].each do |flag|
+          c += " #{flag}" unless c.include?(flag)
+        end
+        bs['OTHER_CFLAGS'] = c.strip
       end
     end
   end
