@@ -54,6 +54,25 @@ echo "  UUID = $PROFILE_UUID"
 echo "  Team = ${TEAM_FROM_PROF:-$APPLE_TEAM_ID}"
 echo "  BID  = $BUNDLE_ID_DETECTED"
 
+echo "== Override de firma SOLO para Runner con xcconfig =="
+OVR="ios/Runner/CodesignOverride.xcconfig"
+cat > "$OVR" <<EOF
+// Forzar firma de distribución en Runner
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = Apple Distribution
+DEVELOPMENT_TEAM = ${APPLE_TEAM_ID}
+PRODUCT_BUNDLE_IDENTIFIER = ${BUNDLE_ID}
+PROVISIONING_PROFILE_SPECIFIER = ${PROFILE_NAME}
+PROVISIONING_PROFILE = ${PROFILE_UUID}
+CODE_SIGNING_ALLOWED = YES
+CODE_SIGNING_REQUIRED = YES
+EOF
+
+REL_XC="ios/Flutter/Release.xcconfig"
+if ! grep -q 'CodesignOverride.xcconfig' "$REL_XC"; then
+  echo '#include "Runner/CodesignOverride.xcconfig"' >> "$REL_XC"
+fi
+
 cat > export_options.plist <<EOF2
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -73,26 +92,19 @@ cat > export_options.plist <<EOF2
 </plist>
 EOF2
 
-# Forzar identidad de distribución en el proyecto si hubiera ajustes previos de desarrollo
+# Defensivo: evitar restos de Development en Runner
 PBX="ios/Runner.xcodeproj/project.pbxproj"
-sed -i '' "s/CODE_SIGN_IDENTITY = iPhone Developer/CODE_SIGN_IDENTITY = Apple Distribution/g" "$PBX" || true
-sed -i '' "s/CODE_SIGN_IDENTITY = iOS Development/CODE_SIGN_IDENTITY = Apple Distribution/g" "$PBX" || true
-sed -i '' "s/CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\] = iPhone Developer/CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution/g" "$PBX" || true
-sed -i '' "s/CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\] = iOS Development/CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution/g" "$PBX" || true
+/usr/bin/sed -i '' "s/CODE_SIGN_IDENTITY = iPhone Developer/CODE_SIGN_IDENTITY = Apple Distribution/g" "$PBX" || true
+/usr/bin/sed -i '' "s/CODE_SIGN_IDENTITY = iOS Development/CODE_SIGN_IDENTITY = Apple Distribution/g" "$PBX" || true
+/usr/bin/sed -i '' "s/CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\] = iPhone Developer/CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution/g" "$PBX" || true
+/usr/bin/sed -i '' "s/CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\] = iOS Development/CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution/g" "$PBX" || true
+/usr/bin/sed -i '' "s/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g" "$PBX" || true
 
-# Nota: setup-signing.sh ya inyecta el provisioning profile en Runner. No pasar los
-# flags PROVISIONING_PROFILE* a xcodebuild evita que se apliquen accidentalmente a los Pods.
 xcodebuild -workspace ios/Runner.xcworkspace \
            -scheme Runner \
            -configuration Release \
            -destination "generic/platform=iOS" \
            -archivePath build/Runner.xcarchive archive \
-           CODE_SIGN_STYLE=Manual \
-           CODE_SIGN_IDENTITY="Apple Distribution" \
-           DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
-           PRODUCT_BUNDLE_IDENTIFIER="${BUNDLE_ID}" \
-           CODE_SIGNING_ALLOWED=YES \
-           CODE_SIGNING_REQUIRED=YES \
            OTHER_CFLAGS= OTHER_CPLUSPLUSFLAGS= OTHER_LDFLAGS= GCC_PREPROCESSOR_DEFINITIONS=
 
 rm -rf build/ipa

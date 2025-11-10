@@ -45,24 +45,21 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
-      build_settings = config.build_settings
+      bs = config.build_settings
       %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS GCC_PREPROCESSOR_DEFINITIONS].each do |key|
-        value = (build_settings[key] || '').to_s
+        value = (bs[key] || '').to_s
         value = value.gsub(/\A-?G(\s+|$)/, '')
                      .gsub(/(\s+)-G(\s+|$)/, ' ')
                      .strip
-        build_settings[key] = value
+        bs[key] = value
       end
-      build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
 
-      # Deshabilitar firma en Pods y dejar estilo automático
-      build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
-      build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
-      build_settings['CODE_SIGN_STYLE'] = 'Automatic'
-
-      # Limpiar perfil/equipo/identidad si se colaron
-      %w[PROVISIONING_PROFILE_SPECIFIER PROVISIONING_PROFILE DEVELOPMENT_TEAM CODE_SIGN_IDENTITY].each do |key|
-        build_settings.delete(key)
+      bs['CODE_SIGNING_ALLOWED'] = 'NO'
+      bs['CODE_SIGNING_REQUIRED'] = 'NO'
+      bs['CODE_SIGN_STYLE'] = 'Automatic'
+      %w[PROVISIONING_PROFILE_SPECIFIER PROVISIONING_PROFILE DEVELOPMENT_TEAM CODE_SIGN_IDENTITY].each do |k|
+        bs.delete(k)
       end
     end
   end
