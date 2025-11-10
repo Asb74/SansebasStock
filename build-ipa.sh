@@ -80,6 +80,8 @@ sed -i '' "s/CODE_SIGN_IDENTITY = iOS Development/CODE_SIGN_IDENTITY = Apple Dis
 sed -i '' "s/CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\] = iPhone Developer/CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution/g" "$PBX" || true
 sed -i '' "s/CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\] = iOS Development/CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution/g" "$PBX" || true
 
+# Nota: setup-signing.sh ya inyecta el provisioning profile en Runner. No pasar los
+# flags PROVISIONING_PROFILE* a xcodebuild evita que se apliquen accidentalmente a los Pods.
 xcodebuild -workspace ios/Runner.xcworkspace \
            -scheme Runner \
            -configuration Release \
@@ -89,8 +91,6 @@ xcodebuild -workspace ios/Runner.xcworkspace \
            CODE_SIGN_IDENTITY="Apple Distribution" \
            DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
            PRODUCT_BUNDLE_IDENTIFIER="${BUNDLE_ID}" \
-           PROVISIONING_PROFILE_SPECIFIER="${PROFILE_NAME}" \
-           PROVISIONING_PROFILE="${PROFILE_UUID}" \
            CODE_SIGNING_ALLOWED=YES \
            CODE_SIGNING_REQUIRED=YES \
            OTHER_CFLAGS= OTHER_CPLUSPLUSFLAGS= OTHER_LDFLAGS= GCC_PREPROCESSOR_DEFINITIONS=
