@@ -47,7 +47,7 @@ post_install do |installer|
     target.build_configurations.each do |config|
       bs = config.build_settings
 
-      %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS].each do |k|
+      %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS OTHER_SWIFT_FLAGS].each do |k|
         v = (bs[k] || "").to_s
         v = v.gsub(/\A-?G\s+/, "")
              .gsub(/\s+-G(\s+|$)/, " ")
