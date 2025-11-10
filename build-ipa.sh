@@ -61,15 +61,26 @@ cat > export_options.plist <<EOF2
 </plist>
 EOF2
 
+# Forzar identidad de distribución en el proyecto si hubiera ajustes previos de desarrollo
+PBX="ios/Runner.xcodeproj/project.pbxproj"
+sed -i '' "s/CODE_SIGN_IDENTITY = iPhone Developer/CODE_SIGN_IDENTITY = Apple Distribution/g" "$PBX" || true
+sed -i '' "s/CODE_SIGN_IDENTITY = iOS Development/CODE_SIGN_IDENTITY = Apple Distribution/g" "$PBX" || true
+sed -i '' "s/CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\] = iPhone Developer/CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution/g" "$PBX" || true
+sed -i '' "s/CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\] = iOS Development/CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution/g" "$PBX" || true
+
 xcodebuild -workspace ios/Runner.xcworkspace \
            -scheme Runner \
            -configuration Release \
+           -destination "generic/platform=iOS" \
            -archivePath build/Runner.xcarchive archive \
            CODE_SIGN_STYLE=Manual \
+           CODE_SIGN_IDENTITY="Apple Distribution" \
            DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
            PRODUCT_BUNDLE_IDENTIFIER="${BUNDLE_ID}" \
            PROVISIONING_PROFILE_SPECIFIER="${PROFILE_NAME}" \
            PROVISIONING_PROFILE="${PROFILE_UUID}" \
+           CODE_SIGNING_ALLOWED=YES \
+           CODE_SIGNING_REQUIRED=YES \
            OTHER_CFLAGS= OTHER_CPLUSPLUSFLAGS= OTHER_LDFLAGS= GCC_PREPROCESSOR_DEFINITIONS=
 
 rm -rf build/ipa
