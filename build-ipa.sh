@@ -3,32 +3,24 @@ set -euo pipefail
 
 echo "== Build IPA (SansebasStock) =="
 
-flutter clean
-flutter pub get
-flutter build ios --release --no-codesign
+flutter clean && flutter pub get
 
-(cd ios && pod install)
+echo "== Refrescar Pods =="
+cd ios
+rm -rf Pods Podfile.lock
+pod repo update
+pod install
+cd ..
 
-echo "== Sanitizar flags de entorno =="
-unset CFLAGS CXXFLAGS LDFLAGS OBJCFLAGS OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS GCC_PREPROCESSOR_DEFINITIONS
-
-echo "== Buscar '-G' en ios (diagnóstico) =="
-grep -R --line-number --fixed-strings " -G" ios || true
-grep -R --line-number --fixed-strings "-G " ios || true
-grep -R --line-number --fixed-strings "= -G" ios || true
-
-echo "== Eliminar '-G' de xcconfig y pbxproj =="
-find ios -type f \( -name "*.xcconfig" -o -name "project.pbxproj" \) -print0 | while IFS= read -r -d '' f; do
-  sed -i '' 's/[[:space:]]-G[[:space:]]/ /g' "$f"
-  sed -i '' 's/=-G[[:space:]]/=/g' "$f"
-  sed -i '' 's/[[:space:]]-G$//g' "$f"
-  sed -i '' 's/^-G[[:space:]]//g' "$f"
-done
+echo "== Diagnóstico -G =="
+grep -R --line-number --fixed-strings -- " -G" ios || true
+grep -R --line-number --fixed-strings -- "-G " ios || true
+grep -R --line-number --fixed-strings -- "= -G" ios || true
 
 echo "== Confirmación tras saneo =="
-grep -R --line-number --fixed-strings " -G" ios || true
-grep -R --line-number --fixed-strings "-G " ios || true
-grep -R --line-number --fixed-strings "= -G" ios || true
+grep -R --line-number --fixed-strings -- " -G" ios || true
+grep -R --line-number --fixed-strings -- "-G " ios || true
+grep -R --line-number --fixed-strings -- "= -G" ios || true
 
 INSTALL_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
 PROFILE_PATH="$(ls "$INSTALL_DIR"/*.mobileprovision 2>/dev/null | head -n1 || true)"
@@ -77,8 +69,10 @@ xcodebuild -workspace ios/Runner.xcworkspace \
            DEVELOPMENT_TEAM="${APPLE_TEAM_ID}" \
            PRODUCT_BUNDLE_IDENTIFIER="${BUNDLE_ID}" \
            PROVISIONING_PROFILE_SPECIFIER="${PROFILE_NAME}" \
-           PROVISIONING_PROFILE="${PROFILE_UUID}"
+           PROVISIONING_PROFILE="${PROFILE_UUID}" \
+           OTHER_CFLAGS= OTHER_CPLUSPLUSFLAGS= OTHER_LDFLAGS= GCC_PREPROCESSOR_DEFINITIONS=
 
+rm -rf build/ipa
 mkdir -p build/ipa
 xcodebuild -exportArchive \
            -archivePath build/Runner.xcarchive \
