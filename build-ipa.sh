@@ -7,6 +7,29 @@ flutter clean
 flutter pub get
 flutter build ios --release --no-codesign
 
+(cd ios && pod install)
+
+echo "== Sanitizar flags de entorno potencialmente problemáticos =="
+unset CFLAGS CXXFLAGS LDFLAGS OBJCFLAGS OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS
+
+echo "== Buscar y eliminar '-G' en configs de iOS =="
+# Listado de apariciones (solo diagnóstico)
+grep -R --line-number --fixed-strings " -G" ios || true
+grep -R --line-number --fixed-strings "-G " ios || true
+grep -R --line-number --fixed-strings "= -G" ios || true
+
+# Eliminar '-G' en Pods *.xcconfig y en el proyecto
+# 1) En todos los .xcconfig generados por CocoaPods y en los del Runner
+find ios -type f \( -name "*.xcconfig" -o -name "project.pbxproj" \) -print0 | while IFS= read -r -d '' f; do
+  # Quitar '-G' cuando aparece como flag suelta o al comienzo de la lista
+  sed -i '' 's/[[:space:]]-G[[:space:]]/ /g' "$f"
+  sed -i '' 's/=-G[[:space:]]/=/g' "$f"
+  sed -i '' 's/[[:space:]]-G$//g' "$f"
+done
+
+echo "== Confirmación tras saneo =="
+grep -R --line-number --fixed-strings " -G" ios || true
+
 INSTALL_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
 PROFILE_PATH="$(ls "$INSTALL_DIR"/*.mobileprovision 2>/dev/null | head -n1 || true)"
 if [[ -z "$PROFILE_PATH" ]]; then
