@@ -45,7 +45,17 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
     target.build_configurations.each do |config|
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      bs = config.build_settings
+
+      %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS].each do |k|
+        v = (bs[k] || "").to_s
+        v = v.gsub(/\A-?G\s+/, "")
+             .gsub(/\s+-G(\s+|$)/, " ")
+             .gsub(/(\s+)-G(\s+)/, " ")
+        bs[k] = v.strip
+      end
+
+      bs['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
     end
   end
 end

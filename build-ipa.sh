@@ -12,16 +12,14 @@ flutter build ios --release --no-codesign
 echo "== Sanitizar flags de entorno potencialmente problemáticos =="
 unset CFLAGS CXXFLAGS LDFLAGS OBJCFLAGS OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_LDFLAGS
 
-echo "== Buscar y eliminar '-G' en configs de iOS =="
-# Listado de apariciones (solo diagnóstico)
+echo "== Buscar '-G' en configs iOS (diagnóstico) =="
 grep -R --line-number --fixed-strings " -G" ios || true
 grep -R --line-number --fixed-strings "-G " ios || true
 grep -R --line-number --fixed-strings "= -G" ios || true
 
-# Eliminar '-G' en Pods *.xcconfig y en el proyecto
-# 1) En todos los .xcconfig generados por CocoaPods y en los del Runner
+echo "== Eliminar '-G' de xcconfig y pbxproj =="
 find ios -type f \( -name "*.xcconfig" -o -name "project.pbxproj" \) -print0 | while IFS= read -r -d '' f; do
-  # Quitar '-G' cuando aparece como flag suelta o al comienzo de la lista
+  # Quita '-G' como token suelto (al principio, medio o final)
   sed -i '' 's/[[:space:]]-G[[:space:]]/ /g' "$f"
   sed -i '' 's/=-G[[:space:]]/=/g' "$f"
   sed -i '' 's/[[:space:]]-G$//g' "$f"
