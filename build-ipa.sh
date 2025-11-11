@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+mkdir -p build
 
 echo "== Build IPA (SansebasStock) =="
 
@@ -11,6 +12,20 @@ rm -rf Pods Podfile.lock
 pod repo update
 pod install
 cd ..
+
+echo "=== port.h (primeras 120 líneas) ==="
+if [ -f "ios/Pods/leveldb-library/port/port.h" ]; then
+  sed -n '1,120p' ios/Pods/leveldb-library/port/port.h || true
+else
+  echo "No se encontró ios/Pods/leveldb-library/port/port.h"
+fi
+
+echo "=== Release.xcconfig (cabecera) ==="
+if [ -f "ios/Flutter/Release.xcconfig" ]; then
+  sed -n '1,20p' ios/Flutter/Release.xcconfig || true
+else
+  echo "No se encontró ios/Flutter/Release.xcconfig"
+fi
 
 # === Saneo de firma en Pods ===
 PODSPROJ="ios/Pods/Pods.xcodeproj/project.pbxproj"
@@ -113,9 +128,16 @@ xcodebuild -workspace ios/Runner.xcworkspace \
            -scheme Runner \
            -configuration Release \
            -destination "generic/platform=iOS" \
-           -archivePath build/Runner.xcarchive archive \
+           -archivePath build/Runner.xcarchive \
            OTHER_CFLAGS= OTHER_CPLUSPLUSFLAGS= OTHER_LDFLAGS= GCC_PREPROCESSOR_DEFINITIONS= \
-           | tee build/xcodebuild-archive.log
+           clean archive | tee build/xcodebuild-archive.log
+
+echo "=== xcodebuild-archive.log (primeras 100 líneas) ==="
+if [ -f "build/xcodebuild-archive.log" ]; then
+  sed -n '1,100p' build/xcodebuild-archive.log || true
+else
+  echo "No se encontró build/xcodebuild-archive.log"
+fi
 
 if [ "${PIPESTATUS[0]}" -ne 0 ]; then
   echo "==== Primeras líneas de error relevantes ===="
