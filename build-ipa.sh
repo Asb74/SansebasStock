@@ -95,6 +95,35 @@ echo "=== Refrescar Pods inicial ==="
 )
 echo "=== Pods iniciales listos ==="
 
+# --- BEGIN: extraer artifacts de CocoaPods para diagnostico ---
+set -Eeuo pipefail
+
+ART_DIR="$CM_BUILD_DIR/leveldb_debug_artifacts"
+mkdir -p "$ART_DIR"
+
+# Copiamos Podfile.lock si existe
+if [ -f "ios/Podfile.lock" ]; then
+  cp "ios/Podfile.lock" "$ART_DIR/"
+fi
+
+# Copiamos xcconfig del target leveldb-library si existen
+if [ -d "ios/Pods/Target Support Files/leveldb-library" ]; then
+  cp ios/Pods/Target\ Support\ Files/leveldb-library/*.xcconfig "$ART_DIR/" || true
+fi
+
+# Vuelca cabeceras útiles al log y a txts
+if [ -f "ios/Pods/leveldb-library/port/port.h" ]; then
+  head -n 150 ios/Pods/leveldb-library/port/port.h | tee "$ART_DIR/port.h.head.txt" >/dev/null
+fi
+if [ -f "ios/Runner/Flutter/Release.xcconfig" ]; then
+  head -n 80 ios/Runner/Flutter/Release.xcconfig | tee "$ART_DIR/release_xcconfig.head.txt" >/dev/null
+fi
+
+# Empaquetamos todo en zip para subirlo como artifact
+(cd "$CM_BUILD_DIR" && zip -r "leveldb_debug_artifacts.zip" "leveldb_debug_artifacts" >/dev/null || true)
+echo ">> Artifacts preparados en $CM_BUILD_DIR/leveldb_debug_artifacts.zip"
+# --- END: extraer artifacts de CocoaPods para diagnostico ---
+
 echo "=== Preparando archivos de firma en Pods ==="
 PODSPROJ="ios/Pods/Pods.xcodeproj/project.pbxproj"
 /usr/bin/sed -i '' '/PROVISIONING_PROFILE_SPECIFIER = /d' "$PODSPROJ" || true
@@ -185,6 +214,13 @@ echo "=== Archive finalizado con código ${XC_CMD_STATUS} ==="
 
 head -c 200000 "$XC_LOG_PATH" > build/ios_archive_head.log || true
 echo "Fragmento de log guardado en build/ios_archive_head.log"
+
+# Guardar las primeras 200 líneas del log de archive
+if [ -f "$CM_BUILD_DIR/build/xcodebuild-archive.log" ]; then
+  head -n 200 "$CM_BUILD_DIR/build/xcodebuild-archive.log" | tee "$ART_DIR/xcodebuild-archive.head.txt" >/dev/null
+  # Reempaquetar con los nuevos txt
+  (cd "$CM_BUILD_DIR" && zip -r "leveldb_debug_artifacts.zip" "leveldb_debug_artifacts" >/dev/null || true)
+fi
 
 package_logs
 print_logs_tree
