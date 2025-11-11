@@ -3,7 +3,6 @@ set -Eeuo pipefail
 
 LOG_DIR="build/logs"
 XC_LOG_PATH="${LOG_DIR}/xcodebuild-archive.log"
-XC_RESULT_BUNDLE="build/XCResultBundle"
 PENDING_XC_LOG=""
 
 ensure_log_dir() {
@@ -87,12 +86,14 @@ flutter pub get
 echo "=== flutter pub get completado ==="
 
 echo "=== Refrescar Pods inicial ==="
-pushd ios >/dev/null
-rm -rf Pods Podfile.lock
-pod repo update
-pod install
+(
+  set -euo pipefail
+  cd ios
+  rm -rf Pods Podfile.lock ~/Library/Developer/Xcode/DerivedData
+  pod repo update
+  pod install --repo-update
+)
 echo "=== Pods iniciales listos ==="
-popd >/dev/null
 
 echo "=== Preparando archivos de firma en Pods ==="
 PODSPROJ="ios/Pods/Pods.xcodeproj/project.pbxproj"
@@ -133,20 +134,6 @@ echo "  UUID = $PROFILE_UUID"
 echo "  Team = ${TEAM_FROM_PROF:-$APPLE_TEAM_ID}"
 echo "  BID  = $BUNDLE_ID_DETECTED"
 
-echo "=== Configurando override de firma en Runner ==="
-OVR="ios/Runner/CodesignOverride.xcconfig"
-cat > "$OVR" <<EOF
-// Forzar firma de distribución en Runner
-CODE_SIGN_STYLE = Manual
-CODE_SIGN_IDENTITY = Apple Distribution
-DEVELOPMENT_TEAM = ${APPLE_TEAM_ID}
-PRODUCT_BUNDLE_IDENTIFIER = ${BUNDLE_ID}
-PROVISIONING_PROFILE_SPECIFIER = ${PROFILE_NAME}
-PROVISIONING_PROFILE = ${PROFILE_UUID}
-CODE_SIGNING_ALLOWED = YES
-CODE_SIGNING_REQUIRED = YES
-EOF
-
 REL_XC="ios/Flutter/Release.xcconfig"
 if ! grep -q 'CodesignOverride.xcconfig' "$REL_XC"; then
   echo '#include "Runner/CodesignOverride.xcconfig"' >> "$REL_XC"
@@ -180,12 +167,6 @@ PBX="ios/Runner.xcodeproj/project.pbxproj"
 /usr/bin/sed -i '' "s/CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\] = iOS Development/CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution/g" "$PBX" || true
 /usr/bin/sed -i '' "s/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g" "$PBX" || true
 
-echo "=== Reinstalando Pods antes del archive ==="
-pushd ios >/dev/null
-pod install
-echo "=== Pods listos para archive ==="
-popd >/dev/null
-
 echo "=== Iniciando archive ==="
 ensure_log_dir
 PENDING_XC_LOG="$XC_LOG_PATH"
@@ -195,8 +176,8 @@ xcodebuild -workspace ios/Runner.xcworkspace \
            -configuration Release \
            -sdk iphoneos \
            -archivePath build/Runner.xcarchive \
-           -resultBundlePath "$XC_RESULT_BUNDLE" \
-           clean archive \
+           OTHER_CPLUSPLUSFLAGS='$(OTHER_CPLUSPLUSFLAGS) -stdlib=libc++' \
+           archive \
            | tee "$XC_LOG_PATH"
 XC_CMD_STATUS=${PIPESTATUS[0]}
 set -e
