@@ -1,64 +1,122 @@
 #!/bin/bash
-set -euo pipefail
+set -Eeuo pipefail
 
-# Crear carpeta de logs
-mkdir -p build/logs
+LOG_DIR="build/logs"
+XC_LOG_PATH="${LOG_DIR}/xcodebuild-archive.log"
+XC_RESULT_BUNDLE="build/XCResultBundle"
+PENDING_XC_LOG=""
+
+ensure_log_dir() {
+  mkdir -p "$LOG_DIR"
+}
+
+collect_diagnostics() {
+  echo "=== Recolectando fragmentos de diagnóstico ==="
+  ensure_log_dir
+  if [[ -f "ios/Pods/leveldb-library/port/port.h" ]]; then
+    sed -n '1,160p' ios/Pods/leveldb-library/port/port.h > "${LOG_DIR}/port.h.head.txt" || true
+    echo "Fragmento de port.h guardado en ${LOG_DIR}/port.h.head.txt"
+  else
+    echo "No existe ios/Pods/leveldb-library/port/port.h" > "${LOG_DIR}/port.h.head.txt"
+    echo "Archivo ios/Pods/leveldb-library/port/port.h no encontrado; se registró aviso."
+  fi
+
+  if [[ -f "ios/Flutter/Release.xcconfig" ]]; then
+    sed -n '1,60p' ios/Flutter/Release.xcconfig > "${LOG_DIR}/release_xcconfig.head.txt" || true
+    echo "Fragmento de Release.xcconfig guardado en ${LOG_DIR}/release_xcconfig.head.txt"
+  else
+    echo "No existe ios/Flutter/Release.xcconfig" > "${LOG_DIR}/release_xcconfig.head.txt"
+    echo "Archivo ios/Flutter/Release.xcconfig no encontrado; se registró aviso."
+  fi
+}
+
+package_logs() {
+  echo "=== Empaquetando logs y diagnósticos ==="
+  ensure_log_dir
+
+  if [[ -n "$PENDING_XC_LOG" && -f "$PENDING_XC_LOG" && "$PENDING_XC_LOG" != "$XC_LOG_PATH" ]]; then
+    mv "$PENDING_XC_LOG" "$XC_LOG_PATH"
+    echo "Log parcial de xcodebuild movido a ${XC_LOG_PATH}"
+  fi
+
+  if [[ ! -f "$XC_LOG_PATH" ]]; then
+    echo "Log de xcodebuild no disponible" > "$XC_LOG_PATH"
+  fi
+
+  collect_diagnostics
+
+  tar -czf "${LOG_DIR}/xcodebuild-archive.tar.gz" -C "$LOG_DIR" xcodebuild-archive.log *.txt 2>/dev/null || true
+  echo "Archivo comprimido disponible en ${LOG_DIR}/xcodebuild-archive.tar.gz"
+}
+
+print_logs_tree() {
+  ensure_log_dir
+  echo "=== Logs disponibles ==="
+  pwd
+  ls -lah "$LOG_DIR" || true
+  echo "=== Árbol completo de ${LOG_DIR} ==="
+  ls -R "$LOG_DIR" || true
+}
+
+on_error() {
+  local exit_code=$?
+  local line_no=$1
+  echo "❌ Error detectado en build-ipa.sh (línea ${line_no}, código ${exit_code})"
+  ensure_log_dir
+  package_logs
+  print_logs_tree
+  exit "$exit_code"
+}
+
+trap 'on_error $LINENO' ERR
+
+echo "=== Posicionando script en la raíz del repositorio ==="
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+ensure_log_dir
 mkdir -p build
 
-echo "== Build IPA (SansebasStock) =="
+echo "=== Build IPA (SansebasStock) ==="
 
-flutter clean && flutter pub get
+echo "=== Ejecutando flutter clean ==="
+flutter clean
+echo "=== flutter clean completado ==="
 
-echo "== Refrescar Pods =="
-cd ios
+echo "=== Ejecutando flutter pub get ==="
+flutter pub get
+echo "=== flutter pub get completado ==="
+
+echo "=== Refrescar Pods inicial ==="
+pushd ios >/dev/null
 rm -rf Pods Podfile.lock
 pod repo update
 pod install
+echo "=== Pods iniciales listos ==="
+popd >/dev/null
 
-echo "=== Guardando cabeceras de archivos para depuración ==="
-
-if [ -f "ios/Pods/leveldb-library/port/port.h" ]; then
-  sed -n '1,160p' ios/Pods/leveldb-library/port/port.h > build/logs/port.h.head.txt || true
-  echo "Fragmento guardado: build/logs/port.h.head.txt"
-else
-  echo "⚠️  No se encontró ios/Pods/leveldb-library/port/port.h" > build/logs/port.h.head.txt
-fi
-
-if [ -f "ios/Flutter/Release.xcconfig" ]; then
-  sed -n '1,40p' ios/Flutter/Release.xcconfig > build/logs/release_xcconfig.head.txt || true
-  echo "Fragmento guardado: build/logs/release_xcconfig.head.txt"
-else
-  echo "⚠️  No se encontró ios/Flutter/Release.xcconfig" > build/logs/release_xcconfig.head.txt
-fi
-
-cd ..
-
-# === Saneo de firma en Pods ===
+echo "=== Preparando archivos de firma en Pods ==="
 PODSPROJ="ios/Pods/Pods.xcodeproj/project.pbxproj"
-
-# Elimina cualquier rastro de perfil/equipo/identidad en Pods
 /usr/bin/sed -i '' '/PROVISIONING_PROFILE_SPECIFIER = /d' "$PODSPROJ" || true
 /usr/bin/sed -i '' '/PROVISIONING_PROFILE = /d' "$PODSPROJ" || true
 /usr/bin/sed -i '' '/DEVELOPMENT_TEAM = /d' "$PODSPROJ" || true
 /usr/bin/sed -i '' '/CODE_SIGN_IDENTITY = /d' "$PODSPROJ" || true
-
-# Asegura estilo automático y sin firma en todos los bloques de buildSettings
 /usr/bin/sed -i '' 's/CODE_SIGN_STYLE = Manual/CODE_SIGN_STYLE = Automatic/g' "$PODSPROJ" || true
 /usr/bin/sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' "$PODSPROJ" || true
 /usr/bin/sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' "$PODSPROJ" || true
-
-# (opcional) Si existiera alguna clave residual con “SansebasStock IOs ios_app_store”, bórrala por si quedó en comentarios
 /usr/bin/sed -i '' '/SansebasStock IOs ios_app_store/d' "$PODSPROJ" || true
 
-# (opcional) saneo anti “-G” si teníamos ese problema
+echo "=== Saneo adicional anti -G en proyectos y xcconfig ==="
 find ios -type f \( -name "*.xcconfig" -o -name "project.pbxproj" \) -print0 | while IFS= read -r -d '' f; do
   sed -i '' 's/[[:space:]]-G[[:space:]]/ /g; s/=-G[[:space:]]/=/g; s/[[:space:]]-G$//g; s/^-G[[:space:]]//g' "$f"
 done
+echo "=== Saneo anti -G completado ==="
 
+echo "=== Detectando perfil de aprovisionamiento ==="
 INSTALL_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
 PROFILE_PATH="$(ls "$INSTALL_DIR"/*.mobileprovision 2>/dev/null | head -n1 || true)"
 if [[ -z "$PROFILE_PATH" ]]; then
-  echo "❌ No hay .mobileprovision en $INSTALL_DIR"; exit 3
+  echo "❌ No hay .mobileprovision en $INSTALL_DIR"
+  exit 3
 fi
 
 TMP_PLIST="$(mktemp /tmp/profile.XXXXXX.plist)"
@@ -75,7 +133,7 @@ echo "  UUID = $PROFILE_UUID"
 echo "  Team = ${TEAM_FROM_PROF:-$APPLE_TEAM_ID}"
 echo "  BID  = $BUNDLE_ID_DETECTED"
 
-echo "== Override de firma SOLO para Runner con xcconfig =="
+echo "=== Configurando override de firma en Runner ==="
 OVR="ios/Runner/CodesignOverride.xcconfig"
 cat > "$OVR" <<EOF
 // Forzar firma de distribución en Runner
@@ -94,6 +152,7 @@ if ! grep -q 'CodesignOverride.xcconfig' "$REL_XC"; then
   echo '#include "Runner/CodesignOverride.xcconfig"' >> "$REL_XC"
 fi
 
+echo "=== Creando export_options.plist ==="
 cat > export_options.plist <<EOF2
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -113,7 +172,7 @@ cat > export_options.plist <<EOF2
 </plist>
 EOF2
 
-# Defensivo: evitar restos de Development en Runner
+echo "=== Ajustando firma en Runner.xcodeproj ==="
 PBX="ios/Runner.xcodeproj/project.pbxproj"
 /usr/bin/sed -i '' "s/CODE_SIGN_IDENTITY = iPhone Developer/CODE_SIGN_IDENTITY = Apple Distribution/g" "$PBX" || true
 /usr/bin/sed -i '' "s/CODE_SIGN_IDENTITY = iOS Development/CODE_SIGN_IDENTITY = Apple Distribution/g" "$PBX" || true
@@ -121,61 +180,57 @@ PBX="ios/Runner.xcodeproj/project.pbxproj"
 /usr/bin/sed -i '' "s/CODE_SIGN_IDENTITY\\[sdk=iphoneos\\*\\] = iOS Development/CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution/g" "$PBX" || true
 /usr/bin/sed -i '' "s/CODE_SIGN_STYLE = Automatic/CODE_SIGN_STYLE = Manual/g" "$PBX" || true
 
-echo "== Pods clean =="
-pushd ios
-rm -rf Pods Podfile.lock
-pod repo update
+echo "=== Reinstalando Pods antes del archive ==="
+pushd ios >/dev/null
 pod install
-popd
+echo "=== Pods listos para archive ==="
+popd >/dev/null
 
-echo "== Archive con log =="
-mkdir -p build
-
-echo "=== Iniciando compilación Xcode ==="
-
+echo "=== Iniciando archive ==="
+ensure_log_dir
+PENDING_XC_LOG="$XC_LOG_PATH"
+set +e
 xcodebuild -workspace ios/Runner.xcworkspace \
            -scheme Runner \
            -configuration Release \
            -sdk iphoneos \
-           -destination "generic/platform=iOS" \
            -archivePath build/Runner.xcarchive \
-           OTHER_CFLAGS= OTHER_CPLUSPLUSFLAGS= OTHER_LDFLAGS= GCC_PREPROCESSOR_DEFINITIONS= \
-           clean archive | tee build/logs/xcodebuild-archive.log
+           -resultBundlePath "$XC_RESULT_BUNDLE" \
+           clean archive \
+           | tee "$XC_LOG_PATH"
+XC_CMD_STATUS=${PIPESTATUS[0]}
+set -e
+echo "=== Archive finalizado con código ${XC_CMD_STATUS} ==="
 
-# Comprimir los logs para subir como artifact más liviano
-tar -czf build/logs/xcodebuild-archive.tar.gz -C build/logs xcodebuild-archive.log || true
+package_logs
+print_logs_tree
 
-echo "Logs generados:"
-ls -lh build/logs/
-
-echo "=== xcodebuild-archive.log (primeras 100 líneas) ==="
-if [ -f "build/logs/xcodebuild-archive.log" ]; then
-  sed -n '1,100p' build/logs/xcodebuild-archive.log || true
-else
-  echo "No se encontró build/logs/xcodebuild-archive.log"
+if [ "$XC_CMD_STATUS" -ne 0 ]; then
+  echo "xcodebuild falló con código $XC_CMD_STATUS"
+  exit "$XC_CMD_STATUS"
 fi
 
-if [ "${PIPESTATUS[0]}" -ne 0 ]; then
-  echo "==== Primeras líneas de error relevantes ===="
-  grep -nE "error:|fatal error:|undefined reference|ld:|clang:" -m 40 build/logs/xcodebuild-archive.log || true
-  exit 65
-fi
-
+echo "=== Preparando exportación de IPA ==="
 rm -rf build/ipa
 mkdir -p build/ipa
 xcodebuild -exportArchive \
            -archivePath build/Runner.xcarchive \
            -exportOptionsPlist export_options.plist \
            -exportPath build/ipa
+echo "=== Exportación de IPA completada ==="
 
+echo "=== Normalizando nombre del IPA ==="
 FINAL_IPA="build/ipa/Runner.ipa"
 FOUND_IPA="$(find build/ipa -maxdepth 1 -type f -name "*.ipa" | head -n1 || true)"
 if [[ -n "$FOUND_IPA" && "$FOUND_IPA" != "$FINAL_IPA" ]]; then
   mv "$FOUND_IPA" "$FINAL_IPA"
 fi
+echo "=== Verificación de IPA generada ==="
 
 if [[ ! -f "$FINAL_IPA" ]]; then
-  echo "❌ No se generó Runner.ipa"; exit 4
+  echo "❌ No se generó Runner.ipa"
+  exit 4
 fi
 
 echo "✅ IPA generado en $FINAL_IPA"
+print_logs_tree
