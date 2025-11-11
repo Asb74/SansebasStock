@@ -1,5 +1,8 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
+
+# Crear carpeta de logs
+mkdir -p build/logs
 mkdir -p build
 
 echo "== Build IPA (SansebasStock) =="
@@ -11,21 +14,24 @@ cd ios
 rm -rf Pods Podfile.lock
 pod repo update
 pod install
-cd ..
 
-echo "=== port.h (primeras 120 líneas) ==="
+echo "=== Guardando cabeceras de archivos para depuración ==="
+
 if [ -f "ios/Pods/leveldb-library/port/port.h" ]; then
-  sed -n '1,120p' ios/Pods/leveldb-library/port/port.h || true
+  sed -n '1,160p' ios/Pods/leveldb-library/port/port.h > build/logs/port.h.head.txt || true
+  echo "Fragmento guardado: build/logs/port.h.head.txt"
 else
-  echo "No se encontró ios/Pods/leveldb-library/port/port.h"
+  echo "⚠️  No se encontró ios/Pods/leveldb-library/port/port.h" > build/logs/port.h.head.txt
 fi
 
-echo "=== Release.xcconfig (cabecera) ==="
 if [ -f "ios/Flutter/Release.xcconfig" ]; then
-  sed -n '1,20p' ios/Flutter/Release.xcconfig || true
+  sed -n '1,40p' ios/Flutter/Release.xcconfig > build/logs/release_xcconfig.head.txt || true
+  echo "Fragmento guardado: build/logs/release_xcconfig.head.txt"
 else
-  echo "No se encontró ios/Flutter/Release.xcconfig"
+  echo "⚠️  No se encontró ios/Flutter/Release.xcconfig" > build/logs/release_xcconfig.head.txt
 fi
+
+cd ..
 
 # === Saneo de firma en Pods ===
 PODSPROJ="ios/Pods/Pods.xcodeproj/project.pbxproj"
@@ -124,24 +130,34 @@ popd
 
 echo "== Archive con log =="
 mkdir -p build
+
+echo "=== Iniciando compilación Xcode ==="
+
 xcodebuild -workspace ios/Runner.xcworkspace \
            -scheme Runner \
            -configuration Release \
+           -sdk iphoneos \
            -destination "generic/platform=iOS" \
            -archivePath build/Runner.xcarchive \
            OTHER_CFLAGS= OTHER_CPLUSPLUSFLAGS= OTHER_LDFLAGS= GCC_PREPROCESSOR_DEFINITIONS= \
-           clean archive | tee build/xcodebuild-archive.log
+           clean archive | tee build/logs/xcodebuild-archive.log
+
+# Comprimir los logs para subir como artifact más liviano
+tar -czf build/logs/xcodebuild-archive.tar.gz -C build/logs xcodebuild-archive.log || true
+
+echo "Logs generados:"
+ls -lh build/logs/
 
 echo "=== xcodebuild-archive.log (primeras 100 líneas) ==="
-if [ -f "build/xcodebuild-archive.log" ]; then
-  sed -n '1,100p' build/xcodebuild-archive.log || true
+if [ -f "build/logs/xcodebuild-archive.log" ]; then
+  sed -n '1,100p' build/logs/xcodebuild-archive.log || true
 else
-  echo "No se encontró build/xcodebuild-archive.log"
+  echo "No se encontró build/logs/xcodebuild-archive.log"
 fi
 
 if [ "${PIPESTATUS[0]}" -ne 0 ]; then
   echo "==== Primeras líneas de error relevantes ===="
-  grep -nE "error:|fatal error:|undefined reference|ld:|clang:" -m 40 build/xcodebuild-archive.log || true
+  grep -nE "error:|fatal error:|undefined reference|ld:|clang:" -m 40 build/logs/xcodebuild-archive.log || true
   exit 65
 fi
 

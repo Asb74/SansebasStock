@@ -68,6 +68,9 @@ workflows:
       - codemagic_prebuild.log
       - codemagic_setup_signing.log
       - codemagic_build_ipa.log
+      - build/logs/xcodebuild-archive.log
+      - build/logs/xcodebuild-archive.tar.gz
+      - build/logs/*.txt
       - artifacts/*
 
     publishing:
