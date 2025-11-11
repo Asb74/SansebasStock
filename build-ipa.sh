@@ -208,6 +208,8 @@ echo "=== Iniciando archive ==="
 ensure_log_dir
 PENDING_XC_LOG="$XC_LOG_PATH"
 set +e
+echo "== Diagnóstico iOS Deployment Target =="
+/usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "build/ios/iphoneos/Runner.app/Info.plist" 2>/dev/null || true
 xcodebuild -workspace ios/Runner.xcworkspace \
            -scheme Runner \
            -configuration Release \
