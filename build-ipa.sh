@@ -72,6 +72,8 @@ trap 'on_error $LINENO' ERR
 echo "=== Posicionando script en la raíz del repositorio ==="
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
+DIAGNOSTICS_ROOT="${CM_ARTIFACTS:-$PWD/build/diagnostics-fallback}"
+
 ensure_log_dir
 mkdir -p build
 
@@ -95,34 +97,40 @@ echo "=== Refrescar Pods inicial ==="
 )
 echo "=== Pods iniciales listos ==="
 
-# --- BEGIN: extraer artifacts de CocoaPods para diagnostico ---
-set -Eeuo pipefail
+# === Diagnóstico: recoger artefactos iOS útiles ===
+{
+  set -e
+  if [[ -z "${CM_ARTIFACTS:-}" ]]; then
+    echo "⚠️  CM_ARTIFACTS no está definido; se usarán artefactos en ${DIAGNOSTICS_ROOT}."
+  fi
 
-ART_DIR="$CM_BUILD_DIR/leveldb_debug_artifacts"
-mkdir -p "$ART_DIR"
+  mkdir -p "${DIAGNOSTICS_ROOT}/diagnostics"
 
-# Copiamos Podfile.lock si existe
-if [ -f "ios/Podfile.lock" ]; then
-  cp "ios/Podfile.lock" "$ART_DIR/"
-fi
+  if [ -f ios/Podfile.lock ]; then
+    cp -v ios/Podfile.lock "${DIAGNOSTICS_ROOT}/diagnostics/Podfile.lock"
+  fi
 
-# Copiamos xcconfig del target leveldb-library si existen
-if [ -d "ios/Pods/Target Support Files/leveldb-library" ]; then
-  cp ios/Pods/Target\ Support\ Files/leveldb-library/*.xcconfig "$ART_DIR/" || true
-fi
+  if [ -f ios/Runner/Flutter/Release.xcconfig ]; then
+    cp -v ios/Runner/Flutter/Release.xcconfig "${DIAGNOSTICS_ROOT}/diagnostics/Release.xcconfig"
+  elif [ -f ios/Flutter/Release.xcconfig ]; then
+    cp -v ios/Flutter/Release.xcconfig "${DIAGNOSTICS_ROOT}/diagnostics/Release.xcconfig"
+  fi
 
-# Vuelca cabeceras útiles al log y a txts
-if [ -f "ios/Pods/leveldb-library/port/port.h" ]; then
-  head -n 150 ios/Pods/leveldb-library/port/port.h | tee "$ART_DIR/port.h.head.txt" >/dev/null
-fi
-if [ -f "ios/Runner/Flutter/Release.xcconfig" ]; then
-  head -n 80 ios/Runner/Flutter/Release.xcconfig | tee "$ART_DIR/release_xcconfig.head.txt" >/dev/null
-fi
+  if [ -f ios/Pods/leveldb-library/port/port.h ]; then
+    mkdir -p "${DIAGNOSTICS_ROOT}/diagnostics/leveldb-port"
+    cp -v ios/Pods/leveldb-library/port/port.h "${DIAGNOSTICS_ROOT}/diagnostics/leveldb-port/port.h"
+  fi
 
-# Empaquetamos todo en zip para subirlo como artifact
-(cd "$CM_BUILD_DIR" && zip -r "leveldb_debug_artifacts.zip" "leveldb_debug_artifacts" >/dev/null || true)
-echo ">> Artifacts preparados en $CM_BUILD_DIR/leveldb_debug_artifacts.zip"
-# --- END: extraer artifacts de CocoaPods para diagnostico ---
+  if [ -f "ios/Pods/Target Support Files/leveldb-library/leveldb-library.release.xcconfig" ]; then
+    mkdir -p "${DIAGNOSTICS_ROOT}/diagnostics/leveldb-xcconfig"
+    cp -v "ios/Pods/Target Support Files/leveldb-library/leveldb-library.release.xcconfig" \
+          "${DIAGNOSTICS_ROOT}/diagnostics/leveldb-xcconfig/leveldb-library.release.xcconfig"
+  fi
+
+  if [ -f build/xcodebuild-archive.log ]; then
+    cp -v build/xcodebuild-archive.log "${DIAGNOSTICS_ROOT}/diagnostics/xcodebuild-archive.log"
+  fi
+}
 
 echo "=== Preparando archivos de firma en Pods ==="
 PODSPROJ="ios/Pods/Pods.xcodeproj/project.pbxproj"
@@ -212,15 +220,21 @@ XC_CMD_STATUS=${PIPESTATUS[0]}
 set -e
 echo "=== Archive finalizado con código ${XC_CMD_STATUS} ==="
 
+# Guardar el log de xcodebuild del archive
+if [ -f /tmp/xcodebuild-archive.log ]; then
+  cp -v /tmp/xcodebuild-archive.log "${DIAGNOSTICS_ROOT}/diagnostics/xcodebuild-archive.log"
+fi
+
+# Empaquetar todo en un ZIP
+if [ -d "${DIAGNOSTICS_ROOT}/diagnostics" ]; then
+  (
+    cd "${DIAGNOSTICS_ROOT}" &&
+    zip -r diagnostics_ios.zip diagnostics || true
+  )
+fi
+
 head -c 200000 "$XC_LOG_PATH" > build/ios_archive_head.log || true
 echo "Fragmento de log guardado en build/ios_archive_head.log"
-
-# Guardar las primeras 200 líneas del log de archive
-if [ -f "$CM_BUILD_DIR/build/xcodebuild-archive.log" ]; then
-  head -n 200 "$CM_BUILD_DIR/build/xcodebuild-archive.log" | tee "$ART_DIR/xcodebuild-archive.head.txt" >/dev/null
-  # Reempaquetar con los nuevos txt
-  (cd "$CM_BUILD_DIR" && zip -r "leveldb_debug_artifacts.zip" "leveldb_debug_artifacts" >/dev/null || true)
-fi
 
 package_logs
 print_logs_tree
