@@ -47,19 +47,15 @@ post_install do |installer|
 
     target.build_configurations.each do |config|
       config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
-      config.build_settings['PROVISIONING_PROFILE_SPECIFIER'] = ''
-      config.build_settings['PROVISIONING_PROFILE'] = ''
-      config.build_settings['DEVELOPMENT_TEAM'] = ''
+      config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+      config.build_settings['CODE_SIGNING_STYLE'] = 'Manual'
     end
 
     next unless target.name == 'leveldb-library'
 
     target.build_configurations.each do |config|
-      defs = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']
-      defs = Array(defs)
+      defs = Array(config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || '$(inherited)')
       defs << 'LEVELDB_PLATFORM_POSIX=1' unless defs.any? { |d| d.include?('LEVELDB_PLATFORM_POSIX') }
-      defs << 'HAVE_CXX_ATOMICS=1' unless defs.any? { |d| d.include?('HAVE_CXX_ATOMICS') }
-      defs << 'HAVE_CXX_ATOMICS_WITHOUT_LIB=1' unless defs.any? { |d| d.include?('HAVE_CXX_ATOMICS_WITHOUT_LIB') }
       config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] = defs
       config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
       config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
