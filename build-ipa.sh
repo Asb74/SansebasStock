@@ -183,6 +183,9 @@ XC_CMD_STATUS=${PIPESTATUS[0]}
 set -e
 echo "=== Archive finalizado con código ${XC_CMD_STATUS} ==="
 
+head -c 200000 "$XC_LOG_PATH" > build/ios_archive_head.log || true
+echo "Fragmento de log guardado en build/ios_archive_head.log"
+
 package_logs
 print_logs_tree
 
