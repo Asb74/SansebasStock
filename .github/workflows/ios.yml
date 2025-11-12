@@ -18,9 +18,9 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           # Opción A (canal estable):
-          channel: 'stable'
+          #channel: 'stable'
           # Opción B (comenta la de arriba y fija versión):
-          # flutter-version: '3.24.3'
+          flutter-version: '3.24.3'
           cache: true
 
       - name: Flutter pub get
