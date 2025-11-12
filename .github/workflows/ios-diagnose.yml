@@ -1,0 +1,100 @@
+name: iOS Diagnose (Pods/BoringSSL)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ios-diagnose:
+    runs-on: macos-14
+    env:
+      LC_ALL: en_US.UTF-8
+      LANG: en_US.UTF-8
+      IOS_DIR: ios
+      LOG_DIR: build/logs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: |
+          xcodebuild -version
+          sw_vers
+
+      - name: Install CocoaPods 1.15.x
+        run: |
+          sudo gem install cocoapods -v "~>1.15" --no-document
+          pod --version
+
+      - name: Setup Flutter (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Flutter version
+        run: flutter --version
+
+      - name: Clean DerivedData
+        run: |
+          echo "=== Cleaning DerivedData ==="
+          rm -rf ~/Library/Developer/Xcode/DerivedData/* || true
+
+      - name: CocoaPods install (repo update + install)
+        working-directory: ${{ env.IOS_DIR }}
+        run: |
+          echo "=== pod repo update ==="
+          pod repo update
+          echo "=== pod install --repo-update ==="
+          pod install --repo-update
+
+      - name: Pre-archive diagnostics (dump Podfile.lock & xcconfig)
+        run: |
+          mkdir -p "$LOG_DIR/diag/tsf"
+          cp "$IOS_DIR/Podfile.lock" "$LOG_DIR/diag/Podfile.lock" || true
+          if [ -d "$IOS_DIR/Pods/Target Support Files/BoringSSL-GRPC" ]; then
+            cp "$IOS_DIR/Pods/Target Support Files/BoringSSL-GRPC"/* "$LOG_DIR/diag/tsf/" || true
+          fi
+          ruby -e '
+            root = "ios/Pods/Target Support Files/BoringSSL-GRPC";
+            if Dir.exist?(root)
+              Dir["#{root}/*.xcconfig"].each{|f|
+                puts "--- #{f} ---";
+                puts File.read(f);
+              }
+            else
+              puts "No BoringSSL-GRPC xcconfig found yet."
+            end
+          ' > "$LOG_DIR/diag/boringssl_grpc_xcconfig_dump.txt" 2>&1 || true
+          pod --version > "$LOG_DIR/diag/pod_version.txt" 2>&1 || true
+          xcodebuild -version > "$LOG_DIR/diag/xcodebuild_version.txt" 2>&1 || true
+
+      - name: Build (archive, no code signing)
+        run: |
+          mkdir -p "$LOG_DIR"
+          set -o pipefail
+          xcodebuild -workspace "${{ env.IOS_DIR }}/Runner.xcworkspace" \
+                     -scheme Runner \
+                     -configuration Release \
+                     -sdk iphoneos \
+                     -destination 'generic/platform=iOS' \
+                     -archivePath build/Runner.xcarchive \
+                     clean archive \
+                     CODE_SIGNING_ALLOWED=NO \
+                     | tee "$LOG_DIR/xcodebuild-archive.log"
+
+      - name: Package diagnostics
+        if: always()
+        run: |
+          tar -czf "$LOG_DIR/diagnostics.tar.gz" -C "$LOG_DIR/diag" . 2>/dev/null || true
+          echo "=== Logs available ==="
+          ls -la "$LOG_DIR" || true
+          echo "=== Diag tree ==="
+          ls -la "$LOG_DIR/diag" || true
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-diagnostics
+          path: |
+            build/logs/xcodebuild-archive.log
+            build/logs/diagnostics.tar.gz
+
