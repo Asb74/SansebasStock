@@ -1,5 +1,5 @@
 #!/bin/bash
-set -Eeuo pipefail
+set -euo pipefail
 
 LOG_DIR="build/logs"
 XC_LOG_PATH="${LOG_DIR}/xcodebuild-archive.log"
@@ -77,6 +77,18 @@ DIAGNOSTICS_ROOT="${CM_ARTIFACTS:-$PWD/build/diagnostics-fallback}"
 ensure_log_dir
 mkdir -p build
 
+echo "=== Información de entorno ==="
+echo "Directorio actual: $PWD"
+if command -v xcode-select >/dev/null 2>&1; then
+  echo "Xcode path: $(xcode-select -p)"
+fi
+if command -v xcodebuild >/dev/null 2>&1; then
+  xcodebuild -version
+fi
+if command -v clang >/dev/null 2>&1; then
+  clang --version | head -n1
+fi
+
 echo "=== Limpiando DerivedData de Xcode ==="
 rm -rf ~/Library/Developer/Xcode/DerivedData/* || true
 
@@ -100,6 +112,8 @@ echo "=== Refrescar Pods inicial ==="
 )
 echo "=== Pods iniciales listos ==="
 
+# Nota: nunca utilizar "-GCC_WARN_INHIBIT_ALL_WARNINGS" como flag de compilador.
+#       Debe configurarse mediante el build setting GCC_WARN_INHIBIT_ALL_WARNINGS.
 echo "=== Verificando flags '-G' inválidas en .xcconfig de Pods ==="
 if grep -R --include="*.xcconfig" -nE '(^|[[:space:]])-G[^[:space:]]*' ios/Pods 2>/dev/null; then
   echo "❌ Se detectaron flags inválidas que comienzan con '-G' en los .xcconfig de Pods."
@@ -212,6 +226,8 @@ echo "=== Iniciando archive ==="
 ensure_log_dir
 PENDING_XC_LOG="$XC_LOG_PATH"
 set +e
+echo "=== Limpiando DerivedData previo al archive ==="
+rm -rf ~/Library/Developer/Xcode/DerivedData/* || true
 echo "== Diagnóstico iOS Deployment Target =="
 /usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "build/ios/iphoneos/Runner.app/Info.plist" 2>/dev/null || true
 xcodebuild -workspace ios/Runner.xcworkspace \
@@ -225,6 +241,27 @@ xcodebuild -workspace ios/Runner.xcworkspace \
 XC_CMD_STATUS=${PIPESTATUS[0]}
 set -e
 echo "=== Archive finalizado con código ${XC_CMD_STATUS} ==="
+
+echo "=== Verificando invocaciones a clang sin flags '-G*' ==="
+if [[ -f "$XC_LOG_PATH" ]]; then
+  found_clang=0
+  while IFS= read -r clang_line; do
+    [[ -n "$clang_line" ]] || continue
+    found_clang=1
+    echo "$clang_line"
+    if [[ "$clang_line" =~ (^|[[:space:]])-G[A-Za-z] ]]; then
+      echo "❌ Se detectó una flag inválida que inicia con '-G' en la invocación a clang."
+      exit 66
+    fi
+  done < <(grep -E "(/|[[:space:]])clang(\+\+)?[[:space:]]" "$XC_LOG_PATH" || true)
+  if [[ $found_clang -eq 0 ]]; then
+    echo "⚠️  No se localizaron invocaciones directas a clang en el log para validar flags '-G'."
+  else
+    echo "=== Validación de flags '-G' completada correctamente ==="
+  fi
+else
+  echo "⚠️  No se encontró ${XC_LOG_PATH}; no fue posible validar flags '-G'."
+fi
 
 # Guardar el log de xcodebuild del archive
 if [ -f /tmp/xcodebuild-archive.log ]; then
