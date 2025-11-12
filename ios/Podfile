@@ -2,6 +2,8 @@ install! 'cocoapods', :warn_for_unused_master_specs_repo => false
 platform :ios, '15.0'
 $FirebaseSDKVersion = '10.24.0'
 
+inhibit_all_warnings!
+
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
@@ -48,6 +50,9 @@ post_install do |installer|
     target.build_configurations.each do |config|
       # Forzar iOS 15 mínimo
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+
+      # Silenciar avisos mediante setting dedicado cuando sea imprescindible
+      config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
 
       # BoringSSL/gRPC/abseil con toolchain moderno: C++17
       config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
@@ -102,5 +107,6 @@ post_install do |installer|
 
   installer.pods_project.build_configurations.each do |config|
     config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'i386'
+    config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
   end
 end
