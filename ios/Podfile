@@ -66,15 +66,17 @@ post_install do |installer|
       other_cflags = Array(other_cflags)
       other_cflags << '-Wno-implicit-fallthrough'
       other_cflags << '-Wno-deprecated-declarations'
-      config.build_settings['OTHER_CFLAGS'] = other_cflags.uniq
+      config.build_settings['OTHER_CFLAGS'] = other_cflags.flatten.compact.uniq
 
-      # Limpiar flags inválidas
-      %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS].each do |key|
-        flags = Array(config.build_settings[key]).flat_map { |f| f.to_s.split(/\s+/) }
-        flags.reject! { |f| f.start_with?('-G') || f =~ /GCC_WARN_INHIBIT_ALL_WARNINGS/ }
-        flags.reject!(&:empty?)
-        flags.unshift('$(inherited)') unless flags.include?('$(inherited)')
-        config.build_settings[key] = flags.uniq
+      # Limpiar flags inválidas en Pods
+      %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_SWIFT_FLAGS].each do |key|
+        vals = config.build_settings[key]
+        next unless vals
+        arr = vals.is_a?(Array) ? vals.flatten : vals.to_s.split(/\s+/)
+        arr = arr.reject { |f| f.to_s.start_with?('-G') }
+        arr = arr.reject(&:empty?)
+        arr.unshift('$(inherited)') unless arr.include?('$(inherited)')
+        config.build_settings[key] = arr.uniq
       end
 
       config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
