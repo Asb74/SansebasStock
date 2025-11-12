@@ -49,6 +49,13 @@ package_logs() {
   tar -czf "$upper_tar" -C "$LOG_DIR" . 2>/dev/null || true
   mv "$upper_tar" "$tmp_tar" 2>/dev/null || true
   echo "Archivo comprimido disponible en ${LOG_DIR}/xcodebuild-archive.tar.gz"
+
+  echo "=== Empaquetando artefactos extra (CocoaPods/xcconfig) ==="
+  tar -czf build/logs/diagnostics.tar.gz -C build/logs/diag . 2>/dev/null || true
+
+  echo "=== Listado de artefactos finales ==="
+  ls -la build/logs || true
+  ls -la build/logs/diag || true
 }
 
 print_logs_tree() {
@@ -275,21 +282,44 @@ PBX="ios/Runner.xcodeproj/project.pbxproj"
 echo "=== Iniciando archive ==="
 ensure_log_dir
 PENDING_XC_LOG="$XC_LOG_PATH"
-set +e
-(
-  set -euo pipefail
-  echo "Limpiando DerivedData…"
-  rm -rf ~/Library/Developer/Xcode/DerivedData/*
+echo "=== Limpiando DerivedData ==="
+rm -rf ~/Library/Developer/Xcode/DerivedData/* || true
 
-  echo "Limpiando e instalando Pods…"
-  pushd ios
-    pod deintegrate || true
-    pod repo update
-    pod install
-  popd
-)
+echo "=== CocoaPods: actualizar repos e instalar ==="
+pushd ios >/dev/null
+# pod deintegrate || true
+pod repo update
+pod install --repo-update
+popd >/dev/null
+
+echo "=== Diagnóstico pre-archive (CocoaPods) ==="
+mkdir -p build/logs/diag
+# Copia el Podfile.lock resultante
+cp ios/Podfile.lock build/logs/diag/Podfile.lock || true
+# Copia xcconfigs del target problemático (si existen)
+mkdir -p build/logs/diag/tsf
+cp ios/Pods/Target\ Support\ Files/BoringSSL-GRPC/*.* build/logs/diag/tsf/ 2>/dev/null || true
+# Greps útiles sobre flags
+/usr/bin/env ruby -e "
+require 'json'
+root = 'ios/Pods/Target Support Files/BoringSSL-GRPC'
+if Dir.exist?(root)
+  Dir["#{root}/*.xcconfig"].each do |f|
+    puts "--- #{f} ---"
+    puts File.read(f)
+  end
+else
+  puts 'No se encontraron xcconfig de BoringSSL-GRPC (aún).'
+end
+" > build/logs/diag/boringssl_grpc_xcconfig_dump.txt 2>&1 || true
+
+# Imprimir versión de Cocoapods y Xcode
+pod --version > build/logs/diag/pod_version.txt 2>&1 || true
+xcodebuild -version > build/logs/diag/xcodebuild_version.txt 2>&1 || true
+
 echo "== Diagnóstico iOS Deployment Target =="
 /usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "build/ios/iphoneos/Runner.app/Info.plist" 2>/dev/null || true
+set +e
 xcodebuild -workspace ios/Runner.xcworkspace \
            -scheme Runner \
            -configuration Release \
