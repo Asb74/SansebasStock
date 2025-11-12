@@ -77,6 +77,9 @@ DIAGNOSTICS_ROOT="${CM_ARTIFACTS:-$PWD/build/diagnostics-fallback}"
 ensure_log_dir
 mkdir -p build
 
+echo "=== Limpiando DerivedData de Xcode ==="
+rm -rf ~/Library/Developer/Xcode/DerivedData/* || true
+
 echo "=== Build IPA (SansebasStock) ==="
 
 echo "=== Ejecutando flutter clean ==="
@@ -96,6 +99,13 @@ echo "=== Refrescar Pods inicial ==="
   pod install --repo-update
 )
 echo "=== Pods iniciales listos ==="
+
+echo "=== Verificando flags '-G' inválidas en .xcconfig de Pods ==="
+if grep -R --include="*.xcconfig" -nE '(^|[[:space:]])-G[^[:space:]]*' ios/Pods 2>/dev/null; then
+  echo "❌ Se detectaron flags inválidas que comienzan con '-G' en los .xcconfig de Pods."
+  echo "   Revisa el post_install del Podfile o los Pods generados."
+  exit 65
+fi
 
 # === Diagnóstico: recoger artefactos iOS útiles ===
 {
@@ -142,12 +152,6 @@ PODSPROJ="ios/Pods/Pods.xcodeproj/project.pbxproj"
 /usr/bin/sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' "$PODSPROJ" || true
 /usr/bin/sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' "$PODSPROJ" || true
 /usr/bin/sed -i '' '/SansebasStock IOs ios_app_store/d' "$PODSPROJ" || true
-
-echo "=== Saneo adicional anti -G en proyectos y xcconfig ==="
-find ios -type f \( -name "*.xcconfig" -o -name "project.pbxproj" \) -print0 | while IFS= read -r -d '' f; do
-  sed -i '' 's/[[:space:]]-G[[:space:]]/ /g; s/=-G[[:space:]]/=/g; s/[[:space:]]-G$//g; s/^-G[[:space:]]//g' "$f"
-done
-echo "=== Saneo anti -G completado ==="
 
 echo "=== Detectando perfil de aprovisionamiento ==="
 INSTALL_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
