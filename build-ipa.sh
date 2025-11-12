@@ -226,8 +226,18 @@ echo "=== Iniciando archive ==="
 ensure_log_dir
 PENDING_XC_LOG="$XC_LOG_PATH"
 set +e
-echo "=== Limpiando DerivedData previo al archive ==="
-rm -rf ~/Library/Developer/Xcode/DerivedData/* || true
+(
+  set -euo pipefail
+  echo "Limpiando DerivedData…"
+  rm -rf ~/Library/Developer/Xcode/DerivedData/*
+
+  echo "Limpiando e instalando Pods…"
+  pushd ios
+    pod deintegrate || true
+    pod repo update
+    pod install
+  popd
+)
 echo "== Diagnóstico iOS Deployment Target =="
 /usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "build/ios/iphoneos/Runner.app/Info.plist" 2>/dev/null || true
 xcodebuild -workspace ios/Runner.xcworkspace \
