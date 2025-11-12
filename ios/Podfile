@@ -44,7 +44,12 @@ target 'Runner' do
 end
 
 post_install do |installer|
+  installer.pods_project.build_configurations.each do |config|
+    config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+  end
+
   installer.pods_project.targets.each do |target|
+    puts "Sanitizing build settings for Pod target: #{target.name}"
     flutter_additional_ios_build_settings(target)
 
     target.build_configurations.each do |config|
@@ -63,8 +68,18 @@ post_install do |installer|
       # (por ejemplo stdatomic.h) y que, de otro modo, terminan evaluándose sin el
       # estándar correcto en Codemagic.
       config.build_settings['CLANG_C_LANGUAGE_STANDARD'] = 'gnu11'
-      other_cpp = config.build_settings['OTHER_CPLUSPLUSFLAGS'] || ['$(inherited)']
-      other_cpp = Array(other_cpp)
+      %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS].each do |key|
+        flags = config.build_settings[key]
+        next if flags.nil?
+
+        normalized = flags.is_a?(Array) ? flags.flatten : flags.to_s.split(/\s+/)
+        sanitized = normalized.reject { |f| %w[-G -G0 -G1 -G2].include?(f) }
+        sanitized = ['$(inherited)'] if sanitized.empty?
+        sanitized.unshift('$(inherited)') unless sanitized.include?('$(inherited)')
+        config.build_settings[key] = sanitized.uniq
+      end
+
+      other_cpp = Array(config.build_settings['OTHER_CPLUSPLUSFLAGS'] || ['$(inherited)'])
       other_cpp << '-std=gnu++17'
       config.build_settings['OTHER_CPLUSPLUSFLAGS'] = other_cpp.uniq
 
@@ -75,15 +90,12 @@ post_install do |installer|
       other_cflags << '-Wno-deprecated-declarations'
       config.build_settings['OTHER_CFLAGS'] = other_cflags.flatten.compact.uniq
 
-      # Limpiar flags inválidas en Pods
-      %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_SWIFT_FLAGS].each do |key|
-        vals = config.build_settings[key]
-        next unless vals
-        arr = vals.is_a?(Array) ? vals.flatten : vals.to_s.split(/\s+/)
+      if (swift_flags = config.build_settings['OTHER_SWIFT_FLAGS'])
+        arr = swift_flags.is_a?(Array) ? swift_flags.flatten : swift_flags.to_s.split(/\s+/)
         arr = arr.reject { |f| f.to_s.start_with?('-G') }
         arr = arr.reject(&:empty?)
         arr.unshift('$(inherited)') unless arr.include?('$(inherited)')
-        config.build_settings[key] = arr.uniq
+        config.build_settings['OTHER_SWIFT_FLAGS'] = arr.uniq
       end
 
       config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
@@ -116,6 +128,7 @@ post_install do |installer|
 
   installer.pods_project.build_configurations.each do |config|
     config.build_settings['EXCLUDED_ARCHS[sdk=iphonesimulator*]'] = 'i386'
+    config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
     config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
   end
 end

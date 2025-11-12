@@ -44,7 +44,10 @@ package_logs() {
 
   collect_diagnostics
 
-  tar -czf "${LOG_DIR}/xcodebuild-archive.tar.gz" -C "$LOG_DIR" xcodebuild-archive.log *.txt 2>/dev/null || true
+  tmp_tar="${LOG_DIR}/xcodebuild-archive.tar.gz"
+  upper_tar="${LOG_DIR}/../xcodebuild-archive.tar.gz"
+  tar -czf "$upper_tar" -C "$LOG_DIR" . 2>/dev/null || true
+  mv "$upper_tar" "$tmp_tar" 2>/dev/null || true
   echo "Archivo comprimido disponible en ${LOG_DIR}/xcodebuild-archive.tar.gz"
 }
 
@@ -77,6 +80,56 @@ DIAGNOSTICS_ROOT="${CM_ARTIFACTS:-$PWD/build/diagnostics-fallback}"
 ensure_log_dir
 mkdir -p build
 
+echo "=== LOGGING PRECOCIDO: Entorno y versiones ==="
+( set +e
+  xcodebuild -version || true
+  swift --version || true
+  ruby -v || true
+  gem env || true
+  pod --version || true
+  pod env || true
+) > build/logs/toolchain_env.txt 2>&1 || true
+
+echo "=== Limpiando DerivedData (pre-archive) ==="
+rm -rf ~/Library/Developer/Xcode/DerivedData/* || true
+
+# Asegura carpeta de logs/artefactos
+mkdir -p build/logs/xcconfigs build/logs/scans build/logs/derived || true
+
+# === Diagnóstico de proyectos/schemes ===
+echo "=== xcodebuild -list (Runner workspace) ===" | tee build/logs/scans/xcodebuild_list.txt
+xcodebuild -workspace ios/Runner.xcworkspace -list >> build/logs/scans/xcodebuild_list.txt 2>&1 || true
+
+echo "=== xcodebuild -list (Pods project) ===" | tee -a build/logs/scans/xcodebuild_list.txt
+xcodebuild -project ios/Pods/Pods.xcodeproj -list >> build/logs/scans/xcodebuild_list.txt 2>&1 || true
+
+# === Dump de build settings del target problemático (BoringSSL-GRPC) ===
+echo "=== showBuildSettings: Pods BoringSSL-GRPC (Release) ===" | tee build/logs/scans/boringssl_release_buildsettings.txt
+xcodebuild -project ios/Pods/Pods.xcodeproj \
+  -target "BoringSSL-GRPC" -configuration Release -showBuildSettings \
+  >> build/logs/scans/boringssl_release_buildsettings.txt 2>&1 || true
+
+echo "=== showBuildSettings: Pods BoringSSL-GRPC (Debug) ===" | tee build/logs/scans/boringssl_debug_buildsettings.txt
+xcodebuild -project ios/Pods/Pods.xcodeproj \
+  -target "BoringSSL-GRPC" -configuration Debug -showBuildSettings \
+  >> build/logs/scans/boringssl_debug_buildsettings.txt 2>&1 || true
+
+# === Copia de xcconfigs relevantes ===
+cp "ios/Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig" \
+   "build/logs/xcconfigs/Pods-Runner.release.xcconfig" 2>/dev/null || true
+cp "ios/Pods/Target Support Files/BoringSSL-GRPC/BoringSSL-GRPC.release.xcconfig" \
+   "build/logs/xcconfigs/BoringSSL-GRPC.release.xcconfig" 2>/dev/null || true
+cp "ios/Pods/Target Support Files/BoringSSL-GRPC/BoringSSL-GRPC.debug.xcconfig" \
+   "build/logs/xcconfigs/BoringSSL-GRPC.debug.xcconfig" 2>/dev/null || true
+
+# === Grep de flags '-G' y otras rarezas en Pods ===
+echo "=== Grep flags sospechosos en ios/Pods ===" | tee build/logs/scans/grep_flags.txt
+( grep -R --line-number -E '(^|[[:space:]])-G([[:space:]]|$)' ios/Pods || true ) >> build/logs/scans/grep_flags.txt
+( grep -R --line-number -E '(^|[[:space:]])-(ffast-math|fno-exceptions|fno-rtti)([[:space:]]|$)' ios/Pods || true ) >> build/logs/scans/grep_flags.txt
+
+# === Guarda Podfile.lock como artefacto también ===
+cp ios/Podfile.lock build/logs/Podfile.lock 2>/dev/null || true
+
 echo "=== Información de entorno ==="
 echo "Directorio actual: $PWD"
 if command -v xcode-select >/dev/null 2>&1; then
@@ -88,9 +141,6 @@ fi
 if command -v clang >/dev/null 2>&1; then
   clang --version | head -n1
 fi
-
-echo "=== Limpiando DerivedData de Xcode ==="
-rm -rf ~/Library/Developer/Xcode/DerivedData/* || true
 
 echo "=== Build IPA (SansebasStock) ==="
 
@@ -251,6 +301,20 @@ xcodebuild -workspace ios/Runner.xcworkspace \
 XC_CMD_STATUS=${PIPESTATUS[0]}
 set -e
 echo "=== Archive finalizado con código ${XC_CMD_STATUS} ==="
+
+echo "=== Intentando capturar response files de clang para BoringSSL-GRPC ==="
+DERIVED_BASE="${HOME}/Library/Developer/Xcode/DerivedData"
+DD_RUNNER="$(ls -1td "${DERIVED_BASE}/Runner-"*/ 2>/dev/null | head -n1 || true)"
+if [[ -n "${DD_RUNNER}" && -d "${DD_RUNNER}" ]]; then
+  BORING_DIR="${DD_RUNNER}/Build/Intermediates.noindex/ArchiveIntermediates/Runner/IntermediateBuildFilesPath/Pods.build/Release-iphoneos/BoringSSL-GRPC.build/Objects-normal/arm64"
+  if [[ -d "${BORING_DIR}" ]]; then
+    cp -v "${BORING_DIR}"/*.resp "build/logs/derived/" 2>/dev/null || true
+    cp -v "${BORING_DIR}"/*.d "build/logs/derived/" 2>/dev/null || true
+  fi
+fi
+
+echo "=== Resumen de artefactos extendidos ==="
+find build/logs -maxdepth 3 -type f | sed 's/^/- /' || true
 
 echo "=== Verificando invocaciones a clang sin flags '-G*' ==="
 if [[ -f "$XC_LOG_PATH" ]]; then
