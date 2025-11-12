@@ -34,7 +34,7 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 flutter_ios_podfile_setup
 
 target 'Runner' do
-  use_frameworks!
+  use_frameworks! :linkage => :static
   use_modular_headers!
 
   pod 'leveldb-library', '1.22'
@@ -46,8 +46,23 @@ post_install do |installer|
     flutter_additional_ios_build_settings(target)
 
     target.build_configurations.each do |config|
-      # iOS mínimo
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      # 1) Limpiar el flag inválido "-GCC_WARN_INHIBIT_ALL_WARNINGS" en C y C++
+      %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS].each do |key|
+        val = config.build_settings[key]
+        case val
+        when String
+          val = val.gsub(/\s-?GCC_WARN_INHIBIT_ALL_WARNINGS\b/, ' ')
+        when Array
+          val = val.reject { |e| e =~ /^-?GCC_WARN_INHIBIT_ALL_WARNINGS$/ }
+        end
+        config.build_settings[key] = val
+      end
+
+      # 2) Forzar iOS 15.0 en Pods que lo tengan más bajo
+      cur = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET']
+      if cur.nil? || cur.to_s.to_f < 15.0
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      end
 
       # BoringSSL/gRPC/abseil con toolchain moderno: C++17
       config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
