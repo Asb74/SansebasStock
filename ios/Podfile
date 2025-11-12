@@ -59,6 +59,9 @@ post_install do |installer|
       # Silenciar avisos mediante setting dedicado cuando sea imprescindible
       config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
 
+      # Evita que los avisos se traten como errores heredados
+      config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+
       # BoringSSL/gRPC/abseil con toolchain moderno: C++17
       config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
       # Xcode 15+ compila algunos Pods de Firebase (en especial BoringSSL) como C puro,
@@ -114,6 +117,24 @@ post_install do |installer|
         config.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
       end
     end
+
+    if target.name == 'BoringSSL-GRPC'
+      target.build_configurations.each do |config|
+        flags = Array(config.build_settings['OTHER_CFLAGS'] || ['$(inherited)'])
+        flags << '-Wno-error=non-modular-include-in-framework-module'
+        flags << '-Wno-non-modular-include-in-framework-module'
+        flags << '-Wno-everything'
+        config.build_settings['OTHER_CFLAGS'] = flags.flatten.compact.uniq
+
+        cxxflags = Array(config.build_settings['OTHER_CPLUSPLUSFLAGS'] || ['$(inherited)'])
+        cxxflags << '-Wno-error=non-modular-include-in-framework-module'
+        cxxflags << '-Wno-everything'
+        config.build_settings['OTHER_CPLUSPLUSFLAGS'] = cxxflags.flatten.compact.uniq
+
+        config.build_settings['GCC_TREAT_WARNINGS_AS_ERRORS'] = 'NO'
+        config.build_settings['CLANG_ENABLE_MODULES'] = 'YES'
+      end
+    end
   end
 
   installer.aggregate_targets.each do |aggregate|
@@ -123,6 +144,12 @@ post_install do |installer|
       target.build_configurations.each do |config|
         config.build_settings['CODE_SIGN_STYLE'] = 'Manual'
       end
+    end
+  end
+
+  installer.generated_projects.each do |project|
+    project.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
     end
   end
 
