@@ -2,55 +2,43 @@ name: iOS Pipeline
 
 on:
   workflow_dispatch:
-    inputs:
-      mode:
-        description: "Selecciona el flujo a ejecutar"
-        required: true
-        default: build
-        type: choice
-        options:
-          - diagnose
-          - build
+  push:
+    branches: [ main ]
 
 jobs:
   ios:
     runs-on: macos-latest
+
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
+      # ❗ Usa canal o versión fija (elige UNA)
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.3'   # pon aquí la que usas localmente
+          # Opción A (canal estable):
+          channel: 'stable'
+          # Opción B (comenta la de arriba y fija versión):
+          # flutter-version: '3.24.3'
           cache: true
-
 
       - name: Flutter pub get
         run: flutter pub get
 
-      # (Opcional) Activa este paso si necesitas limpiar artefactos previos.
-      # - name: Flutter clean
-      #   run: flutter clean
-
-      # === Diagnóstico de Pods ===
-      - name: Actualizar e instalar CocoaPods
-        if: ${{ github.event.inputs.mode == 'diagnose' }}
-        working-directory: ios
+      # Diagnóstico de Pods (opcional)
+      - name: CocoaPods diagnose (optional)
         run: |
-          set -eo pipefail
           pod repo update
-          if [ -f Gemfile ]; then
-            bundle exec pod install --repo-update
-          else
-            pod install --repo-update
-          fi
+          pod install --repo-update
+        working-directory: ios
+        continue-on-error: true
 
-      # === Build IPA ===
-      - name: Flutter build IPA (no codesign)
-        if: ${{ github.event.inputs.mode == 'build' }}
+      # Build IPA sin firma (Xcode/Pods se resuelven automáticamente)
+      - name: Build IPA (no codesign)
         run: flutter build ipa --no-codesign
 
+      # Artefactos útiles aunque falle
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
