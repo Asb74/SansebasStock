@@ -13,32 +13,46 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ❗ Usa canal o versión fija (elige UNA)
+      # Pin Xcode 15.4 (estable con Flutter 3.24.x)
+      - name: Select Xcode 15.4
+        run: sudo xcode-select -s "/Applications/Xcode_15.4.app"
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          # Opción A (canal estable):
-          #channel: 'stable'
-          # Opción B (comenta la de arriba y fija versión):
-          flutter-version: '3.24.3'
+          flutter-version: '3.24.3'   # tu versión actual
           cache: true
+
+      - name: Flutter doctor
+        run: flutter doctor -v
 
       - name: Flutter pub get
         run: flutter pub get
 
-      # Diagnóstico de Pods (opcional)
+      # Si hay Gemfile, usa Bundler para Pods; si no, usa pod nativo
+      - name: Install Bundler (if Gemfile)
+        if: hashFiles('ios/Gemfile') != ''
+        run: |
+          gem install bundler -v "~>2" || true
+          cd ios
+          bundle install --path vendor/bundle
+
       - name: CocoaPods diagnose (optional)
         run: |
-          pod repo update
-          pod install --repo-update
-        working-directory: ios
+          if [ -f ios/Gemfile ]; then
+            (cd ios && bundle exec pod repo update && bundle exec pod install --repo-update)
+          else
+            (cd ios && pod repo update && pod install --repo-update)
+          fi
         continue-on-error: true
 
-      # Build IPA sin firma (Xcode/Pods se resuelven automáticamente)
+      # Build IPA sin firma y con logs verbosos a fichero
       - name: Build IPA (no codesign)
-        run: flutter build ipa --no-codesign
+        run: |
+          set -o pipefail
+          flutter build ipa --no-codesign -v 2>&1 | tee build/ios/ipa_build_verbose.log
 
-      # Artefactos útiles aunque falle
+      # Artefactos útiles para depurar
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -48,4 +62,4 @@ jobs:
             build/ios/**/*
             ios/Pods/**/*
             **/DerivedData/**/*
-          if-no-files-found: ignore
+          if-no-files-found: warn
