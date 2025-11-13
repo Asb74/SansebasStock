@@ -21,7 +21,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.3'   # si diera incompatibilidad con Xcode 16, cambia a: channel: 'stable'
+          flutter-version: '3.24.3'
           cache: true
 
       - name: Flutter doctor
@@ -30,33 +30,25 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
-      # --- PARCHES EN Podfile PARA RESOLVER CONFLICTO MLKit vs Firebase ---
-      - name: Patch Podfile (remove modular headers + MLKit 7.x + strip -G)
+      # ---------- Patch Podfile: sin modular headers + MLKit 7 + post_install ----------
+      - name: Patch Podfile
+        shell: bash
         run: |
-          PFILE=ios/Podfile
+          set -euo pipefail
+          PFILE="ios/Podfile"
 
-          # 1) Quitar 'use_modular_headers!' global si existe
-          sed -i '' '/use_modular_headers!/d' "$PFILE"
+          # 1) Elimina 'use_modular_headers!' si existe (más seguro con perl que con sed -i BSD)
+          perl -i -pe "s/^\s*use_modular_headers!.*\n//g" "$PFILE"
 
-          # 2) Asegurar overrides de MLKit 7.x bajo el target 'Runner'
-          #    Insertamos las líneas solo si no existen aún
-          awk '
-            BEGIN {added=0}
-            /target[[:space:]]+.\x27Runner\x27[[:space:]]+do/ {
-              print; print "  # MLKit overrides para compatibilidad con GoogleUtilities 8.x (Firebase 11.x)"
-              print "  pod \x27GoogleMLKit/BarcodeScanning\x27, \x27~> 7.0.0\x27"
-              print "  pod \x27GoogleMLKit/MLKitCore\x27, \x27~> 7.0.0\x27"
-              added=1; next
-            }
-            {print}
-            END {
-              if (added==0) {
-                # no encontrado, no hacemos nada especial
-              }
-            }
-          ' "$PFILE" > "$PFILE.tmp" && mv "$PFILE.tmp" "$PFILE"
+          # 2) Inserta overrides de MLKit 7.x justo después de 'flutter_install_all_ios_pods ...'
+          if ! grep -q "GoogleMLKit/BarcodeScanning" "$PFILE"; then
+            /usr/bin/sed -i '' "/flutter_install_all_ios_pods .*$/a\\
+  pod 'GoogleMLKit/BarcodeScanning', '~> 7.0.0'\\
+  pod 'GoogleMLKit/MLKitCore', '~> 7.0.0'
+" "$PFILE"
+          fi
 
-          # 3) Asegurar bloque post_install mínimo que elimina '-G' y fija estándares
+          # 3) Asegura un post_install mínimo (si no existe)
           if ! grep -q "post_install do |installer|" "$PFILE"; then
             cat >> "$PFILE" <<'RUBY'
 
@@ -81,10 +73,10 @@ end
 RUBY
           fi
 
-          echo "----- Podfile (patched) -----"
+          echo "----- Podfile (patched) preview -----"
           sed -n '1,220p' "$PFILE"
 
-      # --- LIMPIEZA Y REINSTALACIÓN DE PODS ---
+      # ---------- Pods limpios y reinstalados ----------
       - name: Force fresh Pods
         run: |
           set -e
@@ -92,12 +84,10 @@ RUBY
           rm -rf Pods Podfile.lock
           pod repo update
           pod install --repo-update
-          echo "----- Pod versions top -----"
-          pod --version || true
           echo "----- Podfile.lock (Firebase/MLKit/GoogleUtilities) -----"
           grep -E '(^PODS:|GoogleUtilities|Firebase|BoringSSL|gRPC|GoogleMLKit|MLKitCommon|GoogleDataTransport)' -n Podfile.lock || true
 
-      # --- BUILD IPA SIN FIRMA + LOG VERBOSO ---
+      # ---------- Build IPA (no firma) con log verboso ----------
       - name: Build IPA (no codesign)
         env:
           CI: true
@@ -105,7 +95,7 @@ RUBY
           set -o pipefail
           flutter build ipa --no-codesign -v 2>&1 | tee build/ios/ipa_build_verbose.log
 
-      # --- ARTEFACTOS PARA DEPURAR ---
+      # ---------- Artefactos ----------
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
