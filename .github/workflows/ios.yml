@@ -30,51 +30,51 @@ jobs:
       - name: Flutter pub get
         run: flutter pub get
 
-      # ---------- Patch Podfile: sin modular headers + MLKit 7 + post_install ----------
+      # ---------- Patch Podfile usando Python (sin sed/awk) ----------
       - name: Patch Podfile
-        shell: bash
         run: |
-          set -euo pipefail
-          PFILE="ios/Podfile"
+          python3 - <<'PY'
+          import io, re, sys, pathlib
+          p = pathlib.Path('ios/Podfile')
+          s = p.read_text(encoding='utf-8')
 
-          # 1) Elimina 'use_modular_headers!' si existe (más seguro con perl que con sed -i BSD)
-          perl -i -pe "s/^\s*use_modular_headers!.*\n//g" "$PFILE"
+          # 1) quitar use_modular_headers! si existe
+          s = re.sub(r'^\s*use_modular_headers!.*\n', '', s, flags=re.MULTILINE)
 
-          # 2) Inserta overrides de MLKit 7.x justo después de 'flutter_install_all_ios_pods ...'
-          if ! grep -q "GoogleMLKit/BarcodeScanning" "$PFILE"; then
-            /usr/bin/sed -i '' "/flutter_install_all_ios_pods .*$/a\\
-  pod 'GoogleMLKit/BarcodeScanning', '~> 7.0.0'\\
-  pod 'GoogleMLKit/MLKitCore', '~> 7.0.0'
-" "$PFILE"
-          fi
+          # 2) añadir overrides MLKit 7.x tras flutter_install_all_ios_pods si no están
+          if "GoogleMLKit/BarcodeScanning" not in s:
+              s = re.sub(
+                  r'(flutter_install_all_ios_pods.*\n)',
+                  r"\1  pod 'GoogleMLKit/BarcodeScanning', '~> 7.0.0'\n  pod 'GoogleMLKit/MLKitCore', '~> 7.0.0'\n",
+                  s
+              )
 
-          # 3) Asegura un post_install mínimo (si no existe)
-          if ! grep -q "post_install do |installer|" "$PFILE"; then
-            cat >> "$PFILE" <<'RUBY'
+          # 3) asegurar post_install mínimo (si no existe)
+          if "post_install do |installer|" not in s:
+              s += """
 
-post_install do |installer|
-  installer.pods_project.targets.each do |t|
-    t.build_configurations.each do |cfg|
-      cfg.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-      %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_SWIFT_FLAGS].each do |k|
-        v = Array(cfg.build_settings[k])
-        v = v.reject { |s| s.to_s.strip == '-G' || s.to_s.start_with?('-G') }
-        v.unshift('$(inherited)') unless v.include?('$(inherited)')
-        cfg.build_settings[k] = v
-      end
-      cfg.build_settings['CLANG_C_LANGUAGE_STANDARD']   = 'gnu11'
-      cfg.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
-    end
-  end
-  installer.pods_project.targets.each do |target|
-    flutter_additional_ios_build_settings(target)
-  end
-end
-RUBY
-          fi
-
-          echo "----- Podfile (patched) preview -----"
-          sed -n '1,220p' "$PFILE"
+          post_install do |installer|
+            installer.pods_project.targets.each do |t|
+              t.build_configurations.each do |cfg|
+                cfg.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+                %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_SWIFT_FLAGS].each do |k|
+                  v = Array(cfg.build_settings[k])
+                  v = v.reject { |x| x.to_s.strip == '-G' || x.to_s.start_with?('-G') }
+                  v.unshift('$(inherited)') unless v.include?('$(inherited)')
+                  cfg.build_settings[k] = v
+                end
+                cfg.build_settings['CLANG_C_LANGUAGE_STANDARD']   = 'gnu11'
+                cfg.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
+              end
+            end
+            installer.pods_project.targets.each do |target|
+              flutter_additional_ios_build_settings(target)
+            end
+          end
+          """
+          p.write_text(s, encoding='utf-8')
+          print("Patched Podfile OK")
+          PY
 
       # ---------- Pods limpios y reinstalados ----------
       - name: Force fresh Pods
