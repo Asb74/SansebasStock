@@ -47,6 +47,13 @@ jobs:
             (cd ios && pod repo update && pod install --repo-update)
           fi
         continue-on-error: true
+      - name: Force fresh Pods (Bundler)
+        if: hashFiles('ios/Gemfile') != ''
+        run: |
+          rm -rf ios/Pods ios/Podfile.lock
+          cd ios
+          bundle exec pod repo update
+          bundle exec pod install --repo-update
 
       - name: Build IPA (no codesign)
         run: |
