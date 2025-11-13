@@ -15,10 +15,10 @@ jobs:
 
       # Selecciona Xcode disponible en el runner
       # Opción A: fijar 15.4 (si está disponible en la imagen actual)
-      - name: Select Xcode 15.4
+      - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '15.4'
+          xcode-version: '16.*'
 
       # Si prefieres usar el Xcode por defecto más reciente, elimina el bloque anterior
       # y usa esta otra opción:
