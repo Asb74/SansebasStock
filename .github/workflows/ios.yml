@@ -45,8 +45,9 @@ jobs:
         env:
           CI: true
         run: |
-          set -o pipefail
-          flutter build ipa --no-codesign -v 2>&1 | tee build/ios/ipa_build_verbose.log
+          mkdir -p build/ios
+          # sin pipefail, y tee ya puede crear el fichero
+          flutter build ipa --no-codesign -v | tee build/ios/ipa_build_verbose.log
 
       - name: Upload artifacts
         if: always()
