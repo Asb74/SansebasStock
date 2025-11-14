@@ -43,6 +43,7 @@ workflows:
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
+            --create \
             "$BUNDLE_ID"
           keychain add-certificates
           xcode-project use-profiles
