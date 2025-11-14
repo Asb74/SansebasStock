@@ -3,10 +3,10 @@ workflows:
   ios_release:
     name: iOS Release (Xcode 16.2)
     environment:
-      xcode: 16.2
-      flutter: stable
+      xcode: 16.4
+      flutter: 3.24.3
       vars:
-        BUNDLE_ID: com.sansebas.sansebasstock   # nuevo identificador
+        BUNDLE_ID: com.sansebas.sansebasstock
         APPLE_TEAM_ID: 7QWJ8R3ZB5
       groups:
         - app_store_connect
@@ -33,10 +33,19 @@ workflows:
           else
             echo "⚠️ API key OK pero el bundle no existe o no hay acceso."; fi
 
-      - name: Setup signing
+      - name: Automatic iOS code signing (App Store Connect)
         script: |
-          chmod +x setup-signing.sh
-          ./setup-signing.sh
+          set -euo pipefail
+          echo "=== Automatic signing with App Store Connect ==="
+          keychain initialize
+          app-store-connect fetch-signing-files \
+            --type IOS_APP_STORE \
+            --bundle-id "$BUNDLE_ID" \
+            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
+          keychain add-certificates
+          xcode-project use-profiles
 
       - name: Recreate GoogleService-Info.plist
         script: |
