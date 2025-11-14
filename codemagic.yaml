@@ -40,7 +40,7 @@ workflows:
           keychain initialize
           app-store-connect fetch-signing-files \
             --type IOS_APP_STORE \
-            --bundle-id "$BUNDLE_ID" \
+            --identifier "$BUNDLE_ID" \
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY"
