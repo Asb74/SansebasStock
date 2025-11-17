@@ -10,6 +10,7 @@ workflows:
         APPLE_TEAM_ID: 7QWJ8R3ZB5
       groups:
         - app_store_connect
+
     scripts:
       - name: Check App Store Connect API key
         script: |
@@ -33,21 +34,45 @@ workflows:
           else
             echo "⚠️ API key OK pero el bundle no existe o no hay acceso."; fi
 
-      - name: Automatic iOS code signing (App Store Connect)
+      # 🔁 Sustituye el paso automático por este paso manual
+      - name: Fetch signing files (manual)
         script: |
           set -euo pipefail
-          echo "=== Automatic signing with App Store Connect ==="
+          echo "=== Fetch signing files (manual) ==="
+
+          echo "Sanitizando API key (p8) para eliminar retornos de carro..."
+          ASC_KEY_SANITIZED="$(printf '%s\n' "$APP_STORE_CONNECT_PRIVATE_KEY" | tr -d '\r')"
+
+          echo "Sanitizando CERTIFICATE_PRIVATE_KEY..."
+          CERT_KEY_SANITIZED="$(printf '%s\n' "$CERTIFICATE_PRIVATE_KEY" | tr -d '\r')"
+
+          echo "Usando:"
+          echo "  BUNDLE_ID                        = $BUNDLE_ID"
+          echo "  APP_STORE_CONNECT_KEY_IDENTIFIER = $APP_STORE_CONNECT_KEY_IDENTIFIER"
+          echo "  APP_STORE_CONNECT_ISSUER_ID      = $APP_STORE_CONNECT_ISSUER_ID"
+          echo "  APPLE_TEAM_ID                    = $APPLE_TEAM_ID"
+
+          echo "Inicializando keychain temporal..."
           keychain initialize
+
+          echo "Descargando/creando certificado y provisioning profile con app-store-connect..."
           app-store-connect fetch-signing-files \
             --type IOS_APP_STORE \
+            --bundle-id "$BUNDLE_ID" \
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --private-key "$CERTIFICATE_PRIVATE_KEY" \
-            --create \
-            "$BUNDLE_ID"
+            --private-key "$ASC_KEY_SANITIZED" \
+            --certificate-key "$CERT_KEY_SANITIZED" \
+            --output "~/Library/MobileDevice/Provisioning Profiles"
+
+          echo "Añadiendo certificados al keychain..."
           keychain add-certificates
+
+          echo "Aplicando provisioning profiles al proyecto Xcode..."
           xcode-project use-profiles
 
+          echo "Ficheros en ~/Library/MobileDevice/Provisioning Profiles:"
+          ls -l ~/Library/MobileDevice/Provisioning\ Profiles || true
 
       - name: Recreate GoogleService-Info.plist
         script: |
