@@ -94,15 +94,21 @@ workflows:
       - name: Build IPA
         script: |
           set -euo pipefail
+
           echo "=== Build iOS (sin code signing) ==="
           flutter build ios --release --no-codesign
 
-          echo "=== Crear IPA firmado con xcode-project ==="
-          # Codemagic detecta el workspace/esquema por defecto,
-          # pero lo indicamos explícitamente por claridad.
+          echo "=== Localizando el último .xcarchive generado ==="
+          ARCHIVE_PATH="$(ls -t build/ios/xcarchive/*.xcarchive | head -n 1)"
+          echo "Usando ARCHIVE_PATH=$ARCHIVE_PATH"
+
+          echo "=== Crear IPA firmado con xcode-project (verbose) ==="
           xcode-project build-ipa \
+            --archive-path "$ARCHIVE_PATH" \
             --workspace ios/Runner.xcworkspace \
-            --scheme Runner
+            --scheme Runner \
+            --verbose
+
 
 
     artifacts:
