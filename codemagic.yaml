@@ -93,8 +93,17 @@ workflows:
 
       - name: Build IPA
         script: |
-          chmod +x build-ipa.sh
-          ./build-ipa.sh
+          set -euo pipefail
+          echo "=== Build iOS (sin code signing) ==="
+          flutter build ios --release --no-codesign
+
+          echo "=== Crear IPA firmado con xcode-project ==="
+          # Codemagic detecta el workspace/esquema por defecto,
+          # pero lo indicamos explícitamente por claridad.
+          xcode-project build-ipa \
+            --workspace ios/Runner.xcworkspace \
+            --scheme Runner
+
 
     artifacts:
       - $CM_ARTIFACTS/diagnostics_ios.zip
