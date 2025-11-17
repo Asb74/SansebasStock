@@ -34,25 +34,12 @@ workflows:
           else
             echo "⚠️ API key OK pero el bundle no existe o no hay acceso."; fi
 
-      # 🔁 Sustituye el paso automático por este paso manual
-      - name: Fetch signing files (manual)
+      - name: Automatic iOS code signing (App Store Connect)
         script: |
           set -euo pipefail
-          echo "=== Fetch signing files (manual) ==="
-
-          echo "Sanitizando API key (p8) para eliminar retornos de carro..."
-          ASC_KEY_SANITIZED="$(printf '%s\n' "$APP_STORE_CONNECT_PRIVATE_KEY" | tr -d '\r')"
-
-          echo "Usando parámetros:"
-          echo "  BUNDLE_ID                       = $BUNDLE_ID"
-          echo "  APP_STORE_CONNECT_KEY_IDENTIFIER = $APP_STORE_CONNECT_KEY_IDENTIFIER"
-          echo "  APP_STORE_CONNECT_ISSUER_ID      = $APP_STORE_CONNECT_ISSUER_ID"
-          echo "  APPLE_TEAM_ID                    = $APPLE_TEAM_ID"
-
-          echo "Inicializando keychain temporal..."
+          echo "=== Automatic signing with App Store Connect ==="
           keychain initialize
-
-          echo "Descargando/creando certificado y provisioning profile con app-store-connect..."
+          ASC_KEY_SANITIZED="$(printf '%s\n' "$APP_STORE_CONNECT_PRIVATE_KEY" | tr -d '\r')"
           app-store-connect fetch-signing-files \
             --type IOS_APP_STORE \
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
@@ -60,16 +47,8 @@ workflows:
             --private-key "$ASC_KEY_SANITIZED" \
             --create \
             "$BUNDLE_ID"
-
-          echo "Añadiendo certificados al keychain..."
           keychain add-certificates
-
-          echo "Configurando el proyecto Xcode para usar los perfiles..."
           xcode-project use-profiles
-
-          echo "Provisioning Profiles en ~/Library/MobileDevice/Provisioning Profiles (si los hay):"
-          ls -l "$HOME/Library/MobileDevice/Provisioning Profiles" || true
-
 
       - name: Recreate GoogleService-Info.plist
         script: |
@@ -94,11 +73,8 @@ workflows:
       - name: Build IPA
         script: |
           set -euo pipefail
-          echo "=== Build IPA con Flutter (firmado para App Store) ==="
+          echo "=== Build IPA con Flutter (App Store) ==="
           flutter build ipa --release --export-method=app-store
-
-
-
 
     artifacts:
       - $CM_ARTIFACTS/diagnostics_ios.zip
