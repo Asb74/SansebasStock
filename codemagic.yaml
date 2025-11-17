@@ -43,11 +43,8 @@ workflows:
           echo "Sanitizando API key (p8) para eliminar retornos de carro..."
           ASC_KEY_SANITIZED="$(printf '%s\n' "$APP_STORE_CONNECT_PRIVATE_KEY" | tr -d '\r')"
 
-          echo "Sanitizando CERTIFICATE_PRIVATE_KEY..."
-          CERT_KEY_SANITIZED="$(printf '%s\n' "$CERTIFICATE_PRIVATE_KEY" | tr -d '\r')"
-
-          echo "Usando:"
-          echo "  BUNDLE_ID                        = $BUNDLE_ID"
+          echo "Usando parámetros:"
+          echo "  BUNDLE_ID                       = $BUNDLE_ID"
           echo "  APP_STORE_CONNECT_KEY_IDENTIFIER = $APP_STORE_CONNECT_KEY_IDENTIFIER"
           echo "  APP_STORE_CONNECT_ISSUER_ID      = $APP_STORE_CONNECT_ISSUER_ID"
           echo "  APPLE_TEAM_ID                    = $APPLE_TEAM_ID"
@@ -58,21 +55,21 @@ workflows:
           echo "Descargando/creando certificado y provisioning profile con app-store-connect..."
           app-store-connect fetch-signing-files \
             --type IOS_APP_STORE \
-            --bundle-id "$BUNDLE_ID" \
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --private-key "$ASC_KEY_SANITIZED" \
-            --certificate-key "$CERT_KEY_SANITIZED" \
-            --output "~/Library/MobileDevice/Provisioning Profiles"
+            --create \
+            "$BUNDLE_ID"
 
           echo "Añadiendo certificados al keychain..."
           keychain add-certificates
 
-          echo "Aplicando provisioning profiles al proyecto Xcode..."
+          echo "Configurando el proyecto Xcode para usar los perfiles..."
           xcode-project use-profiles
 
-          echo "Ficheros en ~/Library/MobileDevice/Provisioning Profiles:"
-          ls -l ~/Library/MobileDevice/Provisioning\ Profiles || true
+          echo "Provisioning Profiles en ~/Library/MobileDevice/Provisioning Profiles (si los hay):"
+          ls -l "$HOME/Library/MobileDevice/Provisioning Profiles" || true
+
 
       - name: Recreate GoogleService-Info.plist
         script: |
