@@ -94,15 +94,9 @@ workflows:
       - name: Build IPA
         script: |
           set -euo pipefail
+          echo "=== Build IPA con Flutter (firmado para App Store) ==="
+          flutter build ipa --release --export-method=app-store
 
-          echo "=== Build iOS (sin code signing) con Flutter ==="
-          flutter build ios --release --no-codesign
-
-          echo "=== Crear IPA firmado con xcode-project (verbose) ==="
-          xcode-project build-ipa \
-            --workspace ios/Runner.xcworkspace \
-            --scheme Runner \
-            --verbose
 
 
 
