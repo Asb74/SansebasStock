@@ -95,16 +95,11 @@ workflows:
         script: |
           set -euo pipefail
 
-          echo "=== Build iOS (sin code signing) ==="
+          echo "=== Build iOS (sin code signing) con Flutter ==="
           flutter build ios --release --no-codesign
-
-          echo "=== Localizando el último .xcarchive generado ==="
-          ARCHIVE_PATH="$(ls -t build/ios/xcarchive/*.xcarchive | head -n 1)"
-          echo "Usando ARCHIVE_PATH=$ARCHIVE_PATH"
 
           echo "=== Crear IPA firmado con xcode-project (verbose) ==="
           xcode-project build-ipa \
-            --archive-path "$ARCHIVE_PATH" \
             --workspace ios/Runner.xcworkspace \
             --scheme Runner \
             --verbose
