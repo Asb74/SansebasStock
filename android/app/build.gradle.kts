@@ -33,8 +33,8 @@ android {
         applicationId = "com.sansebas.stock"
         minSdk = 23
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = getFlutterVersionCode()
+        versionName = getFlutterVersionName()
     }
 
     signingConfigs {
@@ -63,4 +63,19 @@ android {
 
 flutter {
     source = "../.."
+}
+import java.util.regex.Pattern
+
+fun getFlutterVersionName(): String {
+    val pubspec = file("../../pubspec.yaml").readText()
+    val regex = Pattern.compile("version:\\s*([0-9]+\\.[0-9]+\\.[0-9]+)")
+    val matcher = regex.matcher(pubspec)
+    return if (matcher.find()) matcher.group(1) else "1.0.0"
+}
+
+fun getFlutterVersionCode(): Int {
+    val pubspec = file("../../pubspec.yaml").readText()
+    val regex = Pattern.compile("version:\\s*[0-9]+\\.[0-9]+\\.[0-9]+\\+([0-9]+)")
+    val matcher = regex.matcher(pubspec)
+    return if (matcher.find()) matcher.group(1).toInt() else 1
 }
