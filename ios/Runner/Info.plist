@@ -45,5 +45,20 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+
+	<!-- 🔒 Permisos de privacidad necesarios -->
+
+	<!-- Cámara: para escanear códigos de barras / QR -->
+	<key>NSCameraUsageDescription</key>
+	<string>La app necesita acceder a la cámara para escanear códigos de barras y QR de los palets y cajas.</string>
+
+	<!-- Si en algún punto permites seleccionar o guardar fotos, descomenta estas:
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>La app necesita acceder a tu galería para seleccionar y guardar imágenes relacionadas con el stock.</string>
+
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>La app necesita permiso para guardar imágenes o documentos generados.</string>
+	-->
+
 </dict>
 </plist>
