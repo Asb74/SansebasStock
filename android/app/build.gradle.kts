@@ -2,6 +2,36 @@ import java.io.FileInputStream
 import java.util.Properties
 import java.util.regex.Pattern
 
+// Lee versionName (antes del '+') desde pubspec.yaml
+fun getFlutterVersionName(): String {
+    val pubspecFile = rootProject.file("pubspec.yaml")
+    if (!pubspecFile.exists()) {
+        println("pubspec.yaml not found at ${pubspecFile.absolutePath}, using default versionName 1.0.0")
+        return "1.0.0"
+    }
+
+    val text = pubspecFile.readText()
+    // Soporta: version: 1.0.1+3  o  version: "1.0.1+3"
+    val regex = Pattern.compile("""version:\s*["']?(\d+\.\d+\.\d+)""")
+    val matcher = regex.matcher(text)
+    return if (matcher.find()) matcher.group(1) else "1.0.0"
+}
+
+// Lee versionCode (después del '+') desde pubspec.yaml
+fun getFlutterVersionCode(): Int {
+    val pubspecFile = rootProject.file("pubspec.yaml")
+    if (!pubspecFile.exists()) {
+        println("pubspec.yaml not found at ${pubspecFile.absolutePath}, using default versionCode 1")
+        return 1
+    }
+
+    val text = pubspecFile.readText()
+    // Soporta: version: 1.0.1+3  o  version: "1.0.1+3"
+    val regex = Pattern.compile("""version:\s*["']?\d+\.\d+\.\d+\+(\d+)""")
+    val matcher = regex.matcher(text)
+    return if (matcher.find()) matcher.group(1).toInt() else 1
+}
+
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
 if (keystorePropertiesFile.exists()) {
@@ -34,6 +64,8 @@ android {
         applicationId = "com.sansebas.stock"
         minSdk = 23
         targetSdk = 35
+
+        // AHORA se leen desde pubspec.yaml
         versionCode = getFlutterVersionCode()
         versionName = getFlutterVersionName()
     }
@@ -64,18 +96,4 @@ android {
 
 flutter {
     source = "../.."
-}
-
-fun getFlutterVersionName(): String {
-    val pubspec = file("../../pubspec.yaml").readText()
-    val regex = Pattern.compile("version:\\s*([0-9]+\\.[0-9]+\\.[0-9]+)")
-    val matcher = regex.matcher(pubspec)
-    return if (matcher.find()) matcher.group(1) else "1.0.0"
-}
-
-fun getFlutterVersionCode(): Int {
-    val pubspec = file("../../pubspec.yaml").readText()
-    val regex = Pattern.compile("version:\\s*[0-9]+\\.[0-9]+\\.[0-9]+\\+([0-9]+)")
-    val matcher = regex.matcher(pubspec)
-    return if (matcher.find()) matcher.group(1).toInt() else 1
 }
