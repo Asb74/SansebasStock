@@ -73,8 +73,7 @@ workflows:
           # Construir el IPA firmado
           xcode-project build-ipa \
             --workspace ios/Runner.xcworkspace \
-            --scheme Runner \
-            --archive-configuration Release
+            --scheme Runner
 
     artifacts:
       - build/ios/ipa/*.ipa
