@@ -1,7 +1,7 @@
 # Codemagic workflow configuration for iOS release builds
 workflows:
   ios_release:
-    name: iOS Release (Xcode 16.2)
+    name: iOS Release (Xcode 16.4)
     environment:
       xcode: 16.4
       flutter: 3.24.3
@@ -12,71 +12,22 @@ workflows:
         - app_store_connect
 
     scripts:
-      - name: Check App Store Connect API key
+      - name: Flutter pub get
         script: |
           set -euo pipefail
-          mkdir -p artifacts
-          ASC_KEY_SANITIZED="$(printf '%s\n' "$APP_STORE_CONNECT_PRIVATE_KEY" | tr -d '\r')"
-          if ! printf '%s\n' "$ASC_KEY_SANITIZED" | grep -q -- '-----BEGIN PRIVATE KEY-----'; then
-            echo "❌ APP_STORE_CONNECT_PRIVATE_KEY no contiene BEGIN"; exit 2; fi
-          if ! printf '%s\n' "$ASC_KEY_SANITIZED" | grep -q -- '-----END PRIVATE KEY-----'; then
-            echo "❌ APP_STORE_CONNECT_PRIVATE_KEY no contiene END"; exit 2; fi
-          echo "Validando API key y acceso al bundle ${BUNDLE_ID} ..."
-          app-store-connect list-bundle-ids \
-            --bundle-id-identifier "$BUNDLE_ID" \
-            --strict-match-identifier \
-            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --private-key "$ASC_KEY_SANITIZED" \
-            --json > artifacts/asc_check.json
-          if grep -q "\"identifier\": \"${BUNDLE_ID}\"" artifacts/asc_check.json; then
-            echo "✅ API key válida y acceso al bundle."
-          else
-            echo "⚠️ API key OK pero el bundle no existe o no hay acceso."; fi
-
-      - name: Automatic iOS code signing (App Store Connect)
-        script: |
-          set -euo pipefail
-          echo "=== Automatic signing with App Store Connect ==="
-
-          echo "Inicializando keychain..."
-          keychain initialize
-
-          echo "Sanitizando claves..."
-          ASC_KEY_SANITIZED="$(printf '%s\n' "$APP_STORE_CONNECT_PRIVATE_KEY" | tr -d '\r')"
-          CERT_KEY_SANITIZED="$(printf '%s\n' "$CERTIFICATE_PRIVATE_KEY" | tr -d '\r')"
-
-          echo "Usando:"
-          echo "  BUNDLE_ID                        = $BUNDLE_ID"
-          echo "  APP_STORE_CONNECT_KEY_IDENTIFIER = $APP_STORE_CONNECT_KEY_IDENTIFIER"
-          echo "  APP_STORE_CONNECT_ISSUER_ID      = $APP_STORE_CONNECT_ISSUER_ID"
-          echo "  APPLE_TEAM_ID                    = $APPLE_TEAM_ID"
-
-          echo "=== Fetch signing files (certificado + provisioning profile) ==="
-          app-store-connect fetch-signing-files \
-            --type IOS_APP_STORE \
-            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
-            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
-            --private-key "$ASC_KEY_SANITIZED" \
-            --certificate-key "$CERT_KEY_SANITIZED" \
-            --create \
-            "$BUNDLE_ID"
-
-          echo "Añadiendo certificados al keychain..."
-          keychain add-certificates
-
-          echo "Aplicando perfiles al proyecto Xcode..."
-          xcode-project use-profiles
-
+          flutter pub get
 
       - name: Recreate GoogleService-Info.plist
         script: |
+          set -euo pipefail
           python3 - <<'PY'
           import os, base64, pathlib, sys
+
           b64 = os.environ.get("GOOGLE_SERVICE_INFO_PLIST_B64", "")
           if not b64:
               print("ERROR: Falta la variable GOOGLE_SERVICE_INFO_PLIST_B64", file=sys.stderr)
               sys.exit(1)
+
           path = pathlib.Path("ios/Runner/GoogleService-Info.plist")
           path.parent.mkdir(parents=True, exist_ok=True)
           path.write_bytes(base64.b64decode(b64))
@@ -86,27 +37,47 @@ workflows:
 
       - name: Patch iOS identifiers
         script: |
+          set -euo pipefail
           chmod +x ios/patch-ios-identifiers.sh
           ./ios/patch-ios-identifiers.sh
 
-      - name: Build IPA
+      - name: Build iOS (sin firma)
         script: |
           set -euo pipefail
-          echo "=== Build IPA con Flutter (App Store) ==="
-          flutter build ipa --release --export-method=app-store
+          # Compilamos la app iOS en Release sin firmar
+          flutter build ios --release --no-codesign
+
+      - name: Automatic code signing and export IPA
+        script: |
+          set -euo pipefail
+          echo "=== Automatic signing with App Store Connect ==="
+
+          # Inicializar llavero temporal
+          keychain initialize
+
+          # Descargar / crear certificado + provisioning profile desde App Store Connect
+          app-store-connect fetch-signing-files \
+            --type IOS_APP_STORE \
+            --bundle-id "$BUNDLE_ID" \
+            --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
+            --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
+            --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
+            --create
+
+          # Añadir los certificados al llavero por defecto
+          keychain add-certificates
+
+          # Aplicar los perfiles al proyecto Xcode
+          xcode-project use-profiles
+
+          # Construir el IPA firmado
+          xcode-project build-ipa \
+            --workspace ios/Runner.xcworkspace \
+            --scheme Runner \
+            --archive-configuration Release
 
     artifacts:
-      - $CM_ARTIFACTS/diagnostics_ios.zip
-      - build/*.ipa
-      - build/**/dSYM.zip
       - build/ios/ipa/*.ipa
-      - codemagic_prebuild.log
-      - codemagic_setup_signing.log
-      - codemagic_build_ipa.log
-      - build/logs/xcodebuild-archive.log
-      - build/logs/xcodebuild-archive.tar.gz
-      - build/logs/*.txt
-      - artifacts/*
 
     publishing:
       app_store_connect:
