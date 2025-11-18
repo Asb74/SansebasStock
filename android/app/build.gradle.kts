@@ -1,5 +1,6 @@
 import java.io.FileInputStream
 import java.util.Properties
+import java.util.regex.Pattern
 
 val keystorePropertiesFile = rootProject.file("key.properties")
 val keystoreProperties = Properties()
@@ -64,7 +65,6 @@ android {
 flutter {
     source = "../.."
 }
-import java.util.regex.Pattern
 
 fun getFlutterVersionName(): String {
     val pubspec = file("../../pubspec.yaml").readText()
