@@ -61,8 +61,8 @@ workflows:
             --issuer-id "$APP_STORE_CONNECT_ISSUER_ID" \
             --key-id "$APP_STORE_CONNECT_KEY_IDENTIFIER" \
             --private-key "$APP_STORE_CONNECT_PRIVATE_KEY" \
-            --create
-             "$BUNDLE_ID"
+            --create \
+            "$BUNDLE_ID"
 
           # Añadir los certificados al llavero por defecto
           keychain add-certificates
