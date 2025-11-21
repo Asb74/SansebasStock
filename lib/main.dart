@@ -35,15 +35,23 @@ void _swallowLockKeys() {
 Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
     _swallowLockKeys(); // DESKTOP FIX: Avoid crashes from lock keys on desktop.
   }
 
   try {
     if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
+      if (kIsWeb) {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      } else if (Platform.isIOS || Platform.isMacOS) {
+        await Firebase.initializeApp();
+      } else {
+        await Firebase.initializeApp(
+          options: DefaultFirebaseOptions.currentPlatform,
+        );
+      }
     } else {
       Firebase.app();
     }
