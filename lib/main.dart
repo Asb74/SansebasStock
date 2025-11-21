@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -60,12 +61,10 @@ Future<void> _bootstrap() async {
     Firebase.app();
   }
 
-  FlutterError.onError = (details) {
-    dev.log('FlutterError', error: details.exception, stackTrace: details.stack);
-    FlutterError.presentError(details);
-  };
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+
   PlatformDispatcher.instance.onError = (error, stack) {
-    dev.log('PlatformError', error: error, stackTrace: stack);
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
     return true; // evita que se cierre el proceso en desktop
   };
 }
@@ -74,6 +73,24 @@ void main() {
   runZonedGuarded(() async {
     await _bootstrap();
     runApp(const AppBootstrapper());
+
+    ErrorWidget.builder = (FlutterErrorDetails details) {
+      return Material(
+        color: Colors.white,
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: SingleChildScrollView(
+            child: Text(
+              details.exceptionAsString(),
+              style: const TextStyle(
+                fontSize: 16,
+                color: Colors.red,
+              ),
+            ),
+          ),
+        ),
+      );
+    };
   }, (e, st) {
     dev.log('ZoneError', error: e, stackTrace: st);
   });
