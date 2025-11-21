@@ -42,23 +42,32 @@ Future<void> _bootstrap() async {
 
   try {
     if (Firebase.apps.isEmpty) {
+      Future<void> init;
+
       if (kIsWeb) {
-        await Firebase.initializeApp(
+        init = Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform,
         );
-      } else if (Platform.isIOS || Platform.isMacOS) {
-        await Firebase.initializeApp();
+      } else if (Platform.isIOS) {
+        init = Firebase.initializeApp();
       } else {
-        await Firebase.initializeApp(
+        init = Firebase.initializeApp(
           options: DefaultFirebaseOptions.currentPlatform,
         );
       }
+
+      await init.timeout(const Duration(seconds: 10));
     } else {
       Firebase.app();
     }
   } on FirebaseException catch (error) {
-    if (error.code != 'duplicate-app') rethrow;
-    Firebase.app();
+    if (error.code != 'duplicate-app') {
+      dev.log('FirebaseInitError', error: error, stackTrace: error.stackTrace);
+    } else {
+      Firebase.app();
+    }
+  } on TimeoutException catch (e, st) {
+    dev.log('FirebaseInitTimeout', error: e, stackTrace: st);
   }
 
   FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
