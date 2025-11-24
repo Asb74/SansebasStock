@@ -1,60 +1,48 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../features/auth/auth_service.dart';
+import '../features/splash_screen.dart';
 import '../features/auth/login_screen.dart';
-import '../features/home/home_screen.dart';
-import '../features/map/camera_map_screen.dart';
-import '../features/map/map_cameras_screen.dart';
-import '../features/ops/qr_scan_screen.dart';
-import '../features/splash/splash_screen.dart';
-import '../models/camera_model.dart';
-import '../ui/stock/stock_filter_page.dart';
+import '../features/home_screen.dart';
 
+/// Configuración principal de rutas para SansebasStock.
+/// De momento definimos solo las rutas básicas para evitar pantallas en blanco.
+/// Más adelante se pueden añadir /qr, /map, /informe-stock, etc.
 final GoRouter appRouter = GoRouter(
   initialLocation: '/splash',
-  routes: <GoRoute>[
+  debugLogDiagnostics: true, // loggea rutas en consola (útil para depurar)
+  routes: <RouteBase>[
     GoRoute(
       path: '/splash',
-      builder: (context, state) => const SplashScreen(),
+      name: 'splash',
+      builder: (BuildContext context, GoRouterState state) =>
+          const SplashScreen(),
     ),
     GoRoute(
       path: '/login',
-      builder: (context, state) => const LoginScreen(),
+      name: 'login',
+      builder: (BuildContext context, GoRouterState state) =>
+          const LoginScreen(),
     ),
     GoRoute(
       path: '/',
-      builder: (context, state) {
-        final extra = state.extra;
-        if (extra is AppUser) {
-          final container = ProviderScope.containerOf(context, listen: false);
-          container.read(currentUserProvider.notifier).state = extra;
-        }
-        return const HomeScreen();
-      },
-    ),
-    GoRoute(
-      path: '/qr',
-      builder: (context, state) => const QrScanScreen(),
-    ),
-    GoRoute(
-      path: '/map',
-      builder: (context, state) => const MapCamerasScreen(),
-    ),
-    GoRoute(
-      path: '/map/:camaraId',
-      builder: (context, state) {
-        final numero = state.pathParameters['camaraId'] ?? '01';
-        final extra = state.extra;
-        if (extra is CameraModel) {
-          return CameraMapScreen.fromCamera(extra);
-        }
-        return CameraMapScreen(numero: numero);
-      },
-    ),
-    GoRoute(
-      path: '/informe-stock',
-      builder: (context, state) => const StockFilterPage(),
+      name: 'home',
+      builder: (BuildContext context, GoRouterState state) =>
+          const HomeScreen(),
     ),
   ],
+  errorBuilder: (BuildContext context, GoRouterState state) {
+    // Si hay algún error de navegación, que se vea algo en pantalla
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Error de navegación'),
+      ),
+      body: Center(
+        child: Text(
+          'Ha ocurrido un error de rutas:\n${state.error}',
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  },
 );
