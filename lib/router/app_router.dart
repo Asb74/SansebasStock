@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../features/splash_screen.dart';
 import '../features/auth/login_screen.dart';
-import '../features/home_screen.dart';
+import '../features/home/home_screen.dart';
+import '../features/splash/splash_screen.dart';
 
 /// Configuración principal de rutas para SansebasStock.
 /// De momento definimos solo las rutas básicas para evitar pantallas en blanco.
