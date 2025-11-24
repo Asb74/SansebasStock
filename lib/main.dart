@@ -13,7 +13,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/auth_listeners.dart';
 import 'features/auth/auth_service.dart';
 import 'firebase_options.dart';
-import 'router/app_router.dart';
 import 'theme/app_theme.dart';
 
 // DESKTOP FIX: Intercept problematic lock key events on desktop platforms.
@@ -152,11 +151,30 @@ class SansebasStockApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
+    return MaterialApp(
       title: 'Sansebas Stock',
       theme: buildTheme(),
-      routerConfig: appRouter,
       debugShowCheckedModeBanner: false,
+      home: const DebugStartupScreen(),
+    );
+  }
+}
+
+class DebugStartupScreen extends StatelessWidget {
+  const DebugStartupScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('SansebasStock (debug inicio)'),
+      ),
+      body: const Center(
+        child: Text(
+          'SansebasStock arrancó correctamente en iOS',
+          textAlign: TextAlign.center,
+        ),
+      ),
     );
   }
 }
