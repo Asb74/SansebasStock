@@ -1,3 +1,4 @@
+/*
 import 'dart:async';
 import 'dart:developer' as dev;
 import 'dart:io' show Platform;
@@ -172,6 +173,46 @@ class DebugStartupScreen extends StatelessWidget {
       body: const Center(
         child: Text(
           'SansebasStock arrancó correctamente en iOS',
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+}
+*/
+
+import 'package:flutter/material.dart';
+
+void main() {
+  runApp(const DebugApp());
+}
+
+class DebugApp extends StatelessWidget {
+  const DebugApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'SansebasStock Debug',
+      debugShowCheckedModeBanner: false,
+      home: const DebugHomeScreen(),
+    );
+  }
+}
+
+class DebugHomeScreen extends StatelessWidget {
+  const DebugHomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('SansebasStock (debug iOS)'),
+      ),
+      body: const Center(
+        child: Text(
+          'Si ves esta pantalla, Flutter está funcionando.\n'
+          'El problema no está en iOS nativo, sino en main/bootstrap/router.',
           textAlign: TextAlign.center,
         ),
       ),
