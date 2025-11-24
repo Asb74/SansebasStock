@@ -45,7 +45,7 @@ workflows:
         script: |
           set -euo pipefail
           # Compilamos la app iOS en Release sin firmar
-          flutter build ios --release --no-codesign
+          flutter build ipa --release --no-codesign -t lib/main.dart
 
       - name: Automatic code signing and export IPA
         script: |
