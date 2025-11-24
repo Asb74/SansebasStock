@@ -1,11 +1,9 @@
-/*
 import 'dart:async';
 import 'dart:developer' as dev;
 import 'dart:io' show Platform;
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,9 +12,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/auth_listeners.dart';
 import 'features/auth/auth_service.dart';
 import 'firebase_options.dart';
+import 'router/app_router.dart';
 import 'theme/app_theme.dart';
 
-// DESKTOP FIX: Intercept problematic lock key events on desktop platforms.
+// DESKTOP FIX: Intercepta teclas de bloqueo problemáticas en desktop.
 void _swallowLockKeys() {
   final dispatcher = WidgetsBinding.instance.platformDispatcher;
   final prev = dispatcher.onKeyData;
@@ -27,7 +26,7 @@ void _swallowLockKeys() {
       0x100000106, // Scroll Lock
     };
     if (lockKeys.contains(data.logical)) {
-      return true; // DESKTOP FIX: Suppress lock keys causing asserts.
+      return true; // suprime el evento para evitar asserts en desktop
     }
     return prev?.call(data) ?? false;
   };
@@ -36,45 +35,31 @@ void _swallowLockKeys() {
 Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
-    _swallowLockKeys(); // DESKTOP FIX: Avoid crashes from lock keys on desktop.
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    _swallowLockKeys();
   }
 
   try {
     if (Firebase.apps.isEmpty) {
-      Future<void> init;
-
-      if (kIsWeb) {
-        init = Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
-      } else if (Platform.isIOS) {
-        init = Firebase.initializeApp();
-      } else {
-        init = Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        );
-      }
-
-      await init.timeout(const Duration(seconds: 10));
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
     } else {
       Firebase.app();
     }
   } on FirebaseException catch (error) {
-    if (error.code != 'duplicate-app') {
-      dev.log('FirebaseInitError', error: error, stackTrace: error.stackTrace);
-    } else {
-      Firebase.app();
-    }
-  } on TimeoutException catch (e, st) {
-    dev.log('FirebaseInitTimeout', error: e, stackTrace: st);
+    if (error.code != 'duplicate-app') rethrow;
+    Firebase.app();
   }
 
-  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
-
+  // Loguear errores de Flutter / plataforma en lugar de cerrar el proceso.
+  FlutterError.onError = (details) {
+    dev.log('FlutterError', error: details.exception, stackTrace: details.stack);
+    FlutterError.presentError(details);
+  };
   PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    return true; // evita que se cierre el proceso en desktop
+    dev.log('PlatformError', error: error, stackTrace: stack);
+    return true;
   };
 }
 
@@ -82,24 +67,6 @@ void main() {
   runZonedGuarded(() async {
     await _bootstrap();
     runApp(const AppBootstrapper());
-
-    ErrorWidget.builder = (FlutterErrorDetails details) {
-      return Material(
-        color: Colors.white,
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: SingleChildScrollView(
-            child: Text(
-              details.exceptionAsString(),
-              style: const TextStyle(
-                fontSize: 16,
-                color: Colors.red,
-              ),
-            ),
-          ),
-        ),
-      );
-    };
   }, (e, st) {
     dev.log('ZoneError', error: e, stackTrace: st);
   });
@@ -152,70 +119,11 @@ class SansebasStockApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'Sansebas Stock',
       theme: buildTheme(),
+      routerConfig: appRouter,
       debugShowCheckedModeBanner: false,
-      home: const DebugStartupScreen(),
-    );
-  }
-}
-
-class DebugStartupScreen extends StatelessWidget {
-  const DebugStartupScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('SansebasStock (debug inicio)'),
-      ),
-      body: const Center(
-        child: Text(
-          'SansebasStock arrancó correctamente en iOS',
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-}
-*/
-
-import 'package:flutter/material.dart';
-
-void main() {
-  runApp(const DebugApp());
-}
-
-class DebugApp extends StatelessWidget {
-  const DebugApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'SansebasStock Debug',
-      debugShowCheckedModeBanner: false,
-      home: const DebugHomeScreen(),
-    );
-  }
-}
-
-class DebugHomeScreen extends StatelessWidget {
-  const DebugHomeScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('SansebasStock (debug iOS)'),
-      ),
-      body: const Center(
-        child: Text(
-          'Si ves esta pantalla, Flutter está funcionando.\n'
-          'El problema no está en iOS nativo, sino en main/bootstrap/router.',
-          textAlign: TextAlign.center,
-        ),
-      ),
     );
   }
 }
