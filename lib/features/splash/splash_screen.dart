@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../auth/auth_service.dart';
 import '../auth/session_store.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -15,64 +14,57 @@ class SplashScreen extends ConsumerStatefulWidget {
 }
 
 class _SplashScreenState extends ConsumerState<SplashScreen> {
+  String? _debugMessage;
+
   @override
   void initState() {
     super.initState();
-    // Ejecutamos la lógica después del primer frame para evitar errores de contexto
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkSession();
+      _runDebugStartup();
     });
   }
 
-  Future<void> _checkSession() async {
+  Future<void> _runDebugStartup() async {
     try {
-      // Leer credenciales guardadas
+      // 1) Probar lectura de SessionStore
+      _setDebug('Leyendo credenciales guardadas...');
       final stored = await SessionStore.read();
+      _setDebug('Credenciales leídas: ${stored?.email ?? "NINGUNA"}');
 
+      // 2) Esperar un poco para ver el mensaje
+      await Future.delayed(const Duration(seconds: 1));
+
+      // 3) Probar navegación sencilla a /login (sin hacer login automático)
       if (!mounted) return;
-
-      if (stored == null) {
-        dev.log('No stored credentials → go /login', name: 'Splash');
-        context.go('/login');
-        return;
-      }
-
-      // Intentar login automático
-      final auth = ref.read(authServiceProvider);
-
-      dev.log(
-        'Trying auto-login...',
-        name: 'Splash',
-        error: {'email': stored.email},
-      );
-
-      final user =
-          await auth.login(context, stored.email, stored.password);
-
-      if (!mounted) return;
-
-      // Guardar usuario global
-      ref.read(currentUserProvider.notifier).state = user;
-
-      dev.log('Auto-login OK → go /', name: 'Splash');
-      context.go('/');
-    } on AuthException catch (e, st) {
-      dev.log('AuthException in splash', name: 'Splash', error: e, stackTrace: st);
-      if (!mounted) return;
+      _setDebug('Navegando a /login ...');
       context.go('/login');
     } catch (e, st) {
-      dev.log('Unexpected splash error', name: 'Splash', error: e, stackTrace: st);
+      dev.log('Error en Splash debug', name: 'SplashDebug', error: e, stackTrace: st);
       if (!mounted) return;
-      context.go('/login');
+      _setDebug('ERROR en Splash:\n$e');
     }
+  }
+
+  void _setDebug(String msg) {
+    dev.log(msg, name: 'SplashDebug');
+    setState(() {
+      _debugMessage = msg;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    // Pantalla durante la espera
-    return const Scaffold(
+    return Scaffold(
       body: Center(
-        child: CircularProgressIndicator(),
+        child: _debugMessage == null
+            ? const CircularProgressIndicator()
+            : Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  _debugMessage!,
+                  textAlign: TextAlign.center,
+                ),
+              ),
       ),
     );
   }
