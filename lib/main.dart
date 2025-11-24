@@ -1,43 +1,17 @@
 import 'dart:async';
 import 'dart:developer' as dev;
-import 'dart:io' show Platform;
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'core/auth_listeners.dart';
-import 'features/auth/auth_service.dart';
 import 'firebase_options.dart';
-import 'router/app_router.dart';
+import 'features/auth/auth_service.dart';
+import 'features/auth/splash_screen.dart';
 import 'theme/app_theme.dart';
-
-// DESKTOP FIX: Intercepta teclas de bloqueo problemáticas en desktop.
-void _swallowLockKeys() {
-  final dispatcher = WidgetsBinding.instance.platformDispatcher;
-  final prev = dispatcher.onKeyData;
-  dispatcher.onKeyData = (KeyData data) {
-    const lockKeys = <int>{
-      0x100000104, // Caps Lock
-      0x100000107, // Num Lock
-      0x100000106, // Scroll Lock
-    };
-    if (lockKeys.contains(data.logical)) {
-      return true; // suprime el evento para evitar asserts en desktop
-    }
-    return prev?.call(data) ?? false;
-  };
-}
 
 Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-    _swallowLockKeys();
-  }
 
   try {
     if (Firebase.apps.isEmpty) {
@@ -47,71 +21,19 @@ Future<void> _bootstrap() async {
     } else {
       Firebase.app();
     }
-  } on FirebaseException catch (error) {
-    if (error.code != 'duplicate-app') rethrow;
-    Firebase.app();
+  } catch (e, st) {
+    dev.log('FirebaseInitError', error: e, stackTrace: st);
+    // No relanzamos la excepción para que la app pueda seguir y mostrar algo.
   }
-
-  // Loguear errores de Flutter / plataforma en lugar de cerrar el proceso.
-  FlutterError.onError = (details) {
-    dev.log('FlutterError', error: details.exception, stackTrace: details.stack);
-    FlutterError.presentError(details);
-  };
-  PlatformDispatcher.instance.onError = (error, stack) {
-    dev.log('PlatformError', error: error, stackTrace: stack);
-    return true;
-  };
 }
 
 void main() {
   runZonedGuarded(() async {
     await _bootstrap();
-    runApp(const AppBootstrapper());
-  }, (e, st) {
-    dev.log('ZoneError', error: e, stackTrace: st);
+    runApp(const ProviderScope(child: SansebasStockApp()));
+  }, (error, stack) {
+    dev.log('ZoneError', error: error, stackTrace: stack);
   });
-}
-
-class AppBootstrapper extends StatefulWidget {
-  const AppBootstrapper({super.key});
-
-  @override
-  State<AppBootstrapper> createState() => _AppBootstrapperState();
-}
-
-class _AppBootstrapperState extends State<AppBootstrapper> {
-  late final ProviderContainer _container;
-  AuthListenersHandle? _authListenersHandle;
-
-  @override
-  void initState() {
-    super.initState();
-    _container = ProviderContainer();
-    _authListenersHandle = registerAuthListenersSafely(
-      onAuthState: _onAuthStateChanged,
-    );
-  }
-
-  void _onAuthStateChanged(User? user) {
-    if (user == null) {
-      _container.read(currentUserProvider.notifier).state = null;
-    }
-  }
-
-  @override
-  void dispose() {
-    unawaited(_authListenersHandle?.close());
-    _container.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return UncontrolledProviderScope(
-      container: _container,
-      child: const SansebasStockApp(),
-    );
-  }
 }
 
 class SansebasStockApp extends StatelessWidget {
@@ -119,11 +41,56 @@ class SansebasStockApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
+    return MaterialApp(
       title: 'Sansebas Stock',
       theme: buildTheme(),
-      routerConfig: appRouter,
+      home: const SafeSplashScreen(),
       debugShowCheckedModeBanner: false,
     );
+  }
+}
+
+/// Versión segura de splash: si algo falla, se queda en UI con mensaje.
+class SafeSplashScreen extends StatelessWidget {
+  const SafeSplashScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _runStartupLogic(context),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Error al iniciar')),
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Text(
+                  'Se ha producido un error al iniciar la aplicación:\n\n'
+                  '${snapshot.error}',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          );
+        }
+
+        // Si todo va bien, mostramos el SplashScreen real de la app.
+        return const SplashScreen();
+      },
+    );
+  }
+
+  Future<void> _runStartupLogic(BuildContext context) async {
+    // Aquí puedes ir añadiendo poco a poco la lógica de sesión
+    // usando AuthService, SharedPreferences, etc.
+    // De momento, no hacemos nada para que no se caiga.
+    return;
   }
 }
