@@ -7,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'firebase_options.dart';
 import 'features/auth/auth_service.dart';
-import 'features/auth/splash_screen.dart';
+import 'features/splash/splash_screen.dart';
 import 'theme/app_theme.dart';
 
 Future<void> _bootstrap() async {
