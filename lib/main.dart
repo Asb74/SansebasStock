@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:developer' as dev;
+import 'dart:io' show Platform;
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -14,16 +16,26 @@ Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(
+    Future<FirebaseApp> init;
+
+    if (kIsWeb) {
+      init = Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
+    } else if (Platform.isIOS) {
+      init = Firebase.initializeApp();
     } else {
-      Firebase.app();
+      init = Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
     }
-  } catch (e, st) {
-    dev.log('FirebaseInitError', error: e, stackTrace: st);
+
+    await init.timeout(const Duration(seconds: 10));
+  } on FirebaseException catch (error, stack) {
+    dev.log('FirebaseInitError', error: error, stackTrace: stack);
     // No relanzamos la excepción para que la app pueda seguir y mostrar algo.
+  } on TimeoutException catch (error, stack) {
+    dev.log('FirebaseInitTimeout', error: error, stackTrace: stack);
   }
 }
 
