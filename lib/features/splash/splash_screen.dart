@@ -2,10 +2,11 @@ import 'dart:developer' as dev;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../auth/auth_service.dart';
 import '../auth/session_store.dart';
+import '../auth/login_screen.dart';
+import '../home/home_screen.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -31,8 +32,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
       if (!mounted) return;
 
       if (stored == null) {
-        dev.log('Sin credenciales → /login', name: 'Splash');
-        context.go('/login');
+        dev.log('Sin credenciales → login', name: 'Splash');
+        _goToLogin();
         return;
       }
 
@@ -50,11 +51,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
       if (!mounted) return;
 
-      // 3) Guardar usuario en provider global
+      // 3) Guardar usuario global
       ref.read(currentUserProvider.notifier).state = user;
 
-      dev.log('Auto-login OK → /', name: 'Splash');
-      context.go('/');
+      dev.log('Auto-login OK → home', name: 'Splash');
+      _goToHome();
     } on AuthException catch (e, st) {
       dev.log(
         'AuthException en splash',
@@ -63,7 +64,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         stackTrace: st,
       );
       if (!mounted) return;
-      context.go('/login');
+      _goToLogin();
     } catch (e, st) {
       dev.log(
         'Error inesperado en splash',
@@ -72,14 +73,32 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         stackTrace: st,
       );
       if (!mounted) return;
-      context.go('/login');
+      _goToLogin();
     }
+  }
+
+  void _goToLogin() {
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => const LoginScreen(),
+      ),
+    );
+  }
+
+  void _goToHome() {
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => const HomeScreen(),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Aquí podemos poner la animación tipo Sansebassms más adelante.
-    // De momento mostramos un loader para asegurar el flujo.
+    // Aquí luego se pondrá la animación del logo (como en Sansebassms).
+    // De momento solo mostramos un loader para asegurar el flujo.
     return const Scaffold(
       body: Center(
         child: CircularProgressIndicator(),
