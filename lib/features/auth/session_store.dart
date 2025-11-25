@@ -12,16 +12,24 @@ class SessionStore {
     await prefs.setString(_passwordKey, password.trim());
   }
 
+  /// Devuelve credenciales guardadas o null si no hay datos válidos.
   static Future<StoredCredentials?> read() async {
     final prefs = await SharedPreferences.getInstance();
+
     final email = prefs.getString(_emailKey);
     final password = prefs.getString(_passwordKey);
 
-    if (email == null || email.isEmpty || password == null || password.isEmpty) {
+    if (email == null ||
+        password == null ||
+        email.trim().isEmpty ||
+        password.trim().isEmpty) {
       return null;
     }
 
-    return StoredCredentials(email: email, password: password);
+    return StoredCredentials(
+      email: email,
+      password: password,
+    );
   }
 
   static Future<void> clear() async {
