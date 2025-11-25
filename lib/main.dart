@@ -15,28 +15,9 @@ import 'theme/app_theme.dart';
 Future<void> _bootstrap() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  try {
-    Future<FirebaseApp> init;
-
-    if (kIsWeb) {
-      init = Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-    } else if (Platform.isIOS) {
-      init = Firebase.initializeApp();
-    } else {
-      init = Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-    }
-
-    await init.timeout(const Duration(seconds: 10));
-  } on FirebaseException catch (error, stack) {
-    dev.log('FirebaseInitError', error: error, stackTrace: stack);
-    // No relanzamos la excepción para que la app pueda seguir y mostrar algo.
-  } on TimeoutException catch (error, stack) {
-    dev.log('FirebaseInitTimeout', error: error, stackTrace: stack);
-  }
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 }
 
 void main() {
