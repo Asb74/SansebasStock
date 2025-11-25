@@ -56,7 +56,7 @@ class SansebasStockApp extends StatelessWidget {
     return MaterialApp(
       title: 'Sansebas Stock',
       theme: buildTheme(),
-      home: const SafeSplashScreen(),
+      home: const SplashScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
