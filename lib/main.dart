@@ -1,110 +1,44 @@
-import 'dart:async';
-import 'dart:developer' as dev;
-import 'dart:io' show Platform;
-
-import 'package:firebase_core/firebase_core.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
+import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-import 'features/auth/auth_service.dart';
 import 'features/splash/splash_screen.dart';
-import 'theme/app_theme.dart';
 
-Future<void> _bootstrap() async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    Future<FirebaseApp> init;
-
-    if (kIsWeb) {
-      init = Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-    } else if (Platform.isIOS) {
-      // En iOS usamos la configuración por defecto / plist
-      init = Firebase.initializeApp();
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      await Firebase.initializeApp();
     } else {
-      // Android y resto de plataformas usan firebase_options.dart
-      init = Firebase.initializeApp(
+      await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
     }
-
-    await init.timeout(const Duration(seconds: 10));
-  } on FirebaseException catch (error, stack) {
-    dev.log('FirebaseInitError', error: error, stackTrace: stack);
-    // No relanzamos la excepción para que la app pueda seguir y mostrar algo.
-  } on TimeoutException catch (error, stack) {
-    dev.log('FirebaseInitTimeout', error: error, stackTrace: stack);
-  }
-}
-
-void main() {
-  runZonedGuarded(() async {
-    await _bootstrap();
-    runApp(const ProviderScope(child: SansebasStockApp()));
-  }, (error, stack) {
-    dev.log('ZoneError', error: error, stackTrace: stack);
-  });
-}
-
-class SansebasStockApp extends StatelessWidget {
-  const SansebasStockApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Sansebas Stock',
-      theme: buildTheme(),
-      home: const SplashScreen(),
-      debugShowCheckedModeBanner: false,
-    );
-  }
-}
-
-/// Versión segura de splash: si algo falla, se queda en UI con mensaje.
-class SafeSplashScreen extends StatelessWidget {
-  const SafeSplashScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<void>(
-      future: _runStartupLogic(context),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-
-        if (snapshot.hasError) {
-          return Scaffold(
-            appBar: AppBar(title: const Text('Error al iniciar')),
-            body: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  'Se ha producido un error al iniciar la aplicación:\n\n'
-                  '${snapshot.error}',
-                  textAlign: TextAlign.center,
-                ),
-              ),
+    print("🔥 Firebase INIT OK 🔥");
+  } catch (e, st) {
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          appBar: AppBar(title: Text('Error Firebase')),
+          body: Padding(
+            padding: EdgeInsets.all(20),
+            child: Text(
+              'Error inicializando Firebase:\n$e',
+              style: TextStyle(fontSize: 17),
             ),
-          );
-        }
-
-        // Si todo va bien, mostramos el SplashScreen real de la app.
-        return const SplashScreen();
-      },
+          ),
+        ),
+      ),
     );
-  }
-
-  Future<void> _runStartupLogic(BuildContext context) async {
-    // Aquí puedes ir añadiendo poco a poco la lógica de sesión
-    // usando AuthService, SharedPreferences, etc.
-    // De momento, no hacemos nada para que no se caiga.
+    print("🔥 Firebase INIT ERROR: $e");
+    print(st);
     return;
   }
+
+  runApp(
+    MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: SplashScreen(),
+    ),
+  );
 }
