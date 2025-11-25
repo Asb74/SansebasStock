@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../auth/auth_service.dart';
 import '../auth/session_store.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -14,57 +15,74 @@ class SplashScreen extends ConsumerStatefulWidget {
 }
 
 class _SplashScreenState extends ConsumerState<SplashScreen> {
-  String? _debugMessage;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _runDebugStartup();
+      _checkSession();
     });
   }
 
-  Future<void> _runDebugStartup() async {
+  Future<void> _checkSession() async {
     try {
-      // 1) Probar lectura de SessionStore
-      _setDebug('Leyendo credenciales guardadas...');
+      // 1) Leer credenciales guardadas
       final stored = await SessionStore.read();
-      _setDebug('Credenciales leídas: ${stored?.email ?? "NINGUNA"}');
 
-      // 2) Esperar un poco para ver el mensaje
-      await Future.delayed(const Duration(seconds: 1));
-
-      // 3) Probar navegación sencilla a /login (sin hacer login automático)
       if (!mounted) return;
-      _setDebug('Navegando a /login ...');
+
+      if (stored == null) {
+        dev.log('Sin credenciales → /login', name: 'Splash');
+        context.go('/login');
+        return;
+      }
+
+      // 2) Intentar login automático
+      final auth = ref.read(authServiceProvider);
+
+      dev.log(
+        'Intentando auto-login',
+        name: 'Splash',
+        error: {'email': stored.email},
+      );
+
+      final user =
+          await auth.login(context, stored.email, stored.password);
+
+      if (!mounted) return;
+
+      // 3) Guardar usuario en provider global
+      ref.read(currentUserProvider.notifier).state = user;
+
+      dev.log('Auto-login OK → /', name: 'Splash');
+      context.go('/');
+    } on AuthException catch (e, st) {
+      dev.log(
+        'AuthException en splash',
+        name: 'Splash',
+        error: e,
+        stackTrace: st,
+      );
+      if (!mounted) return;
       context.go('/login');
     } catch (e, st) {
-      dev.log('Error en Splash debug', name: 'SplashDebug', error: e, stackTrace: st);
+      dev.log(
+        'Error inesperado en splash',
+        name: 'Splash',
+        error: e,
+        stackTrace: st,
+      );
       if (!mounted) return;
-      _setDebug('ERROR en Splash:\n$e');
+      context.go('/login');
     }
-  }
-
-  void _setDebug(String msg) {
-    dev.log(msg, name: 'SplashDebug');
-    setState(() {
-      _debugMessage = msg;
-    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    // Aquí podemos poner la animación tipo Sansebassms más adelante.
+    // De momento mostramos un loader para asegurar el flujo.
+    return const Scaffold(
       body: Center(
-        child: _debugMessage == null
-            ? const CircularProgressIndicator()
-            : Padding(
-                padding: const EdgeInsets.all(16),
-                child: Text(
-                  _debugMessage!,
-                  textAlign: TextAlign.center,
-                ),
-              ),
+        child: CircularProgressIndicator(),
       ),
     );
   }
