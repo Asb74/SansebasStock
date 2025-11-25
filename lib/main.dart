@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -7,7 +9,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   try {
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
+    if (Platform.isIOS) {
       await Firebase.initializeApp();
     } else {
       await Firebase.initializeApp(
