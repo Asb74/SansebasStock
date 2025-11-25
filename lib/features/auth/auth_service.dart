@@ -6,6 +6,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../firebase_options.dart';
+
 final authServiceProvider = Provider<AuthService>((ref) {
   return AuthService();
 });
@@ -42,6 +44,38 @@ class AuthService {
     String password,
   ) async {
     try {
+      // Asegurarse de que Firebase está inicializado.
+      try {
+        Firebase.app();
+      } on FirebaseException catch (e, st) {
+        if (e.code == 'no-app') {
+          dev.log(
+            'Firebase no inicializado, inicializando en login...',
+            name: 'Auth',
+            error: e,
+            stackTrace: st,
+          );
+          await Firebase.initializeApp(
+            options: DefaultFirebaseOptions.currentPlatform,
+          );
+        } else {
+          dev.log(
+            'FirebaseException inesperada al comprobar Firebase.app()',
+            name: 'Auth',
+            error: e,
+            stackTrace: st,
+          );
+          rethrow;
+        }
+      } catch (e, st) {
+        dev.log(
+          'Error inesperado al comprobar Firebase.app()',
+          name: 'Auth',
+          error: e,
+          stackTrace: st,
+        );
+      }
+
       final trimmedCorreo = correo.trim().toLowerCase();
       final trimmedPassword = password.trim();
 
