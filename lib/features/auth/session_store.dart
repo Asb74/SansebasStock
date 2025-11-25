@@ -6,6 +6,7 @@ class SessionStore {
   static const _emailKey = 'session_email';
   static const _passwordKey = 'session_password';
 
+  /// Guarda correo y contraseña en SharedPreferences.
   static Future<void> save(String email, String password) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_emailKey, email.trim());
@@ -32,6 +33,7 @@ class SessionStore {
     );
   }
 
+  /// Borra las credenciales guardadas.
   static Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_emailKey);
