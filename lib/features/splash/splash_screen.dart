@@ -16,6 +16,8 @@ class SplashScreen extends ConsumerStatefulWidget {
 }
 
 class _SplashScreenState extends ConsumerState<SplashScreen> {
+  String _status = 'Iniciando...';
+
   @override
   void initState() {
     super.initState();
@@ -24,37 +26,47 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     });
   }
 
+  void _setStatus(String msg) {
+    dev.log(msg, name: 'SplashStatus');
+    if (!mounted) return;
+    setState(() {
+      _status = msg;
+    });
+  }
+
   Future<void> _checkSession() async {
     try {
-      // 1) Leer credenciales guardadas
+      _setStatus('Leyendo credenciales guardadas...');
       final stored = await SessionStore.read();
+      _setStatus(
+        stored == null
+            ? 'Sin credenciales guardadas.'
+            : 'Credenciales encontradas para ${stored.email}',
+      );
+
+      // Pequeña pausa para que se lea el mensaje
+      await Future.delayed(const Duration(milliseconds: 500));
 
       if (!mounted) return;
 
       if (stored == null) {
-        dev.log('Sin credenciales → login', name: 'Splash');
+        _setStatus('Navegando a Login...');
         _goToLogin();
         return;
       }
 
-      // 2) Intentar login automático
+      // Intentar login automático
       final auth = ref.read(authServiceProvider);
 
-      dev.log(
-        'Intentando auto-login',
-        name: 'Splash',
-        error: {'email': stored.email},
-      );
-
-      final user =
-          await auth.login(context, stored.email, stored.password);
+      _setStatus('Intentando auto-login en Firebase...');
+      final user = await auth
+          .login(context, stored.email, stored.password)
+          .timeout(const Duration(seconds: 15));
 
       if (!mounted) return;
 
-      // 3) Guardar usuario global
+      _setStatus('Login correcto. Entrando en la app...');
       ref.read(currentUserProvider.notifier).state = user;
-
-      dev.log('Auto-login OK → home', name: 'Splash');
       _goToHome();
     } on AuthException catch (e, st) {
       dev.log(
@@ -64,6 +76,19 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         stackTrace: st,
       );
       if (!mounted) return;
+      _setStatus('Error de autenticación: ${e.message}. Abriendo Login...');
+      await Future.delayed(const Duration(milliseconds: 500));
+      _goToLogin();
+    } on TimeoutException catch (e, st) {
+      dev.log(
+        'Timeout en login automático',
+        name: 'Splash',
+        error: e,
+        stackTrace: st,
+      );
+      if (!mounted) return;
+      _setStatus('Tiempo de espera agotado. Abriendo Login...');
+      await Future.delayed(const Duration(milliseconds: 500));
       _goToLogin();
     } catch (e, st) {
       dev.log(
@@ -73,6 +98,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         stackTrace: st,
       );
       if (!mounted) return;
+      _setStatus('Error inesperado: $e. Abriendo Login...');
+      await Future.delayed(const Duration(milliseconds: 500));
       _goToLogin();
     }
   }
@@ -97,11 +124,24 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Aquí luego se pondrá la animación del logo (como en Sansebassms).
-    // De momento solo mostramos un loader para asegurar el flujo.
-    return const Scaffold(
+    // Luego aquí podemos cambiar el loader por la animación del logo
+    // como en Sansebassms. De momento mostramos loader + texto de estado.
+    return Scaffold(
       body: Center(
-        child: CircularProgressIndicator(),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                _status,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
