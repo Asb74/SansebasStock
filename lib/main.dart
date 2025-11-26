@@ -16,18 +16,19 @@ Future<void> main() async {
 
 Future<void> _initFirebaseSafely() async {
   try {
-    // Si ya hay una app inicializada (por ejemplo, desde iOS nativo),
-    // simplemente la usamos. Si no, la creamos con las opciones generadas.
-    if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-    } else {
-      Firebase.app();
-    }
+    // Usar SIEMPRE las opciones generadas por flutterfire,
+    // también en iOS. Así evitamos problemas con el plist.
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
   } catch (e, st) {
-    // Nunca reventar la app por un error de inicialización.
-    dev.log('Firebase init failed', error: e, stackTrace: st);
+    // Nunca reventar la app por un fallo de inicialización.
+    dev.log(
+      'Firebase init failed',
+      name: 'Bootstrap',
+      error: e,
+      stackTrace: st,
+    );
   }
 }
 
