@@ -26,8 +26,6 @@
 <true/>
 
 <!-- Sólo pantalla de lanzamiento, como en un proyecto Flutter moderno -->
-<key>UILaunchStoryboardName</key>
-<string>LaunchScreen</string>
 
 <!-- IMPORTANTE: NO usar UIMainStoryboardFile en Flutter -->
 <!-- Eliminar cualquier clave UIMainStoryboardFile existente -->
