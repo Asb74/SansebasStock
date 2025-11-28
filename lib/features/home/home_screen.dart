@@ -2,10 +2,13 @@ import 'dart:io' show Platform; // DESKTOP-GUARD
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../auth/auth_service.dart';
 import '../settings/settings_home_screen.dart';
+
+// IMPORTS CORRECTOS SEGÚN TU ESTRUCTURA
+import '../ops/qr_scan_screen.dart';
+import '../map/map_cameras_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -14,6 +17,7 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     final theme = Theme.of(context);
+
     final isDesktop =
         Platform.isWindows || Platform.isLinux || Platform.isMacOS; // DESKTOP-GUARD
     final isMobile =
@@ -26,7 +30,13 @@ class HomeScreen extends ConsumerWidget {
         ),
         actions: [
           IconButton(
-            onPressed: () => context.push('/informe-stock'),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const _StockReportPlaceholderScreen(),
+                ),
+              );
+            },
             icon: const Icon(Icons.assessment_outlined),
             tooltip: 'Informe de stock',
           ),
@@ -41,6 +51,7 @@ class HomeScreen extends ConsumerWidget {
                 : constraints.maxWidth > 600
                     ? 3
                     : 2;
+
             return GridView.count(
               crossAxisCount: crossAxisCount,
               crossAxisSpacing: 16,
@@ -48,30 +59,58 @@ class HomeScreen extends ConsumerWidget {
               childAspectRatio:
                   constraints.maxWidth > 600 ? 1.1 : 1.05,
               children: <Widget>[
+                // --- LECTURA QR ---
                 _HomeActionCard(
                   title: 'Iniciar lectura QR',
                   subtitle: 'Escanea palets y revisa su contenido',
                   icon: Icons.qr_code_scanner,
                   color: theme.colorScheme.secondary,
-                  onTap: isDesktop ? null : () => context.push('/qr'),
+                  onTap: isDesktop
+                      ? null
+                      : () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const QrScanScreen(),
+                            ),
+                          );
+                        },
                   enabled: isMobile,
                   tooltip:
-                      isDesktop ? 'Solo disponible en móvil' : null, // DESKTOP-GUARD
+                      isDesktop ? 'Solo disponible en móvil' : null,
                 ),
+
+                // --- MAPA ---
                 _HomeActionCard(
                   title: 'Mapa',
                   subtitle: 'Consulta ubicaciones en planta',
                   icon: Icons.map_outlined,
                   color: theme.colorScheme.primary,
-                  onTap: () => context.push('/map'),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const MapCamerasScreen(),
+                      ),
+                    );
+                  },
                 ),
+
+                // --- INFORME DE STOCK ---
                 _HomeActionCard(
                   title: 'Informe de stock',
                   subtitle: 'Filtra palets y exporta resultados',
                   icon: Icons.inventory_outlined,
                   color: theme.colorScheme.tertiary,
-                  onTap: () => context.push('/informe-stock'),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const _StockReportPlaceholderScreen(),
+                      ),
+                    );
+                  },
                 ),
+
+                // --- AJUSTES ---
                 _HomeActionCard(
                   title: 'Ajustes',
                   subtitle: 'Preferencias de la aplicación',
@@ -90,7 +129,6 @@ class HomeScreen extends ConsumerWidget {
       ),
     );
   }
-
 }
 
 class _HomeActionCard extends StatelessWidget {
@@ -115,6 +153,7 @@ class _HomeActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+
     final card = Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(16),
@@ -167,5 +206,28 @@ class _HomeActionCard extends StatelessWidget {
       return Tooltip(message: tooltip, child: card);
     }
     return card;
+  }
+}
+
+/// Pantalla temporal hasta localizar la real
+class _StockReportPlaceholderScreen extends StatelessWidget {
+  const _StockReportPlaceholderScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Informe de stock')),
+      body: const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Text(
+            'Pantalla de informe de stock pendiente de enlazar.\n'
+            'Cuando localices la pantalla real del informe,\n'
+            'cámbiala aquí en Navigator.push.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    );
   }
 }
