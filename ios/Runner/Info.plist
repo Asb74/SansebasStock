@@ -53,6 +53,6 @@
 
 <!-- Permisos que ya usas -->
 <key>NSCameraUsageDescription</key>
-<string>La app necesita acceder a la cámara para escanear códigos de barras y QR de los palets y cajas.</string>
+<string>La app necesita acceder a la cámara para escanear códigos de barras y códigos QR.</string>
 </dict>
 </plist>
