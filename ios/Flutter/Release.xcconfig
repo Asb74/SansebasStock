@@ -1,4 +1,5 @@
-IPHONEOS_DEPLOYMENT_TARGET=15.0
+// Include CocoaPods configurations for the Runner target.
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"
+#include? "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
+// Flutter-generated build settings (keep this include last).
 #include "Generated.xcconfig"
-#include "Runner/CodesignOverride.xcconfig"
-#include "Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"

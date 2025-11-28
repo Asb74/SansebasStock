@@ -1,10 +1,9 @@
-source 'https://github.com/CocoaPods/Specs.git'
+# Uncomment this line to define a global platform for your project
+platform :ios, '15.0'
 
-install! 'cocoapods', :warn_for_unused_master_specs_repo => false
-platform :ios, '16.0'
-inhibit_all_warnings!
-
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+install! 'cocoapods', :warn_for_unused_master_specs_repo => false
 
 project 'Runner', {
   'Debug' => :debug,
@@ -15,13 +14,9 @@ project 'Runner', {
 def flutter_root
   generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
   unless File.exist?(generated_xcode_build_settings_path)
-    alt = File.expand_path(File.join('Flutter', 'Generated.xcconfig'), __FILE__)
-    if File.exist?(alt)
-      generated_xcode_build_settings_path = alt
-    else
-      raise "#{generated_xcode_build_settings_path} must exist. Run 'flutter pub get' first."
-    end
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
   end
+
   File.foreach(generated_xcode_build_settings_path) do |line|
     matches = line.match(/FLUTTER_ROOT\=(.*)/)
     return matches[1].strip if matches
@@ -35,36 +30,22 @@ flutter_ios_podfile_setup
 
 target 'Runner' do
   use_frameworks! :linkage => :static
-  # ❌ NO pongas use_modular_headers! global
+  use_modular_headers!
+
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
-  # Si necesitas leveldb explícito:
-  pod 'leveldb-library', '1.22'
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
 end
 
 post_install do |installer|
-  # Fijar iOS mínimo y limpiar flags '-G' para Xcode 16
   installer.pods_project.targets.each do |t|
-    t.build_configurations.each do |cfg|
-      # Asegura iOS 15.0
-      cfg.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '16.0'
-
-      # Elimina cualquier '-G' que rompa con Xcode 16
-      %w[OTHER_CFLAGS OTHER_CPLUSPLUSFLAGS OTHER_SWIFT_FLAGS].each do |k|
-        v = Array(cfg.build_settings[k])
-        v = v.reject { |s| s.to_s.strip == '-G' || s.to_s.start_with?('-G') }
-        v.unshift('$(inherited)') unless v.include?('$(inherited)')
-        cfg.build_settings[k] = v
-      end
-
-      # Estándares seguros
-      cfg.build_settings['CLANG_C_LANGUAGE_STANDARD']  = 'gnu11'
-      cfg.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
+    flutter_additional_ios_build_settings(t)
+    t.build_configurations.each do |c|
+      c.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      c.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+      c.build_settings['CLANG_CXX_LIBRARY'] = 'libc++'
     end
-  end
-
-  # Ajustes adicionales de Flutter
-  installer.pods_project.targets.each do |target|
-    flutter_additional_ios_build_settings(target)
   end
 end

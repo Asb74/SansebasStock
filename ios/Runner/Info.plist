@@ -2,57 +2,79 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-<key>CFBundleDevelopmentRegion</key>
-<string>$(DEVELOPMENT_LANGUAGE)</string>
-<key>CFBundleDisplayName</key>
-<string>Sansebas Stock</string>
-<key>CFBundleExecutable</key>
-<string>$(EXECUTABLE_NAME)</string>
-<key>CFBundleIdentifier</key>
-<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-<key>CFBundleInfoDictionaryVersion</key>
-<string>6.0</string>
-<key>CFBundleName</key>
-<string>sansebas_stock</string>
-<key>CFBundlePackageType</key>
-<string>APPL</string>
-<key>CFBundleShortVersionString</key>
-<string>$(FLUTTER_BUILD_NAME)</string>
-<key>CFBundleSignature</key>
-<string>????</string>
-<key>CFBundleVersion</key>
-<string>$(FLUTTER_BUILD_NUMBER)</string>
-<key>UILaunchStoryboardName</key>
-<string>LaunchScreen</string>
-<key>LSRequiresIPhoneOS</key>
-<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
 
-<!-- Sólo pantalla de lanzamiento, como en un proyecto Flutter moderno -->
+	<key>CFBundleDisplayName</key>
+	<string>Sansebas Stock</string>
 
-<!-- IMPORTANTE: NO usar UIMainStoryboardFile en Flutter -->
-<!-- Eliminar cualquier clave UIMainStoryboardFile existente -->
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
 
-<key>UISupportedInterfaceOrientations</key>
-<array>
-<string>UIInterfaceOrientationPortrait</string>
-<string>UIInterfaceOrientationLandscapeLeft</string>
-<string>UIInterfaceOrientationLandscapeRight</string>
-</array>
-<key>UISupportedInterfaceOrientations~ipad</key>
-<array>
-<string>UIInterfaceOrientationPortrait</string>
-<string>UIInterfaceOrientationPortraitUpsideDown</string>
-<string>UIInterfaceOrientationLandscapeLeft</string>
-<string>UIInterfaceOrientationLandscapeRight</string>
-</array>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 
-<key>CADisableMinimumFrameDurationOnPhone</key>
-<true/>
-<key>UIApplicationSupportsIndirectInputEvents</key>
-<true/>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
 
-<!-- Permisos que ya usas -->
-<key>NSCameraUsageDescription</key>
-<string>La app necesita acceder a la cámara para escanear códigos de barras y QR de los palets y cajas.</string>
+	<key>CFBundleName</key>
+	<string>sansebas_stock</string>
+
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+
+	<key>CFBundleSignature</key>
+	<string>????</string>
+
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+
+	<!-- Igual que en sansebassms -->
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
+
+	<key>UIApplicationSupportsIndirectInputEvents</key>
+	<true/>
+
+	<!-- Igual que sansebassms: notificaciones en segundo plano -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
+
+	<!-- Igual que sansebassms: gestionas Firebase delegate a mano -->
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<false/>
+
+	<!-- Añade esto si tu app usa la cámara (lectura de códigos) -->
+	<key>NSCameraUsageDescription</key>
+	<string>La app necesita acceder a la cámara para escanear códigos de barras y códigos QR.</string>
 </dict>
 </plist>
