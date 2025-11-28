@@ -63,18 +63,8 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 
-	<!-- Igual que sansebassms: notificaciones en segundo plano -->
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
-
-	<!-- Igual que sansebassms: gestionas Firebase delegate a mano -->
-	<key>FirebaseAppDelegateProxyEnabled</key>
-	<false/>
-
-	<!-- Añade esto si tu app usa la cámara (lectura de códigos) -->
-	<key>NSCameraUsageDescription</key>
-	<string>La app necesita acceder a la cámara para escanear códigos de barras y códigos QR.</string>
+        <!-- Añade esto si tu app usa la cámara (lectura de códigos) -->
+        <key>NSCameraUsageDescription</key>
+        <string>La app necesita acceder a la cámara para escanear códigos de barras y códigos QR.</string>
 </dict>
 </plist>
