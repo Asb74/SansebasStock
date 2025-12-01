@@ -4,11 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/auth_service.dart';
-import '../settings/settings_home_screen.dart';
-
-// IMPORTS CORRECTOS SEGÚN TU ESTRUCTURA
-import '../ops/qr_scan_screen.dart';
 import '../map/map_cameras_screen.dart';
+import '../ops/qr_scan_screen.dart';
+import '../settings/settings_home_screen.dart';
+import '../../ui/stock/stock_filter_page.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -33,7 +32,7 @@ class HomeScreen extends ConsumerWidget {
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => const _StockReportPlaceholderScreen(),
+                  builder: (_) => const StockFilterPage(),
                 ),
               );
             },
@@ -103,8 +102,7 @@ class HomeScreen extends ConsumerWidget {
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) =>
-                            const _StockReportPlaceholderScreen(),
+                        builder: (_) => const StockFilterPage(),
                       ),
                     );
                   },
@@ -206,28 +204,5 @@ class _HomeActionCard extends StatelessWidget {
       return Tooltip(message: tooltip, child: card);
     }
     return card;
-  }
-}
-
-/// Pantalla temporal hasta localizar la real
-class _StockReportPlaceholderScreen extends StatelessWidget {
-  const _StockReportPlaceholderScreen({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Informe de stock')),
-      body: const Center(
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Text(
-            'Pantalla de informe de stock pendiente de enlazar.\n'
-            'Cuando localices la pantalla real del informe,\n'
-            'cámbiala aquí en Navigator.push.',
-            textAlign: TextAlign.center,
-          ),
-        ),
-      ),
-    );
   }
 }
