@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:sansebas_stock/features/ops/ops_providers.dart';
@@ -46,6 +45,14 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   void dispose() {
     _controller?.dispose();
     super.dispose();
+  }
+
+  /// Navegación de salida *siempre* con Navigator.pop
+  void _navigateBack() {
+    if (!mounted) return;
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _scanFromGallery() async {
@@ -93,11 +100,7 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
       await _controller?.stop();
     } catch (_) {}
 
-    if (!mounted) {
-      return;
-    }
-
-    context.go('/');
+    _navigateBack();
   }
 
   Future<void> _handle(String raw) async {
@@ -265,6 +268,7 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
 
   Future<void> _handleSuccess(StockProcessResult result) async {
     ref.read(ubicacionPendienteProvider.notifier).state = null;
+
     try {
       await _controller?.stop();
     } catch (_) {}
@@ -280,10 +284,9 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
         SnackBar(content: Text(result.userMessage)),
       );
 
+    // Cerramos el lector después de mostrar el mensaje
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.go('/');
-      }
+      _navigateBack();
     });
   }
 
@@ -309,7 +312,7 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
     if (_isDesktop) {
       // DESKTOP-GUARD
       return _DesktopQrPlaceholder(
-        onClose: () => context.go('/'),
+        onClose: _navigateBack,
       );
     }
 
@@ -365,7 +368,7 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
                     padding: const EdgeInsets.all(16),
                     child: _ScannerBackButton(
                       enabled: !_busy && !_analyzingFromGallery,
-                      onPressed: () => _closeScanner(),
+                      onPressed: _closeScanner,
                     ),
                   ),
                 ),
@@ -410,7 +413,7 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
                           label: 'Galería',
                           onTap: _busy || _analyzingFromGallery
                               ? null
-                              : () => _scanFromGallery(),
+                              : _scanFromGallery,
                           active: _analyzingFromGallery,
                         ),
                       ],
