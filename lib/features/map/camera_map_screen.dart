@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -225,6 +226,57 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
     _storeMatrix();
   }
 
+  Future<void> cambiarEstadoPalet({
+    required DocumentSnapshot doc,
+    required bool marcarLibre,
+  }) async {
+    if (!doc.exists) return;
+
+    final data = (doc.data() as Map<String, dynamic>?) ?? <String, dynamic>{};
+    final currentValue = (data['HUECO'] ?? '').toString();
+    final targetValue = marcarLibre ? 'Libre' : 'Ocupado';
+    final currentNormalized = currentValue.toLowerCase();
+    final targetNormalized = targetValue.toLowerCase();
+
+    if (currentNormalized == targetNormalized) {
+      return;
+    }
+
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid;
+    if (uid == null) return;
+
+    final userDoc = await FirebaseFirestore.instance
+        .collection('UsuariosAutorizados')
+        .doc(uid)
+        .get();
+
+    final userName = userDoc.data()?['Nombre'];
+    final userEmail = user?.email;
+
+    final batch = FirebaseFirestore.instance.batch();
+
+    batch.update(doc.reference, {'HUECO': targetValue});
+
+    batch.set(
+      FirebaseFirestore.instance.collection('StockLogs').doc(),
+      {
+        'palletId': doc.id,
+        'campo': 'HUECO',
+        'from': currentNormalized == 'ocupado'
+            ? 'Ocupado'
+            : (currentNormalized == 'libre' ? 'Libre' : currentValue),
+        'to': targetValue,
+        'userId': uid,
+        'userEmail': userEmail,
+        'userName': userName,
+        'timestamp': FieldValue.serverTimestamp(),
+      },
+    );
+
+    await batch.commit();
+  }
+
   void _showSlotDetails(BuildContext context, StockEntry entry) {
     showModalBottomSheet<void>(
       context: context,
@@ -258,6 +310,9 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                         final currentHueco = (data['HUECO'] ?? '').toString();
                         final isOcupado = currentHueco.toLowerCase() == 'ocupado';
                         final nextState = isOcupado ? 'Libre' : 'Ocupado';
+                        final docRef = FirebaseFirestore.instance
+                            .collection('Stock')
+                            .doc(entry.id);
 
                         Future<void> handleUpdate() async {
                           final confirmed = await showDialog<bool>(
@@ -280,10 +335,11 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
 
                           if (confirmed != true) return;
 
-                          await FirebaseFirestore.instance
-                              .collection('Stock')
-                              .doc(entry.id)
-                              .update({'HUECO': nextState});
+                          final snapshot = await docRef.get();
+                          await cambiarEstadoPalet(
+                            doc: snapshot,
+                            marcarLibre: isOcupado,
+                          );
 
                           if (context.mounted) {
                             Navigator.of(context).pop();
