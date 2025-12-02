@@ -35,7 +35,7 @@ android {
         targetSdk = 36
 
         // ⭐ VUELTA A LA CONFIG ORIGINAL: VALORES FIJOS
-        versionCode = 4       // ← CAMBIA AQUÍ PARA PLAY STORE
+        versionCode = 5       // ← CAMBIA AQUÍ PARA PLAY STORE
         versionName = "1.0.0" // ← NOMBRE DE VERSIÓN
     }
 
