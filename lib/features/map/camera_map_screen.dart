@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -253,28 +254,71 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                   onPressed: () {
                     showDialog<void>(
                       context: context,
-                      builder: (context) => AlertDialog(
-                        title: const Text('Detalle del documento'),
-                        content: SingleChildScrollView(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: data.entries
-                                .map(
-                                  (e) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 4),
-                                    child: Text('${e.key}: ${e.value}'),
-                                  ),
-                                )
-                                .toList(),
+                      builder: (context) {
+                        final currentHueco = (data['HUECO'] ?? '').toString();
+                        final isOcupado = currentHueco.toLowerCase() == 'ocupado';
+                        final nextState = isOcupado ? 'Libre' : 'Ocupado';
+
+                        Future<void> handleUpdate() async {
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (dialogContext) => AlertDialog(
+                              title: const Text('Confirmar'),
+                              content: Text('¿Deseas marcar este palet como $nextState?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.of(dialogContext).pop(false),
+                                  child: const Text('Cancelar'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.of(dialogContext).pop(true),
+                                  child: const Text('Confirmar'),
+                                ),
+                              ],
+                            ),
+                          );
+
+                          if (confirmed != true) return;
+
+                          await FirebaseFirestore.instance
+                              .collection('Stock')
+                              .doc(entry.id)
+                              .update({'HUECO': nextState});
+
+                          if (context.mounted) {
+                            Navigator.of(context).pop();
+                          }
+                        }
+
+                        return AlertDialog(
+                          title: const Text('Detalle del documento'),
+                          content: SingleChildScrollView(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: data.entries
+                                  .map(
+                                    (e) => Padding(
+                                      padding: const EdgeInsets.only(bottom: 4),
+                                      child: Text('${e.key}: ${e.value}'),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
                           ),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(context).pop(),
-                            child: const Text('Cerrar'),
-                          ),
-                        ],
-                      ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(),
+                              child: const Text('Cerrar'),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: handleUpdate,
+                              icon: Icon(
+                                  isOcupado ? Icons.inventory_2_outlined : Icons.check_circle_outline),
+                              label: Text('Marcar como $nextState'),
+                            ),
+                          ],
+                        );
+                      },
                     );
                   },
                   child: const Text('Ver todos los campos'),
