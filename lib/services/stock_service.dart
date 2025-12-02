@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sansebas_stock/features/qr/qr_parser.dart';
 
@@ -99,6 +100,12 @@ class StockService {
 
         await ref.set(data, SetOptions(merge: true));
 
+        await _writeStockLog(
+          palletId: docId,
+          fromValue: 'new',
+          toValue: 'Ocupado',
+        );
+
         return StockProcessResult(
           action: StockProcessAction.creadoOcupado,
           id: docId,
@@ -108,11 +115,19 @@ class StockService {
       }
 
       final Map<String, dynamic> current = snapshot.data() ?? <String, dynamic>{};
+      final String huecoAnterior = _normalizeHuecoValue(current['HUECO']);
       final String huecoActual =
           (current['HUECO']?.toString().toLowerCase() ?? 'ocupado');
 
       if (huecoActual == 'ocupado') {
         await ref.set({'HUECO': 'Libre'}, SetOptions(merge: true));
+
+        await _writeStockLog(
+          palletId: docId,
+          fromValue: huecoAnterior,
+          toValue: 'Libre',
+        );
+
         return StockProcessResult(
           action: StockProcessAction.liberado,
           id: docId,
@@ -133,6 +148,14 @@ class StockService {
         ..['HUECO'] = 'Ocupado';
 
       await ref.set(data, SetOptions(merge: true));
+
+      if (huecoAnterior.toLowerCase() != 'ocupado') {
+        await _writeStockLog(
+          palletId: docId,
+          fromValue: huecoAnterior,
+          toValue: 'Ocupado',
+        );
+      }
 
       return StockProcessResult(
         action: StockProcessAction.reubicado,
@@ -191,6 +214,62 @@ class StockService {
     data['VIDA'] = qr.vida;
     data['LINEAS'] = qr.lineas;
     return data;
+  }
+
+  String _normalizeHuecoValue(dynamic value) {
+    final String raw = value?.toString() ?? '';
+    if (raw.isEmpty) {
+      return 'Ocupado';
+    }
+
+    final String lower = raw.toLowerCase();
+    if (lower == 'ocupado') {
+      return 'Ocupado';
+    }
+    if (lower == 'libre') {
+      return 'Libre';
+    }
+
+    return raw;
+  }
+
+  Future<void> _writeStockLog({
+    required String palletId,
+    required String fromValue,
+    required String toValue,
+  }) async {
+    try {
+      if (fromValue.toLowerCase() == toValue.toLowerCase()) {
+        return;
+      }
+
+      final User? user = FirebaseAuth.instance.currentUser;
+      final String? uid = user?.uid;
+      if (uid == null) {
+        return;
+      }
+
+      final DocumentSnapshot<Map<String, dynamic>> userDoc = await _db
+          .collection('UsuariosAutorizados')
+          .doc(uid)
+          .get();
+
+      final String? userName = userDoc.data()?['Nombre']?.toString();
+
+      await _db.collection('StockLogs').add(<String, dynamic>{
+        'palletId': palletId,
+        'campo': 'HUECO',
+        'from': fromValue,
+        'to': toValue,
+        'userId': uid,
+        'userEmail': user?.email,
+        'userName': userName,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e, st) {
+      debugPrint('Error al escribir en StockLogs: $e');
+      debugPrintStack(label: 'StockLogs stack', stackTrace: st);
+    }
   }
 
   String _friendlyMessage(String code, String? rawMessage) {
