@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../features/auth/login_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/splash/splash_screen.dart';
+import '../features/tools/compare_loteado_stock_screen.dart';
+import '../features/tools/tools_screen.dart';
 
 /// Configuración principal de rutas para SansebasStock.
 /// De momento definimos solo las rutas básicas para evitar pantallas en blanco.
@@ -29,6 +31,20 @@ final GoRouter appRouter = GoRouter(
       name: 'home',
       builder: (BuildContext context, GoRouterState state) =>
           const HomeScreen(),
+    ),
+    GoRoute(
+      path: '/tools',
+      name: 'tools',
+      builder: (BuildContext context, GoRouterState state) =>
+          const ToolsScreen(),
+      routes: [
+        GoRoute(
+          path: 'compare',
+          name: 'tools-compare',
+          builder: (BuildContext context, GoRouterState state) =>
+              const CompareLoteadoStockScreen(),
+        ),
+      ],
     ),
   ],
   errorBuilder: (BuildContext context, GoRouterState state) {
