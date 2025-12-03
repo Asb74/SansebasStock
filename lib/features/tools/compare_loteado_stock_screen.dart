@@ -2,12 +2,15 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
+
+import 'package:sansebas_stock/features/ops/qr_scan_screen.dart';
 
 import 'compare_loteado_stock_provider.dart';
 
@@ -25,6 +28,9 @@ class _CompareLoteadoStockScreenState
   String? _selectedCamara;
   late final TextEditingController _searchController;
 
+  bool get _isMobile =>
+      !kIsWeb && (Platform.isAndroid || Platform.isIOS); // ignore: dead_code_on_web
+
   @override
   void initState() {
     super.initState();
@@ -35,6 +41,20 @@ class _CompareLoteadoStockScreenState
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _scanQr() async {
+    if (!_isMobile) return;
+    final result = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => const QrScanScreen(returnScanResult: true),
+      ),
+    );
+
+    if (result != null && mounted) {
+      _searchController.text = result;
+      setState(() {});
+    }
   }
 
   @override
@@ -77,6 +97,7 @@ class _CompareLoteadoStockScreenState
         data: (diff) {
           final variedadOptions = ['Todas', ...diff.variedadOptions];
           final camaraOptions = ['Todas', ...diff.camaraOptions];
+          final searchText = _searchController.text;
 
           return RefreshIndicator(
             onRefresh: () async {
@@ -109,12 +130,17 @@ class _CompareLoteadoStockScreenState
                           value: diff.totalStockOcupado.toString(),
                         ),
                         _SummaryRow(
-                          label: 'En Loteado pero no en Stock',
-                          value: diff.docsEnLoteadoNoStock.length.toString(),
+                          label: 'Caso 1 – En Loteado y NO en Stock',
+                          value: diff.case1LoteadoSinStock.length.toString(),
                         ),
                         _SummaryRow(
-                          label: 'En Stock (Ocupado) pero no en Loteado',
-                          value: diff.docsEnStockNoLoteado.length.toString(),
+                          label: 'Caso 2 – En Loteado + Stock Libre',
+                          value: diff.case2LoteadoMasLibre.length.toString(),
+                        ),
+                        _SummaryRow(
+                          label: 'Caso 3 – En Stock (Ocupado) sin Loteado',
+                          value: diff.case3StockOcupadoSinLoteado.length
+                              .toString(),
                         ),
                       ],
                     ),
@@ -140,24 +166,35 @@ class _CompareLoteadoStockScreenState
                   onSearchChanged: (value) {
                     setState(() {});
                   },
+                  onQrTap: _isMobile ? _scanQr : null,
                 ),
                 const SizedBox(height: 12),
                 _DiffSection(
-                  title: 'En Loteado pero NO en Stock (Hueco=Ocupado)',
-                  items: diff.enLoteadoNoStockItems,
-                  emptyText: 'No hay diferencias en este grupo.',
+                  title: 'Caso 1 – En Loteado y NO están en Stock',
+                  items: diff.case1LoteadoSinStock,
+                  emptyText: 'No hay palets en esta casuística.',
                   selectedVariedad: _selectedVariedad,
                   selectedCamara: _selectedCamara,
-                  searchText: _searchController.text,
+                  searchText: searchText,
                 ),
                 const SizedBox(height: 12),
                 _DiffSection(
-                  title: 'En Stock (Ocupado) pero NO en Loteado',
-                  items: diff.enStockNoLoteadoItems,
-                  emptyText: 'No hay diferencias en este grupo.',
+                  title: 'Caso 2 – En Loteado y en Stock con Hueco=Libre',
+                  items: diff.case2LoteadoMasLibre,
+                  emptyText: 'No hay palets en esta casuística.',
                   selectedVariedad: _selectedVariedad,
                   selectedCamara: _selectedCamara,
-                  searchText: _searchController.text,
+                  searchText: searchText,
+                ),
+                const SizedBox(height: 12),
+                _DiffSection(
+                  title:
+                      'Caso 3 – En Stock (Hueco=Ocupado) y NO están en Loteado',
+                  items: diff.case3StockOcupadoSinLoteado,
+                  emptyText: 'No hay palets en esta casuística.',
+                  selectedVariedad: _selectedVariedad,
+                  selectedCamara: _selectedCamara,
+                  searchText: searchText,
                 ),
               ],
             ),
@@ -176,7 +213,7 @@ class _CompareLoteadoStockScreenState
 
   Future<void> _onExportAction(
     _ExportAction action,
-    LoteadoStockDiff diff,
+    CompareLoteadoStockResult diff,
     AsyncValue<DateTime?> lastSyncAsync,
   ) async {
     try {
@@ -217,7 +254,7 @@ class _CompareLoteadoStockScreenState
     }
   }
 
-  Future<void> _exportCsv(LoteadoStockDiff diff) async {
+  Future<void> _exportCsv(CompareLoteadoStockResult diff) async {
     final csvContent = _buildCsv(diff.diffRows);
     final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
     final file = File('${Directory.systemTemp.path}/diferencias_$timestamp.csv');
@@ -230,7 +267,10 @@ class _CompareLoteadoStockScreenState
     );
   }
 
-  Future<void> _exportPdf(LoteadoStockDiff diff, DateTime? lastSync) async {
+  Future<void> _exportPdf(
+    CompareLoteadoStockResult diff,
+    DateTime? lastSync,
+  ) async {
     final bytes = await _buildPdfBytes(diff, lastSync);
     final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
     final file = File('${Directory.systemTemp.path}/diferencias_$timestamp.pdf');
@@ -245,39 +285,46 @@ class _CompareLoteadoStockScreenState
   String _buildCsv(List<DiffRow> rows) {
     final buffer = StringBuffer();
     buffer.writeln(
-      'origen,docId,idpalet,variedad,confeccion,camara,estanteria,nivel',
+      'caso,origen,palletNumber,docId,variedad,confeccion,camara,estanteria,nivel,hueco',
     );
 
     String esc(String? v) => '"${(v ?? '').replaceAll('"', '""')}"';
 
     for (final r in rows) {
       buffer.writeln([
+        esc(r.caseNumber.toString()),
         esc(r.origen),
+        esc(r.palletNumber),
         esc(r.docId),
-        esc(r.idpalet),
         esc(r.variedad),
         esc(r.confeccion),
         esc(r.camara),
         esc(r.estanteria),
         esc(r.nivel),
+        esc(r.hueco),
       ].join(','));
     }
     return buffer.toString();
   }
 
   Future<Uint8List> _buildPdfBytes(
-    LoteadoStockDiff diff,
+    CompareLoteadoStockResult diff,
     DateTime? lastSync,
   ) async {
     final doc = pw.Document();
     final now = DateTime.now();
     final formatter = DateFormat('dd/MM/yyyy HH:mm');
     final summaryHeaders = ['Métrica', 'Valor'];
-    final groups = agruparPorCampos([
-      ...diff.enLoteadoNoStockItems,
-      ...diff.enStockNoLoteadoItems,
-    ]).values.toList()
-      ..sort((a, b) => b.items.length.compareTo(a.items.length));
+    final rowsByCase = <int, List<DiffRow>>{
+      1: diff.diffRows.where((r) => r.caseNumber == 1).toList(),
+      2: diff.diffRows.where((r) => r.caseNumber == 2).toList(),
+      3: diff.diffRows.where((r) => r.caseNumber == 3).toList(),
+    };
+    final caseTitles = {
+      1: 'Caso 1 – En Loteado y NO están en Stock',
+      2: 'Caso 2 – En Loteado y en Stock con Hueco=Libre',
+      3: 'Caso 3 – En Stock (Hueco=Ocupado) y NO están en Loteado',
+    };
 
     doc.addPage(
       pw.MultiPage(
@@ -300,14 +347,9 @@ class _CompareLoteadoStockScreenState
               data: [
                 ['Total Loteado', diff.totalLoteado.toString()],
                 ['Total Stock (Ocupado)', diff.totalStockOcupado.toString()],
-                [
-                  'En Loteado pero no en Stock',
-                  diff.docsEnLoteadoNoStock.length.toString(),
-                ],
-                [
-                  'En Stock pero no en Loteado',
-                  diff.docsEnStockNoLoteado.length.toString(),
-                ],
+                [caseTitles[1]!, rowsByCase[1]!.length.toString()],
+                [caseTitles[2]!, rowsByCase[2]!.length.toString()],
+                [caseTitles[3]!, rowsByCase[3]!.length.toString()],
               ],
               headerStyle: pw.TextStyle(
                 fontSize: 11,
@@ -319,10 +361,13 @@ class _CompareLoteadoStockScreenState
             pw.SizedBox(height: 16),
           ];
 
-          for (final group in groups) {
+          for (final entry in rowsByCase.entries) {
+            final title = caseTitles[entry.key] ?? 'Caso ${entry.key}';
+            final rows = entry.value;
+
             content.add(
               pw.Text(
-                group.key,
+                '$title (${rows.length})',
                 style: pw.TextStyle(
                   fontSize: 14,
                   fontWeight: pw.FontWeight.bold,
@@ -330,47 +375,57 @@ class _CompareLoteadoStockScreenState
               ),
             );
             content.add(pw.SizedBox(height: 6));
-            content.add(
-              pw.Table.fromTextArray(
-                headers: const [
-                  'Origen',
-                  'docId',
-                  'idpalet',
-                  'Variedad',
-                  'Confección',
-                  'Cámara',
-                  'Estantería',
-                  'Nivel',
-                ],
-                data: group.items.map((item) {
-                  return [
-                    item.origen,
-                    item.docId,
-                    item.idpalet ?? '',
-                    item.variedad ?? '',
-                    item.confeccion ?? '',
-                    item.camara ?? '',
-                    item.estanteria ?? '',
-                    item.nivel ?? '',
-                  ];
-                }).toList(),
-                headerStyle: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
+            if (rows.isEmpty) {
+              content.add(pw.Text('Sin palets en este caso.'));
+            } else {
+              content.add(
+                pw.Table.fromTextArray(
+                  headers: const [
+                    'Caso',
+                    'Origen',
+                    'Pallet',
+                    'docId',
+                    'Variedad',
+                    'Confección',
+                    'Cámara',
+                    'Estantería',
+                    'Nivel',
+                    'Hueco',
+                  ],
+                  data: rows.map((r) {
+                    return [
+                      r.caseNumber.toString(),
+                      r.origen,
+                      r.palletNumber,
+                      r.docId,
+                      r.variedad ?? '',
+                      r.confeccion ?? '',
+                      r.camara ?? '',
+                      r.estanteria ?? '',
+                      r.nivel ?? '',
+                      r.hueco ?? '',
+                    ];
+                  }).toList(),
+                  headerStyle: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                  cellStyle: const pw.TextStyle(fontSize: 9),
+                  columnWidths: {
+                    0: const pw.FixedColumnWidth(35),
+                    1: const pw.FixedColumnWidth(65),
+                    2: const pw.FixedColumnWidth(80),
+                    3: const pw.FlexColumnWidth(),
+                    4: const pw.FixedColumnWidth(70),
+                    5: const pw.FixedColumnWidth(70),
+                    6: const pw.FixedColumnWidth(55),
+                    7: const pw.FixedColumnWidth(70),
+                    8: const pw.FixedColumnWidth(50),
+                    9: const pw.FixedColumnWidth(55),
+                  },
                 ),
-                cellStyle: const pw.TextStyle(fontSize: 9),
-                columnWidths: {
-                  0: const pw.FixedColumnWidth(55),
-                  1: const pw.FlexColumnWidth(),
-                  2: const pw.FixedColumnWidth(80),
-                  3: const pw.FixedColumnWidth(70),
-                  4: const pw.FixedColumnWidth(80),
-                  5: const pw.FixedColumnWidth(55),
-                  6: const pw.FixedColumnWidth(70),
-                  7: const pw.FixedColumnWidth(50),
-                },
-              ),
-            );
+              );
+            }
             content.add(pw.SizedBox(height: 12));
           }
 
@@ -402,18 +457,17 @@ class _DiffSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final search = searchText.trim().toLowerCase();
+    final query = searchText.trim();
     final filtered = items.where((item) {
       if (selectedVariedad != null &&
           (item.variedad ?? 'Sin variedad') != selectedVariedad) {
         return false;
       }
-      if (selectedCamara != null &&
-          (item.camara ?? 'Sin cámara') != selectedCamara) {
+      final cam = item.camara ?? item.stockCamara ?? 'Sin cámara';
+      if (selectedCamara != null && cam != selectedCamara) {
         return false;
       }
-      if (search.isNotEmpty &&
-          !(item.idpalet?.toLowerCase().contains(search) ?? false)) {
+      if (query.isNotEmpty && !item.palletNumber.contains(query)) {
         return false;
       }
       return true;
@@ -426,6 +480,10 @@ class _DiffSection extends StatelessWidget {
       child: ExpansionTile(
         initiallyExpanded: true,
         title: Text(title),
+        trailing: CircleAvatar(
+          radius: 14,
+          child: Text(filtered.length.toString()),
+        ),
         children: [
           if (grouped.isEmpty)
             Padding(
@@ -443,7 +501,7 @@ class _DiffSection extends StatelessWidget {
                 children: group.items
                     .map(
                       (item) => ListTile(
-                        title: Text(item.idpalet ?? 'Sin idpalet'),
+                        title: Text(item.palletNumber),
                         subtitle: Text(_buildSubtitle(item)),
                       ),
                     )
@@ -463,12 +521,15 @@ class _DiffSection extends StatelessWidget {
       parts.add('$label: $text');
     }
 
+    add('Origen', item.origen);
     add('docId', item.docId);
     add('Variedad', item.variedad);
     add('Confección', item.confeccion);
-    add('Cámara', item.camara);
-    add('Estantería', item.estanteria);
-    add('Nivel', item.nivel);
+    add('Cámara (Loteado)', item.camara);
+    add('Cámara (Stock)', item.stockCamara);
+    add('Estantería', item.estanteria ?? item.stockEstanteria);
+    add('Nivel', item.nivel ?? item.stockNivel);
+    add('Hueco', item.hueco);
 
     if (parts.isEmpty) return 'Sin datos adicionales';
     return parts.join(' · ');
@@ -485,6 +546,7 @@ class _FiltersRow extends StatelessWidget {
     required this.onVariedadChanged,
     required this.onCamaraChanged,
     required this.onSearchChanged,
+    this.onQrTap,
   });
 
   final List<String> variedadOptions;
@@ -495,6 +557,7 @@ class _FiltersRow extends StatelessWidget {
   final ValueChanged<String?> onVariedadChanged;
   final ValueChanged<String?> onCamaraChanged;
   final ValueChanged<String> onSearchChanged;
+  final VoidCallback? onQrTap;
 
   @override
   Widget build(BuildContext context) {
@@ -555,12 +618,21 @@ class _FiltersRow extends StatelessWidget {
                   width: 220,
                   child: TextField(
                     controller: searchController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Buscar idpalet',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.search),
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: onQrTap != null
+                          ? IconButton(
+                              tooltip: 'Leer QR',
+                              icon: const Icon(Icons.qr_code_scanner),
+                              onPressed: onQrTap,
+                            )
+                          : null,
                     ),
+                    keyboardType: TextInputType.number,
                     onChanged: onSearchChanged,
+                    textInputAction: TextInputAction.search,
                   ),
                 ),
               ],
