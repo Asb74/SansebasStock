@@ -86,21 +86,6 @@ class StockService {
   }) async {
     final db = _db;
 
-    // 1) Comprobar destino fuera de la transacción
-    final destSnap = await db
-        .collection('Stock')
-        .where('CAMARA', isEqualTo: toCamara)
-        .where('ESTANTERIA', isEqualTo: toEstanteria)
-        .where('POSICION', isEqualTo: toPosicion)
-        .where('NIVEL', isEqualTo: toNivel)
-        .where('HUECO', isEqualTo: 'Ocupado')
-        .get();
-
-    if (destSnap.docs.isNotEmpty) {
-      throw Exception('Hueco de destino ocupado');
-    }
-
-    // 2) Transacción Firestore
     await db.runTransaction((tx) async {
       final stockRef = db.collection('Stock').doc(stockDocId);
 
@@ -116,11 +101,11 @@ class StockService {
           data['ESTANTERIA'] != fromEstanteria ||
           (data['POSICION'] as num).toInt() != fromPosicion ||
           (data['NIVEL'] as num).toInt() != fromNivel) {
-        throw Exception('El palet cambió de posición');
+        throw Exception('El palet cambió de posición mientras tanto');
       }
 
       if (data['HUECO'] != 'Ocupado') {
-        throw Exception('El palet ya no está ocupado');
+        throw Exception('El palet ya no está en un hueco ocupado');
       }
 
       // Actualizar posición
