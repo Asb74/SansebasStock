@@ -57,7 +57,7 @@ class MapCamerasScreen extends ConsumerWidget {
                   // AHORA: navegación clásica con Navigator
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) => CameraMapScreen(camaraId: camera.displayNumero),
+                      builder: (_) => CameraMapScreen(numero: camera.displayNumero),
                     ),
                   );
                 },

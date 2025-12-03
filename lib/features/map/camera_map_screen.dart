@@ -1150,6 +1150,7 @@ class _CameraCanvas extends StatelessWidget {
   }
 
   Widget _buildPalletRow({
+    required BuildContext context,
     required StorageSide side,
     required int fila,
     required bool isLeftSide,
@@ -1210,6 +1211,7 @@ class _CameraCanvas extends StatelessWidget {
               children: [
                 _buildRowLabel('F$leftFila'),
                 _buildPalletRow(
+                  context: context,
                   side: StorageSide.left,
                   fila: leftFila,
                   isLeftSide: true,
@@ -1219,6 +1221,7 @@ class _CameraCanvas extends StatelessWidget {
                 SizedBox(width: gap),
                 _buildRowLabel('F$rightFila', alignment: Alignment.centerLeft),
                 _buildPalletRow(
+                  context: context,
                   side: StorageSide.right,
                   fila: rightFila,
                   isLeftSide: false,
@@ -1242,6 +1245,7 @@ class _CameraCanvas extends StatelessWidget {
                 SizedBox(width: gap),
                 _buildRowLabel('F$fila'),
                 _buildPalletRow(
+                  context: context,
                   side: StorageSide.right,
                   fila: fila,
                   isLeftSide: false,
