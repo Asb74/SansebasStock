@@ -4,11 +4,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sansebas_stock/services/stock_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/camera_model.dart';
 import '../../providers/camera_providers.dart';
-import '../../services/stock_service.dart';
 import 'models/palet_position.dart';
 import 'widgets/pallet_tile.dart';
 
@@ -43,18 +43,9 @@ final selectedLevelProvider =
     StateProvider.autoDispose.family<int, String>((ref, numero) => 1);
 
 class CameraMapScreen extends ConsumerStatefulWidget {
-  const CameraMapScreen({
-    super.key,
-    required this.numero,
-    this.initialCamera,
-  });
+  const CameraMapScreen({super.key, required this.camaraId});
 
-  factory CameraMapScreen.fromCamera(CameraModel camera) {
-    return CameraMapScreen(numero: camera.displayNumero, initialCamera: camera);
-  }
-
-  final String numero;
-  final CameraModel? initialCamera;
+  final String camaraId;
 
   @override
   ConsumerState<CameraMapScreen> createState() => _CameraMapScreenState();
@@ -471,11 +462,11 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
 
   @override
   Widget build(BuildContext context) {
-    final cameraAsync = ref.watch(cameraByNumeroProvider(widget.numero));
+    final cameraAsync = ref.watch(cameraByNumeroProvider(widget.camaraId));
     return cameraAsync.when(
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (error, __) => Scaffold(
-        appBar: AppBar(title: Text('Cámara ${widget.numero}')),
+        appBar: AppBar(title: Text('Cámara ${widget.camaraId}')),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -484,10 +475,10 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
         ),
       ),
       data: (cameraFromStream) {
-        final camera = cameraFromStream ?? widget.initialCamera;
+        final camera = cameraFromStream;
         if (camera == null) {
           return Scaffold(
-            appBar: AppBar(title: Text('Cámara ${widget.numero}')),
+            appBar: AppBar(title: Text('Cámara ${widget.camaraId}')),
             body: const Center(child: Text('La cámara no existe.')),
           );
         }
