@@ -11,7 +11,9 @@ import 'package:sansebas_stock/features/qr/qr_parser.dart' as qr;
 import 'package:sansebas_stock/services/stock_service.dart';
 
 class QrScanScreen extends ConsumerStatefulWidget {
-  const QrScanScreen({super.key});
+  const QrScanScreen({super.key, this.returnScanResult = false});
+
+  final bool returnScanResult;
 
   @override
   ConsumerState<QrScanScreen> createState() => _QrScanScreenState();
@@ -52,6 +54,13 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
     if (!mounted) return;
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
+    }
+  }
+
+  void _navigateBackWithResult(String? result) {
+    if (!mounted) return;
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop(result);
     }
   }
 
@@ -106,6 +115,16 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   Future<void> _handle(String raw) async {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) {
+      return;
+    }
+
+    if (widget.returnScanResult && _esQrPalet(trimmed)) {
+      try {
+        final parsed = qr.parseQr(trimmed);
+        _navigateBackWithResult(parsed.p.toString().padLeft(10, '0'));
+      } on FormatException catch (e) {
+        _showError(e.message);
+      }
       return;
     }
 
