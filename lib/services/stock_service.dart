@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sansebas_stock/features/qr/qr_parser.dart';
 
 enum StockProcessAction { creadoOcupado, liberado, reubicado }
@@ -85,51 +86,46 @@ class StockService {
     required int toNivel,
     required String usuario,
   }) async {
-    final user = FirebaseAuth.instance.currentUser;
-    final uid = user?.uid;
-    final userEmail = user?.email;
+    final db = FirebaseFirestore.instance;
 
-    String? userName;
-    if (uid != null) {
-      final userDoc = await _db.collection('UsuariosAutorizados').doc(uid).get();
-      userName = userDoc.data()?['Nombre']?.toString();
+    // 1) Comprobar destino fuera de la transacción
+    final destSnap = await db
+        .collection('Stock')
+        .where('CAMARA', isEqualTo: toCamara)
+        .where('ESTANTERIA', isEqualTo: toEstanteria)
+        .where('POSICION', isEqualTo: toPosicion)
+        .where('NIVEL', isEqualTo: toNivel)
+        .where('HUECO', isEqualTo: 'Ocupado')
+        .get();
+
+    if (destSnap.docs.isNotEmpty) {
+      throw Exception('Hueco de destino ocupado');
     }
 
-    await _db.runTransaction((tx) async {
-      final stockRef = _db.collection('Stock').doc(stockDocId);
+    // 2) Transacción Firestore
+    await db.runTransaction((tx) async {
+      final stockRef = db.collection('Stock').doc(stockDocId);
 
-      final stockSnap = await tx.get(stockRef);
-      if (!stockSnap.exists) {
+      final snap = await tx.get(stockRef);
+      if (!snap.exists) {
         throw Exception('El palet ya no existe en Stock');
       }
 
-      final data = stockSnap.data() as Map<String, dynamic>;
+      final data = snap.data() as Map<String, dynamic>;
 
+      // Confirmar posición de origen
       if (data['CAMARA'] != fromCamara ||
           data['ESTANTERIA'] != fromEstanteria ||
           (data['POSICION'] as num).toInt() != fromPosicion ||
           (data['NIVEL'] as num).toInt() != fromNivel) {
-        throw Exception('El palet ha cambiado de posición mientras tanto');
+        throw Exception('El palet cambió de posición');
       }
 
       if (data['HUECO'] != 'Ocupado') {
-        throw Exception('El palet ya no está en un hueco ocupado');
+        throw Exception('El palet ya no está ocupado');
       }
 
-      final queryDestino = await tx.get(
-        _db
-            .collection('Stock')
-            .where('CAMARA', isEqualTo: toCamara)
-            .where('ESTANTERIA', isEqualTo: toEstanteria)
-            .where('POSICION', isEqualTo: toPosicion)
-            .where('NIVEL', isEqualTo: toNivel)
-            .where('HUECO', isEqualTo: 'Ocupado'),
-      );
-
-      if (queryDestino.docs.isNotEmpty) {
-        throw Exception('Hueco de destino ocupado');
-      }
-
+      // Actualizar posición
       tx.update(stockRef, {
         'CAMARA': toCamara,
         'ESTANTERIA': toEstanteria,
@@ -137,8 +133,9 @@ class StockService {
         'NIVEL': toNivel,
       });
 
-      final logsRef = _db.collection('StockLogs').doc();
-      tx.set(logsRef, {
+      // Crear log
+      final logRef = db.collection('StockLogs').doc();
+      tx.set(logRef, {
         'tipo': 'MOVE',
         'idpalet': idPalet,
         'stockDocId': stockDocId,
@@ -152,9 +149,6 @@ class StockService {
         'toNivel': toNivel,
         'fechaHora': FieldValue.serverTimestamp(),
         'usuario': usuario,
-        'userId': uid,
-        'userEmail': userEmail,
-        'userName': userName,
       });
     });
   }
@@ -376,3 +370,7 @@ class StockService {
     }
   }
 }
+
+final stockServiceProvider = Provider<StockService>((ref) {
+  return StockService(FirebaseFirestore.instance);
+});
