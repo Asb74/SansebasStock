@@ -635,7 +635,8 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                             gap: gap,
                             aisleWidth: aisleWidth,
                             onEntryTap: (entry) => _showSlotDetails(context, entry),
-                            onDrop: ({required from, required to}) => _handleDrop(
+                            onDrop: (context, ref, {required from, required to}) =>
+                                _handleDrop(
                               context,
                               ref,
                               camera: camera,
@@ -941,7 +942,9 @@ class _CameraCanvas extends StatelessWidget {
   final double gap;
   final double aisleWidth;
   final ValueChanged<StockEntry>? onEntryTap;
-  final Future<void> Function({
+  final Future<void> Function(
+    BuildContext context,
+    WidgetRef ref, {
     required PalletDragData from,
     required StorageSlotCoordinate to,
   }) onDrop;
@@ -1144,7 +1147,7 @@ class _CameraCanvas extends StatelessWidget {
         return !ocupado;
       },
       onAccept: (data) async {
-        await onDrop(from: data, to: coord);
+        await onDrop(context, ref, from: data, to: coord);
       },
     );
   }
