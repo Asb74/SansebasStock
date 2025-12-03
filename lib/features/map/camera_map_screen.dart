@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/camera_model.dart';
 import '../../providers/camera_providers.dart';
+import '../../services/stock_service.dart';
+import 'models/palet_position.dart';
 import 'widgets/pallet_tile.dart';
 
 int labelForPosition({
@@ -224,6 +226,87 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
   void _handleInteractionEnd(ScaleEndDetails details) {
     _legendKey.currentState?.setFaded(false);
     _storeMatrix();
+  }
+
+  Future<String?> _resolveUsuario() async {
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid;
+    if (uid == null) return null;
+
+    final userDoc = await FirebaseFirestore.instance
+        .collection('UsuariosAutorizados')
+        .doc(uid)
+        .get();
+
+    final userName = userDoc.data()?['Nombre']?.toString();
+    if (userName != null && userName.isNotEmpty) {
+      return userName;
+    }
+
+    final displayName = user?.displayName;
+    if (displayName != null && displayName.isNotEmpty) {
+      return displayName;
+    }
+
+    final email = user?.email;
+    if (email != null && email.isNotEmpty) {
+      return email;
+    }
+
+    return uid;
+  }
+
+  Future<void> _movePalet({
+    required PaletPosition from,
+    required StorageSlotCoordinate to,
+    required CameraModel camera,
+    required int nivel,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final usuario = await _resolveUsuario();
+    if (usuario == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('No se pudo identificar al usuario actual.')),
+      );
+      return;
+    }
+
+    final service = ref.read(stockServiceProvider);
+    final provider = stockByCameraLevelProvider(
+      CameraLevelKey(numero: camera.displayNumero, nivel: nivel, pasillo: camera.pasillo),
+    );
+
+    try {
+      await service.movePalet(
+        stockDocId: from.stockDocId,
+        idPalet: from.palletNumber,
+        fromCamara: from.camara,
+        fromEstanteria: from.estanteria,
+        fromPosicion: from.posicion,
+        fromNivel: from.nivel,
+        toCamara: camera.displayNumero,
+        toEstanteria: to.fila.toString(),
+        toPosicion: to.posicion,
+        toNivel: nivel,
+        usuario: usuario,
+      );
+
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Palet movido a F${to.fila} · P${to.posicion} · Nivel $nivel'),
+        ),
+      );
+
+      ref.invalidate(provider);
+    } catch (e) {
+      ref.invalidate(provider);
+      final message = e.toString().replaceFirst('Exception: ', '');
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(message),
+        ),
+      );
+    }
   }
 
   Future<void> cambiarEstadoPalet({
@@ -508,10 +591,17 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                           final canvas = _CameraCanvas(
                             camera: camera,
                             occupied: occupied,
+                            nivel: nivelActual,
                             cell: cell,
                             gap: gap,
                             aisleWidth: aisleWidth,
                             onEntryTap: (entry) => _showSlotDetails(context, entry),
+                            onPalletMove: (from, to) => _movePalet(
+                              from: from,
+                              to: to,
+                              camera: camera,
+                              nivel: nivelActual,
+                            ),
                           );
 
                           return Stack(
@@ -793,18 +883,22 @@ class _CameraCanvas extends StatelessWidget {
   const _CameraCanvas({
     required this.camera,
     required this.occupied,
+    required this.nivel,
     required this.cell,
     required this.gap,
     required this.aisleWidth,
     required this.onEntryTap,
+    required this.onPalletMove,
   });
 
   final CameraModel camera;
   final Map<StorageSlotCoordinate, StockEntry> occupied;
+  final int nivel;
   final double cell;
   final double gap;
   final double aisleWidth;
   final ValueChanged<StockEntry>? onEntryTap;
+  final Future<void> Function(PaletPosition, StorageSlotCoordinate)? onPalletMove;
 
   static const double rowLabelWidth = 36;
   static const double headerHeight = 20;
@@ -848,6 +942,24 @@ class _CameraCanvas extends StatelessWidget {
   int get _filasTotales => _isCentral ? _filasPorLado * 2 : _filasPorLado;
 
   int get _posicionesMax => camera.posicionesMax;
+
+  PaletPosition _buildPaletPosition(StockEntry entry) {
+    final idPalet = entry.id.length > 1 ? entry.id.substring(1) : entry.id;
+    final nivelValue = entry.data['NIVEL'];
+    final nivelInt = nivelValue is int
+        ? nivelValue
+        : int.tryParse(nivelValue?.toString() ?? '') ?? nivel;
+    final estanteriaValue = entry.data['ESTANTERIA'];
+
+    return PaletPosition(
+      stockDocId: entry.id,
+      palletNumber: idPalet,
+      camara: (entry.data['CAMARA'] ?? camera.displayNumero).toString(),
+      estanteria: estanteriaValue?.toString() ?? entry.coordinate.fila.toString(),
+      posicion: entry.posicion,
+      nivel: nivelInt,
+    );
+  }
 
   StockEntry? _entryFor(StorageSide side, int fila, int posicion) {
     final key = StorageSlotCoordinate(side: side, fila: fila, posicion: posicion);
@@ -956,13 +1068,16 @@ class _CameraCanvas extends StatelessWidget {
       );
       final entry = _entryFor(side, fila, logicalPos);
       final digits = entry != null ? _digitsForEntry(entry) : null;
-      Widget tile = SizedBox(
-        width: cell,
-        height: cell,
-        child: PalletTile(
-          ocupado: entry != null,
-          p: digits,
-        ),
+      final coordinate = StorageSlotCoordinate(
+        side: side,
+        fila: fila,
+        posicion: logicalPos,
+      );
+
+      final paletPosition = entry != null ? _buildPaletPosition(entry) : null;
+      Widget tile = PalletTile(
+        ocupado: entry != null,
+        p: digits,
       );
       if (entry != null && onEntryTap != null) {
         tile = GestureDetector(
@@ -970,7 +1085,54 @@ class _CameraCanvas extends StatelessWidget {
           child: tile,
         );
       }
-      tiles.add(tile);
+
+      if (entry != null && onPalletMove != null) {
+        tile = LongPressDraggable<PaletPosition>(
+          data: paletPosition!,
+          feedback: Material(
+            color: Colors.transparent,
+            child: SizedBox(
+              width: cell,
+              height: cell,
+              child: PalletTile(
+                ocupado: true,
+                p: digits,
+              ),
+            ),
+          ),
+          childWhenDragging: PalletTile(
+            ocupado: false,
+            p: null,
+          ),
+          child: tile,
+        );
+      }
+
+      tiles.add(
+        DragTarget<PaletPosition>(
+          onWillAccept: (_) => entry == null,
+          onAccept: (data) async {
+            if (onPalletMove != null) {
+              await onPalletMove!(data, coordinate);
+            }
+          },
+          builder: (context, candidateData, rejectedData) {
+            final isActive = candidateData.isNotEmpty && entry == null;
+            return AnimatedContainer(
+              duration: const Duration(milliseconds: 120),
+              width: cell,
+              height: cell,
+              decoration: isActive
+                  ? BoxDecoration(
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.blueAccent, width: 3),
+                    )
+                  : null,
+              child: tile,
+            );
+          },
+        ),
+      );
       if (colIndex != _posicionesMax - 1) {
         tiles.add(SizedBox(width: gap));
       }

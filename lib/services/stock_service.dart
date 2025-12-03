@@ -72,6 +72,93 @@ class StockService {
 
   final FirebaseFirestore _db;
 
+  Future<void> movePalet({
+    required String stockDocId,
+    required String idPalet,
+    required String fromCamara,
+    required String fromEstanteria,
+    required int fromPosicion,
+    required int fromNivel,
+    required String toCamara,
+    required String toEstanteria,
+    required int toPosicion,
+    required int toNivel,
+    required String usuario,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    final uid = user?.uid;
+    final userEmail = user?.email;
+
+    String? userName;
+    if (uid != null) {
+      final userDoc = await _db.collection('UsuariosAutorizados').doc(uid).get();
+      userName = userDoc.data()?['Nombre']?.toString();
+    }
+
+    await _db.runTransaction((tx) async {
+      final stockRef = _db.collection('Stock').doc(stockDocId);
+
+      final stockSnap = await tx.get(stockRef);
+      if (!stockSnap.exists) {
+        throw Exception('El palet ya no existe en Stock');
+      }
+
+      final data = stockSnap.data() as Map<String, dynamic>;
+
+      if (data['CAMARA'] != fromCamara ||
+          data['ESTANTERIA'] != fromEstanteria ||
+          (data['POSICION'] as num).toInt() != fromPosicion ||
+          (data['NIVEL'] as num).toInt() != fromNivel) {
+        throw Exception('El palet ha cambiado de posición mientras tanto');
+      }
+
+      if (data['HUECO'] != 'Ocupado') {
+        throw Exception('El palet ya no está en un hueco ocupado');
+      }
+
+      final queryDestino = await tx.get(
+        _db
+            .collection('Stock')
+            .where('CAMARA', isEqualTo: toCamara)
+            .where('ESTANTERIA', isEqualTo: toEstanteria)
+            .where('POSICION', isEqualTo: toPosicion)
+            .where('NIVEL', isEqualTo: toNivel)
+            .where('HUECO', isEqualTo: 'Ocupado'),
+      );
+
+      if (queryDestino.docs.isNotEmpty) {
+        throw Exception('Hueco de destino ocupado');
+      }
+
+      tx.update(stockRef, {
+        'CAMARA': toCamara,
+        'ESTANTERIA': toEstanteria,
+        'POSICION': toPosicion,
+        'NIVEL': toNivel,
+      });
+
+      final logsRef = _db.collection('StockLogs').doc();
+      tx.set(logsRef, {
+        'tipo': 'MOVE',
+        'idpalet': idPalet,
+        'stockDocId': stockDocId,
+        'fromCamara': fromCamara,
+        'fromEstanteria': fromEstanteria,
+        'fromPosicion': fromPosicion,
+        'fromNivel': fromNivel,
+        'toCamara': toCamara,
+        'toEstanteria': toEstanteria,
+        'toPosicion': toPosicion,
+        'toNivel': toNivel,
+        'fechaHora': FieldValue.serverTimestamp(),
+        'usuario': usuario,
+        'userId': uid,
+        'userEmail': userEmail,
+        'userName': userName,
+      });
+    });
+  }
+
   Future<StockProcessResult> procesarPalet({
     required ParsedQr qr,
     StockLocation? ubicacion,
