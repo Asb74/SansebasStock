@@ -26,6 +26,7 @@ class _CompareLoteadoStockScreenState
     extends ConsumerState<CompareLoteadoStockScreen> {
   String? _selectedVariedad;
   String? _selectedCamara;
+  String? _selectedMarca;
   late final TextEditingController _searchController;
 
   bool get _isMobile =>
@@ -61,6 +62,7 @@ class _CompareLoteadoStockScreenState
   Widget build(BuildContext context) {
     final comparisonAsync = ref.watch(compareLoteadoStockProvider);
     final lastSyncAsync = ref.watch(lastLoteadoSyncProvider);
+    final numberFormat = NumberFormat.decimalPattern('es_ES');
 
     return Scaffold(
       appBar: AppBar(
@@ -97,6 +99,7 @@ class _CompareLoteadoStockScreenState
         data: (diff) {
           final variedadOptions = ['Todas', ...diff.variedadOptions];
           final camaraOptions = ['Todas', ...diff.camaraOptions];
+          final marcaOptions = ['Todas', ...diff.marcaOptions];
           final searchText = _searchController.text;
 
           return RefreshIndicator(
@@ -126,8 +129,17 @@ class _CompareLoteadoStockScreenState
                           value: diff.totalLoteado.toString(),
                         ),
                         _SummaryRow(
+                          label: 'Neto Loteado',
+                          value: '${numberFormat.format(diff.totalNetoLoteado)} kg',
+                        ),
+                        _SummaryRow(
                           label: 'Total Stock (Hueco=Ocupado)',
                           value: diff.totalStockOcupado.toString(),
+                        ),
+                        _SummaryRow(
+                          label: 'Neto Stock (Hueco=Ocupado)',
+                          value:
+                              '${numberFormat.format(diff.totalNetoStockOcupado)} kg',
                         ),
                         _SummaryRow(
                           label: 'Caso 1 – En Loteado y NO en Stock',
@@ -150,8 +162,10 @@ class _CompareLoteadoStockScreenState
                 _FiltersRow(
                   variedadOptions: variedadOptions,
                   camaraOptions: camaraOptions,
+                  marcaOptions: marcaOptions,
                   selectedVariedad: _selectedVariedad,
                   selectedCamara: _selectedCamara,
+                  selectedMarca: _selectedMarca,
                   searchController: _searchController,
                   onVariedadChanged: (value) {
                     setState(() {
@@ -163,6 +177,11 @@ class _CompareLoteadoStockScreenState
                       _selectedCamara = value == 'Todas' ? null : value;
                     });
                   },
+                  onMarcaChanged: (value) {
+                    setState(() {
+                      _selectedMarca = value == 'Todas' ? null : value;
+                    });
+                  },
                   onSearchChanged: (value) {
                     setState(() {});
                   },
@@ -170,31 +189,37 @@ class _CompareLoteadoStockScreenState
                 ),
                 const SizedBox(height: 12),
                 _DiffSection(
-                  title: 'Caso 1 – En Loteado y NO están en Stock',
+                  baseTitle: 'Caso 1 – En Loteado y NO en Stock',
                   items: diff.case1LoteadoSinStock,
                   emptyText: 'No hay palets en esta casuística.',
                   selectedVariedad: _selectedVariedad,
                   selectedCamara: _selectedCamara,
+                  selectedMarca: _selectedMarca,
                   searchText: searchText,
+                  numberFormat: numberFormat,
                 ),
                 const SizedBox(height: 12),
                 _DiffSection(
-                  title: 'Caso 2 – En Loteado y en Stock con Hueco=Libre',
+                  baseTitle: 'Caso 2 – En Loteado y en Stock con Hueco=Libre',
                   items: diff.case2LoteadoMasLibre,
                   emptyText: 'No hay palets en esta casuística.',
                   selectedVariedad: _selectedVariedad,
                   selectedCamara: _selectedCamara,
+                  selectedMarca: _selectedMarca,
                   searchText: searchText,
+                  numberFormat: numberFormat,
                 ),
                 const SizedBox(height: 12),
                 _DiffSection(
-                  title:
-                      'Caso 3 – En Stock (Hueco=Ocupado) y NO están en Loteado',
+                  baseTitle:
+                      'Caso 3 – En Stock (Hueco=Ocupado) y NO en Loteado',
                   items: diff.case3StockOcupadoSinLoteado,
                   emptyText: 'No hay palets en esta casuística.',
                   selectedVariedad: _selectedVariedad,
                   selectedCamara: _selectedCamara,
+                  selectedMarca: _selectedMarca,
                   searchText: searchText,
+                  numberFormat: numberFormat,
                 ),
               ],
             ),
@@ -440,20 +465,24 @@ class _CompareLoteadoStockScreenState
 
 class _DiffSection extends StatelessWidget {
   const _DiffSection({
-    required this.title,
+    required this.baseTitle,
     required this.items,
     required this.emptyText,
     required this.selectedVariedad,
     required this.selectedCamara,
+    required this.selectedMarca,
     required this.searchText,
+    required this.numberFormat,
   });
 
-  final String title;
+  final String baseTitle;
   final List<PaletDiffItem> items;
   final String emptyText;
   final String? selectedVariedad;
   final String? selectedCamara;
+  final String? selectedMarca;
   final String searchText;
+  final NumberFormat numberFormat;
 
   @override
   Widget build(BuildContext context) {
@@ -467,11 +496,17 @@ class _DiffSection extends StatelessWidget {
       if (selectedCamara != null && cam != selectedCamara) {
         return false;
       }
+      if (selectedMarca != null && (item.marca ?? '') != selectedMarca) {
+        return false;
+      }
       if (query.isNotEmpty && !item.palletNumber.contains(query)) {
         return false;
       }
       return true;
     }).toList();
+
+    final sumNeto =
+        filtered.fold<num>(0, (previousValue, element) => previousValue + element.neto);
 
     final grouped = agruparPorCampos(filtered).values.toList()
       ..sort((a, b) => b.items.length.compareTo(a.items.length));
@@ -479,7 +514,9 @@ class _DiffSection extends StatelessWidget {
     return Card(
       child: ExpansionTile(
         initiallyExpanded: true,
-        title: Text(title),
+        title: Text(
+          '$baseTitle (Palets: ${filtered.length} · Neto: ${numberFormat.format(sumNeto)} kg)',
+        ),
         trailing: CircleAvatar(
           radius: 14,
           child: Text(filtered.length.toString()),
@@ -540,22 +577,28 @@ class _FiltersRow extends StatelessWidget {
   const _FiltersRow({
     required this.variedadOptions,
     required this.camaraOptions,
+    required this.marcaOptions,
     required this.selectedVariedad,
     required this.selectedCamara,
+    required this.selectedMarca,
     required this.searchController,
     required this.onVariedadChanged,
     required this.onCamaraChanged,
+    required this.onMarcaChanged,
     required this.onSearchChanged,
     this.onQrTap,
   });
 
   final List<String> variedadOptions;
   final List<String> camaraOptions;
+  final List<String> marcaOptions;
   final String? selectedVariedad;
   final String? selectedCamara;
+  final String? selectedMarca;
   final TextEditingController searchController;
   final ValueChanged<String?> onVariedadChanged;
   final ValueChanged<String?> onCamaraChanged;
+  final ValueChanged<String?> onMarcaChanged;
   final ValueChanged<String> onSearchChanged;
   final VoidCallback? onQrTap;
 
@@ -612,6 +655,25 @@ class _FiltersRow extends StatelessWidget {
                         )
                         .toList(),
                     onChanged: onCamaraChanged,
+                  ),
+                ),
+                SizedBox(
+                  width: 180,
+                  child: DropdownButtonFormField<String>(
+                    value: selectedMarca ?? 'Todas',
+                    decoration: const InputDecoration(
+                      labelText: 'Marca',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: marcaOptions
+                        .map(
+                          (m) => DropdownMenuItem(
+                            value: m,
+                            child: Text(m),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: onMarcaChanged,
                   ),
                 ),
                 SizedBox(
