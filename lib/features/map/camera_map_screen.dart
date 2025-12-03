@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sansebas_stock/features/ops/ops_providers.dart';
 import 'package:sansebas_stock/services/stock_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -262,13 +263,13 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
       return;
     }
 
-    final service = ref.read(stockServiceProvider);
+    final stockService = ref.read(stockServiceProvider);
     final provider = stockByCameraLevelProvider(
       CameraLevelKey(numero: camera.displayNumero, nivel: nivel, pasillo: camera.pasillo),
     );
 
     try {
-      await service.movePalet(
+      await stockService.movePalet(
         stockDocId: from.stockDocId,
         idPalet: from.palletNumber,
         fromCamara: from.camara,
