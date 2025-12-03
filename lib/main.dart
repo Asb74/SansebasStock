@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'firebase_options.dart';
+import 'features/auth/login_screen.dart';
+import 'features/home/home_screen.dart';
 import 'features/splash/splash_screen.dart';
 import 'theme/app_theme.dart';
 
@@ -41,6 +43,10 @@ class SansebasStockApp extends StatelessWidget {
       title: 'Sansebas Stock',
       theme: buildTheme(),
       home: const SplashScreen(),
+      routes: {
+        '/login': (context) => const LoginScreen(),
+        '/home': (context) => const HomeScreen(),
+      },
       debugShowCheckedModeBanner: false,
     );
   }

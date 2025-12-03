@@ -1,9 +1,9 @@
 import 'dart:io' show Platform; // DESKTOP-GUARD
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../auth/auth_service.dart';
 import '../map/map_cameras_screen.dart';
 import '../ops/qr_scan_screen.dart';
 import '../settings/settings_home_screen.dart';
@@ -14,7 +14,6 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(currentUserProvider);
     final theme = Theme.of(context);
 
     final isDesktop =
@@ -24,20 +23,15 @@ class HomeScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          user?.nombre.isNotEmpty == true ? 'Hola, ${user!.nombre}' : 'Inicio',
-        ),
+        title: const Text('SansebasStock'),
         actions: [
           IconButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const StockFilterPage(),
-                ),
-              );
+            icon: const Icon(Icons.logout),
+            tooltip: 'Cerrar sesión',
+            onPressed: () async {
+              await FirebaseAuth.instance.signOut();
+              Navigator.pushReplacementNamed(context, '/login');
             },
-            icon: const Icon(Icons.assessment_outlined),
-            tooltip: 'Informe de stock',
           ),
         ],
       ),
