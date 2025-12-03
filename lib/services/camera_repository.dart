@@ -18,7 +18,7 @@ class CameraRepository {
   }
 
   Stream<CameraModel?> watchByNumero(String numero) {
-    final docId = numero.padLeft(2, '0');
+    final docId = numero;
     return _collection.doc(docId).snapshots().map((doc) {
       if (!doc.exists) return null;
       return CameraModel.fromDoc(doc);

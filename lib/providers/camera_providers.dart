@@ -87,13 +87,32 @@ final cameraByNumeroProvider = StreamProvider.family<CameraModel?, String>((ref,
   return ref.watch(cameraRepositoryProvider).watchByNumero(numero);
 });
 
+final stockByCameraProvider =
+    StreamProvider.family<List<QueryDocumentSnapshot<Map<String, dynamic>>>, String>((ref, numero) {
+  final firestore = FirebaseFirestore.instance;
+  final normalized = numero.trim();
+  final candidates = <String>{normalized};
+  final padded = normalized.padLeft(2, '0');
+  candidates.add(padded);
+
+  return firestore
+      .collection('Stock')
+      .where('CAMARA', whereIn: candidates.toList())
+      .snapshots()
+      .map((snapshot) => snapshot.docs);
+});
+
 final stockByCameraLevelProvider =
     StreamProvider.family<Map<StorageSlotCoordinate, StockEntry>, CameraLevelKey>((ref, key) {
   final firestore = FirebaseFirestore.instance;
-  final normalizedNumero = key.numero.padLeft(2, '0');
+  final normalizedNumero = key.numero.trim();
+  final candidates = <String>{normalizedNumero};
+  final padded = normalizedNumero.padLeft(2, '0');
+  candidates.add(padded);
+
   final query = firestore
       .collection('Stock')
-      .where('CAMARA', isEqualTo: normalizedNumero)
+      .where('CAMARA', whereIn: candidates.toList())
       .where('NIVEL', isEqualTo: key.nivel)
       .where('HUECO', isEqualTo: 'Ocupado');
 

@@ -265,7 +265,7 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
 
     final stockService = ref.read(stockServiceProvider);
     final provider = stockByCameraLevelProvider(
-      CameraLevelKey(numero: camera.displayNumero, nivel: nivel, pasillo: camera.pasillo),
+      CameraLevelKey(numero: camera.numero, nivel: nivel, pasillo: camera.pasillo),
     );
 
     try {
@@ -276,7 +276,7 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
         fromEstanteria: from.estanteria,
         fromPosicion: from.posicion,
         fromNivel: from.nivel,
-        toCamara: camera.displayNumero,
+        toCamara: camera.numero,
         toEstanteria: to.fila.toString(),
         toPosicion: to.posicion,
         toNivel: nivel,
@@ -350,6 +350,37 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
     );
 
     await batch.commit();
+  }
+
+  CameraModel _buildCameraFromStockDocs(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    String camaraId,
+  ) {
+    int maxNivel = 1;
+    int maxPosicion = 1;
+    int maxFila = 1;
+
+    int? _asInt(dynamic value) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse(value?.toString() ?? '');
+    }
+
+    for (final doc in docs) {
+      final data = doc.data();
+      maxNivel = math.max(maxNivel, _asInt(data['NIVEL']) ?? maxNivel);
+      maxPosicion = math.max(maxPosicion, _asInt(data['POSICION']) ?? maxPosicion);
+      maxFila = math.max(maxFila, _asInt(data['ESTANTERIA']) ?? maxFila);
+    }
+
+    return CameraModel(
+      id: camaraId.trim(),
+      numero: camaraId.trim(),
+      filas: math.max(maxFila, 1),
+      niveles: math.max(maxNivel, 1),
+      pasillo: CameraPasillo.central,
+      posicionesMax: math.max(maxPosicion, 1),
+    );
   }
 
   void _showSlotDetails(BuildContext context, StockEntry entry) {
@@ -463,6 +494,7 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
 
   @override
   Widget build(BuildContext context) {
+    final stockAllAsync = ref.watch(stockByCameraProvider(widget.camaraId));
     final cameraAsync = ref.watch(cameraByNumeroProvider(widget.camaraId));
     return cameraAsync.when(
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
@@ -476,18 +508,31 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
         ),
       ),
       data: (cameraFromStream) {
-        final camera = cameraFromStream;
-        if (camera == null) {
+        final hasStorageConfig = cameraFromStream != null;
+        final hasStockPalets = stockAllAsync.maybeWhen(
+          data: (docs) => docs.isNotEmpty,
+          orElse: () => false,
+        );
+
+        if (!hasStorageConfig && stockAllAsync.isLoading) {
+          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        }
+
+        if (!hasStorageConfig && !hasStockPalets) {
           return Scaffold(
             appBar: AppBar(title: Text('Cámara ${widget.camaraId}')),
             body: const Center(child: Text('La cámara no existe.')),
           );
         }
 
-        final cameraNumero = camera.displayNumero;
+        final stockDocs = stockAllAsync.value ?? const <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+        final camera = cameraFromStream ?? _buildCameraFromStockDocs(stockDocs, widget.camaraId);
+        final cameraKeyNumero = cameraFromStream?.id ?? camera.numero;
+
+        final cameraNumero = cameraKeyNumero;
         final nivelController = ref.watch(selectedLevelProvider(cameraNumero));
-        final nivelActual =
-            nivelController.clamp(1, math.max(camera.niveles, 1)).toInt();
+        final nivelesTotales = math.max(camera.niveles, 1);
+        final nivelActual = nivelController.clamp(1, nivelesTotales).toInt();
         if (nivelActual != nivelController) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -498,7 +543,7 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
 
         final stockAsync = ref.watch(
           stockByCameraLevelProvider(
-            CameraLevelKey(numero: cameraNumero, nivel: nivelActual, pasillo: camera.pasillo),
+            CameraLevelKey(numero: camera.numero, nivel: nivelActual, pasillo: camera.pasillo),
           ),
         );
 
@@ -514,7 +559,7 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
-                  children: List.generate(camera.niveles, (index) {
+                  children: List.generate(nivelesTotales, (index) {
                     final nivel = index + 1;
                     final selected = nivelActual == nivel;
                     return ChoiceChip(
@@ -946,7 +991,7 @@ class _CameraCanvas extends StatelessWidget {
     return PaletPosition(
       stockDocId: entry.id,
       palletNumber: idPalet,
-      camara: (entry.data['CAMARA'] ?? camera.displayNumero).toString(),
+      camara: (entry.data['CAMARA'] ?? camera.numero).toString(),
       estanteria: estanteriaValue?.toString() ?? entry.coordinate.fila.toString(),
       posicion: entry.posicion,
       nivel: nivelInt,
