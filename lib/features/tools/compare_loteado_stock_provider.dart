@@ -10,6 +10,7 @@ class PaletDiffItem {
     this.idpalet,
     this.variedad,
     this.confeccion,
+    this.marca,
     this.camara,
     this.estanteria,
     this.nivel,
@@ -17,6 +18,7 @@ class PaletDiffItem {
     this.stockEstanteria,
     this.stockNivel,
     this.hueco,
+    required this.neto,
   });
 
   final String origen; // 'Loteado', 'Stock' o combinaciones
@@ -26,6 +28,7 @@ class PaletDiffItem {
   final String? idpalet;
   final String? variedad;
   final String? confeccion;
+  final String? marca;
   final String? camara;
   final String? estanteria;
   final String? nivel;
@@ -33,6 +36,7 @@ class PaletDiffItem {
   final String? stockEstanteria;
   final String? stockNivel;
   final String? hueco;
+  final num neto;
 }
 
 class PaletDiffGroup {
@@ -88,8 +92,11 @@ class CompareLoteadoStockResult {
     required this.case3StockOcupadoSinLoteado,
     required this.totalLoteado,
     required this.totalStockOcupado,
+    required this.totalNetoLoteado,
+    required this.totalNetoStockOcupado,
     required this.variedadOptions,
     required this.camaraOptions,
+    required this.marcaOptions,
     required this.diffRows,
   });
 
@@ -98,8 +105,11 @@ class CompareLoteadoStockResult {
   final List<PaletDiffItem> case3StockOcupadoSinLoteado;
   final int totalLoteado;
   final int totalStockOcupado;
+  final num totalNetoLoteado;
+  final num totalNetoStockOcupado;
   final List<String> variedadOptions;
   final List<String> camaraOptions;
+  final List<String> marcaOptions;
   final List<DiffRow> diffRows;
 }
 
@@ -155,6 +165,7 @@ final compareLoteadoStockProvider =
           _palletNumber(primaryDoc.id),
       variedad: _readString(primaryData, ['VARIEDAD', 'variedad']),
       confeccion: _readString(primaryData, ['CONFECCION', 'confeccion']),
+      marca: _readString(primaryData, ['MARCA', 'marca']),
       camara: _readString(primaryData, ['CAMARA', 'idcamara', 'camara']),
       estanteria:
           _readString(primaryData, ['ESTANTERIA', 'estanteria', 'pasillo']),
@@ -166,6 +177,7 @@ final compareLoteadoStockProvider =
       stockNivel: _readString(
           secondaryData, ['NIVEL', 'nivel', 'POSICION', 'posicion']),
       hueco: _readHueco(secondaryData ?? primaryData),
+      neto: _readNetoFromDoc(primaryDoc, esStock: origen == 'Stock'),
     );
   }
 
@@ -236,6 +248,19 @@ final compareLoteadoStockProvider =
         .followedBy(case3Items.expand<String?>((e) => [e.camara, e.stockCamara])),
   );
 
+  final marcaOptions = _buildOptions(
+    case1Items
+        .map((e) => e.marca)
+        .followedBy(case2Items.map((e) => e.marca))
+        .followedBy(case3Items.map((e) => e.marca)),
+  );
+
+  num _totalNetoFromDocs(
+    Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> docs, {
+    required bool esStock,
+  }) =>
+      docs.fold<num>(0, (acc, doc) => acc + _readNetoFromDoc(doc, esStock: esStock));
+
   String? _camaraForRow(PaletDiffItem item) => item.camara ?? item.stockCamara;
   String? _estanteriaForRow(PaletDiffItem item) =>
       item.estanteria ?? item.stockEstanteria;
@@ -292,8 +317,12 @@ final compareLoteadoStockProvider =
     case3StockOcupadoSinLoteado: case3Items,
     totalLoteado: loteadoDocs.length,
     totalStockOcupado: stockOcupadoDocs.length,
+    totalNetoLoteado: _totalNetoFromDocs(loteadoDocs, esStock: false),
+    totalNetoStockOcupado:
+        _totalNetoFromDocs(stockOcupadoDocs, esStock: true),
     variedadOptions: variedadOptions,
     camaraOptions: camaraOptions,
+    marcaOptions: marcaOptions,
     diffRows: diffRows,
   );
 });
@@ -366,4 +395,22 @@ String? _readHueco(Map<String, dynamic>? data) {
   final raw = _readString(data, ['Hueco', 'HUECO', 'hueco']);
   if (raw == null) return null;
   return raw.trim();
+}
+
+num _readNetoFromDoc(
+  QueryDocumentSnapshot<Map<String, dynamic>> doc, {
+  required bool esStock,
+}) {
+  final data = doc.data();
+  if (esStock) {
+    final v = data['NETO'];
+    if (v is num) return v;
+    if (v is String) return num.tryParse(v) ?? 0;
+    return 0;
+  } else {
+    final v = data['neto'];
+    if (v is num) return v;
+    if (v is String) return num.tryParse(v) ?? 0;
+    return 0;
+  }
 }
