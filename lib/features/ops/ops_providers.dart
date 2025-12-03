@@ -1,4 +1,5 @@
 // lib/features/ops/ops_providers.dart
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sansebas_stock/services/stock_service.dart';
 
@@ -33,6 +34,6 @@ final ubicacionPendienteProvider = StateProvider<Ubicacion?>((_) => null);
 
 /// Proveedor del servicio de stock
 final stockServiceProvider = Provider<StockService>((ref) {
-  // Si StockService no tiene constructor con args, deja así:
-  return StockService();
+  final db = FirebaseFirestore.instance;
+  return StockService(db);
 });
