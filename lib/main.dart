@@ -5,9 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'firebase_options.dart';
-import 'features/auth/login_screen.dart';
-import 'features/home/home_screen.dart';
-import 'features/splash/splash_screen.dart';
+import 'router/app_router.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -39,14 +37,10 @@ class SansebasStockApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return MaterialApp.router(
       title: 'Sansebas Stock',
       theme: buildTheme(),
-      home: const SplashScreen(),
-      routes: {
-        '/login': (context) => const LoginScreen(),
-        '/home': (context) => const HomeScreen(),
-      },
+      routerConfig: appRouter,
       debugShowCheckedModeBanner: false,
     );
   }

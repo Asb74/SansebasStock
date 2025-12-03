@@ -3,6 +3,7 @@ import 'dart:io' show Platform; // DESKTOP-GUARD
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../map/map_cameras_screen.dart';
 import '../ops/qr_scan_screen.dart';
@@ -30,7 +31,9 @@ class HomeScreen extends ConsumerWidget {
             tooltip: 'Cerrar sesión',
             onPressed: () async {
               await FirebaseAuth.instance.signOut();
-              Navigator.pushReplacementNamed(context, '/login');
+              if (context.mounted) {
+                context.go('/login');
+              }
             },
           ),
         ],
@@ -100,6 +103,15 @@ class HomeScreen extends ConsumerWidget {
                       ),
                     );
                   },
+                ),
+
+                // --- HERRAMIENTAS ---
+                _HomeActionCard(
+                  title: 'Herramientas',
+                  subtitle: 'Utilidades avanzadas de gestión',
+                  icon: Icons.build,
+                  color: theme.colorScheme.secondary,
+                  onTap: () => context.pushNamed('tools'),
                 ),
 
                 // --- AJUSTES ---

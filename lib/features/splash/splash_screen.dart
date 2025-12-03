@@ -3,11 +3,10 @@ import 'dart:developer' as dev;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../auth/auth_service.dart';
 import '../auth/session_store.dart';
-import '../auth/login_screen.dart';
-import '../home/home_screen.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -107,20 +106,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   void _goToLogin() {
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => const LoginScreen(),
-      ),
-    );
+    context.go('/login');
   }
 
   void _goToHome() {
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => const HomeScreen(),
-      ),
-    );
+    context.go('/');
   }
 
   @override
