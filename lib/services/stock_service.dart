@@ -1,7 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sansebas_stock/features/qr/qr_parser.dart';
 
 enum StockProcessAction { creadoOcupado, liberado, reubicado }
@@ -68,8 +67,7 @@ class StockLocation {
 }
 
 class StockService {
-  StockService({FirebaseFirestore? firestore})
-      : _db = firestore ?? FirebaseFirestore.instance;
+  StockService(this._db);
 
   final FirebaseFirestore _db;
 
@@ -86,7 +84,7 @@ class StockService {
     required int toNivel,
     required String usuario,
   }) async {
-    final db = FirebaseFirestore.instance;
+    final db = _db;
 
     // 1) Comprobar destino fuera de la transacción
     final destSnap = await db
@@ -370,7 +368,3 @@ class StockService {
     }
   }
 }
-
-final stockServiceProvider = Provider<StockService>((ref) {
-  return StockService(FirebaseFirestore.instance);
-});
