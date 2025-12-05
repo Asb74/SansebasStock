@@ -60,7 +60,7 @@ class _StockFilterPageState extends ConsumerState<StockFilterPage> {
     final totalsAsync = ref.watch(paletsTotalsProvider);
     final groupedAsync = ref.watch(paletsGroupByUbicacionProvider);
     final storageAsync = ref.watch(storageByCamaraProvider);
-    final filterOptionsAsync = ref.watch(paletFilterOptionsProvider);
+    final filterOptions = ref.watch(paletFilterOptionsProvider);
     final savedViewsAsync = ref.watch(savedPaletViewsProvider);
 
     final palets = paletsAsync.value ?? <Palet>[];
@@ -74,8 +74,6 @@ class _StockFilterPageState extends ConsumerState<StockFilterPage> {
       storage: storageInfo,
       palets: palets,
     );
-
-    final filterOptions = filterOptionsAsync.whenOrNull(data: (data) => data);
 
     return Scaffold(
       appBar: AppBar(
