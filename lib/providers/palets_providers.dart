@@ -56,13 +56,13 @@ List<Palet> _applyFilters(List<Palet> palets, PaletFilters filters) {
 
   // Mantenemos el mismo orden que antes: CAMARA, ESTANTERIA, NIVEL, POSICION
   filtered.sort((a, b) {
-    final c = (a.camara ?? '').compareTo(b.camara ?? '');
+    final c = a.camara.compareTo(b.camara);
     if (c != 0) return c;
-    final e = (a.estanteria ?? '').compareTo(b.estanteria ?? '');
+    final e = a.estanteria.compareTo(b.estanteria);
     if (e != 0) return e;
-    final n = (a.nivel ?? '').compareTo(b.nivel ?? '');
+    final n = a.nivel.compareTo(b.nivel);
     if (n != 0) return n;
-    return (a.posicion ?? '').compareTo(b.posicion ?? '');
+    return a.posicion.compareTo(b.posicion);
   });
 
   return filtered;
