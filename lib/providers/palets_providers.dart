@@ -116,11 +116,6 @@ final paletsGroupByUbicacionProvider =
   return paletsAsync.whenData(groupPaletsPorUbicacion);
 });
 
-/// Valores únicos para poblar los dropdowns de filtros.
-/// De momento dejamos esta lógica como estaba (limit 500),
-/// porque es una sola lectura "gorda" cuando entras al informe.
-/// Más adelante, si quieres, la podemos derivar también de
-/// `paletsBaseStreamProvider` para que no haga ningún .get() extra.
 class PaletFilterOptions {
   PaletFilterOptions({
     required this.camaras,
@@ -141,10 +136,15 @@ class PaletFilterOptions {
   final List<String> marcas;
 }
 
-final paletFilterOptionsProvider =
-    FutureProvider<PaletFilterOptions>((ref) async {
-  final firestore = FirebaseFirestore.instance;
-  final snapshot = await firestore.collection('Stock').limit(500).get();
+final paletFilterOptionsProvider = Provider<PaletFilterOptions?>((ref) {
+  final baseAsync = ref.watch(paletsBaseStreamProvider);
+  final filters = ref.watch(paletFiltersProvider);
+  final palets = baseAsync.value;
+
+  if (palets == null) return null;
+
+  final filtered = _applyFilters(palets, filters);
+
   final camaras = <String>{};
   final estanterias = <String>{};
   final huecos = <String>{};
@@ -153,23 +153,21 @@ final paletFilterOptionsProvider =
   final calibres = <String>{};
   final marcas = <String>{};
 
-  for (final doc in snapshot.docs) {
-    final data = doc.data();
-    void addString(String key, Set<String> target) {
-      final raw = data[key];
-      if (raw == null) return;
-      final value = raw.toString().trim();
-      if (value.isEmpty) return;
-      target.add(value);
+  void addValue(String value, Set<String> target) {
+    final normalized = value.trim();
+    if (normalized.isNotEmpty) {
+      target.add(normalized);
     }
+  }
 
-    addString('CAMARA', camaras);
-    addString('ESTANTERIA', estanterias);
-    addString('HUECO', huecos);
-    addString('CULTIVO', cultivos);
-    addString('VARIEDAD', variedades);
-    addString('CALIBRE', calibres);
-    addString('MARCA', marcas);
+  for (final palet in filtered) {
+    addValue(palet.camara, camaras);
+    addValue(palet.estanteria, estanterias);
+    addValue(palet.hueco, huecos);
+    addValue(palet.cultivo, cultivos);
+    addValue(palet.variedad, variedades);
+    addValue(palet.calibre, calibres);
+    addValue(palet.marca, marcas);
   }
 
   List<String> sortSet(Set<String> set) => set.toList()
