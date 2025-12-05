@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../models/camera_model.dart';
 import '../../providers/camera_providers.dart';
 import 'widgets/pallet_tile.dart';
+import 'providers/variedad_colors_provider.dart';
 
 int labelForPosition({
   required bool isLeftSide,
@@ -590,6 +591,10 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                           ),
                         ),
                         data: (occupied) {
+                          final coloresPorVariedad = ref
+                              .watch(variedadColorsProvider)
+                              .maybeWhen(data: (data) => data, orElse: () => const <String, Color>{});
+
                           final filasPorLado = camera.filas;
                           final colsPorLado = camera.posicionesMax;
 
@@ -630,6 +635,7 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                             ref: ref,
                             camera: camera,
                             occupied: occupied,
+                            coloresPorVariedad: coloresPorVariedad,
                             nivel: nivelActual,
                             cell: cell,
                             gap: gap,
@@ -926,6 +932,7 @@ class _CameraCanvas extends StatelessWidget {
     required this.ref,
     required this.camera,
     required this.occupied,
+    required this.coloresPorVariedad,
     required this.nivel,
     required this.cell,
     required this.gap,
@@ -937,6 +944,7 @@ class _CameraCanvas extends StatelessWidget {
   final WidgetRef ref;
   final CameraModel camera;
   final Map<StorageSlotCoordinate, StockEntry> occupied;
+  final Map<String, Color> coloresPorVariedad;
   final int nivel;
   final double cell;
   final double gap;
@@ -1017,6 +1025,15 @@ class _CameraCanvas extends StatelessWidget {
     return digits.substring(digits.length - 10);
   }
 
+  Color? _colorForEntry(StockEntry? entry) {
+    if (entry == null) return null;
+    final data = entry.data;
+    final variedad =
+        (data['Variedad'] ?? data['VARIEDAD'] ?? '').toString().toUpperCase().trim();
+    if (variedad.isEmpty) return null;
+    return coloresPorVariedad[variedad];
+  }
+
   Widget _buildHeaderRow(TextStyle style) {
     final children = <Widget>[];
 
@@ -1092,10 +1109,12 @@ class _CameraCanvas extends StatelessWidget {
   ) {
     final ocupado = entry != null;
     final digits = entry != null ? _digitsForEntry(entry) : null;
+    final color = ocupado ? (_colorForEntry(entry) ?? const Color(0xFFF2F3F5)) : null;
 
     Widget baseTile = PalletTile(
       ocupado: ocupado,
       p: digits,
+      color: color,
     );
 
     if (ocupado && onEntryTap != null) {
