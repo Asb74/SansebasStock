@@ -10,42 +10,15 @@ import '../models/palet_filters.dart';
 final paletFiltersProvider =
     StateProvider<PaletFilters>((ref) => const PaletFilters());
 
-/// Stream de palets filtrados según los filtros activos.
-final paletsStreamProvider = StreamProvider<List<Palet>>((ref) {
-  final filters = ref.watch(paletFiltersProvider);
+/// Stream base de todos los palets de Stock (sin filtros de usuario).
+/// Aquí es donde realmente se hacen las lecturas a Firestore.
+/// A partir de este stream, todo lo demás (filtros, totales, agrupados)
+/// se hace en memoria.
+final paletsBaseStreamProvider = StreamProvider<List<Palet>>((ref) {
   final firestore = FirebaseFirestore.instance;
 
-  Query<Map<String, dynamic>> query = firestore.collection('Stock');
-
-  if (filters.camara != null && filters.camara!.isNotEmpty) {
-    query = query.where('CAMARA', isEqualTo: filters.camara);
-  }
-  if (filters.estanteria != null && filters.estanteria!.isNotEmpty) {
-    query = query.where('ESTANTERIA', isEqualTo: filters.estanteria);
-  }
-  if (filters.hueco != null && filters.hueco!.isNotEmpty) {
-    query = query.where('HUECO', isEqualTo: filters.hueco);
-  }
-  if (filters.cultivo != null && filters.cultivo!.isNotEmpty) {
-    query = query.where('CULTIVO', isEqualTo: filters.cultivo);
-  }
-  if (filters.variedad != null && filters.variedad!.isNotEmpty) {
-    query = query.where('VARIEDAD', isEqualTo: filters.variedad);
-  }
-  if (filters.calibre != null && filters.calibre!.isNotEmpty) {
-    query = query.where('CALIBRE', isEqualTo: filters.calibre);
-  }
-  if (filters.marca != null && filters.marca!.isNotEmpty) {
-    query = query.where('MARCA', isEqualTo: filters.marca);
-  }
-  if (filters.netoMin != null) {
-    query = query.where('NETO', isGreaterThanOrEqualTo: filters.netoMin);
-  }
-  if (filters.netoMax != null) {
-    query = query.where('NETO', isLessThanOrEqualTo: filters.netoMax);
-  }
-
-  query = query
+  final query = firestore
+      .collection('Stock')
       .orderBy('CAMARA')
       .orderBy('ESTANTERIA')
       .orderBy('NIVEL')
@@ -56,6 +29,57 @@ final paletsStreamProvider = StreamProvider<List<Palet>>((ref) {
         .map((doc) => Palet.fromDoc(doc.id, doc.data()))
         .toList(growable: false);
   });
+});
+
+/// Aplica los filtros de PaletFilters sobre una lista de Palet en memoria.
+List<Palet> _applyFilters(List<Palet> palets, PaletFilters filters) {
+  bool matches(String? filter, String? value) {
+    if (filter == null || filter.isEmpty) return true;
+    if (value == null) return false;
+    return value == filter;
+  }
+
+  final filtered = palets.where((p) {
+    if (!matches(filters.camara, p.camara)) return false;
+    if (!matches(filters.estanteria, p.estanteria)) return false;
+    if (!matches(filters.hueco, p.hueco)) return false;
+    if (!matches(filters.cultivo, p.cultivo)) return false;
+    if (!matches(filters.variedad, p.variedad)) return false;
+    if (!matches(filters.calibre, p.calibre)) return false;
+    if (!matches(filters.marca, p.marca)) return false;
+
+    if (filters.netoMin != null && p.neto < filters.netoMin!) return false;
+    if (filters.netoMax != null && p.neto > filters.netoMax!) return false;
+
+    return true;
+  }).toList(growable: false);
+
+  // Mantenemos el mismo orden que antes: CAMARA, ESTANTERIA, NIVEL, POSICION
+  filtered.sort((a, b) {
+    final c = (a.camara ?? '').compareTo(b.camara ?? '');
+    if (c != 0) return c;
+    final e = (a.estanteria ?? '').compareTo(b.estanteria ?? '');
+    if (e != 0) return e;
+    final n = (a.nivel ?? '').compareTo(b.nivel ?? '');
+    if (n != 0) return n;
+    return (a.posicion ?? '').compareTo(b.posicion ?? '');
+  });
+
+  return filtered;
+}
+
+/// Lista de palets ya filtrada según los filtros activos, envuelta en AsyncValue.
+/// OJO: este provider ya NO habla con Firestore directamente.
+/// Sólo escucha al stream base y aplica filtros en memoria.
+///
+/// Desde fuera, `ref.watch(paletsStreamProvider)` sigue devolviendo
+/// AsyncValue<List<Palet>>, igual que antes, así que `StockFilterPage`
+/// no necesita cambios.
+final paletsStreamProvider = Provider<AsyncValue<List<Palet>>>((ref) {
+  final baseAsync = ref.watch(paletsBaseStreamProvider);
+  final filters = ref.watch(paletFiltersProvider);
+
+  return baseAsync.whenData((palets) => _applyFilters(palets, filters));
 });
 
 /// Totales calculados en cliente para evitar consultas agregadas.
@@ -93,6 +117,10 @@ final paletsGroupByUbicacionProvider =
 });
 
 /// Valores únicos para poblar los dropdowns de filtros.
+/// De momento dejamos esta lógica como estaba (limit 500),
+/// porque es una sola lectura "gorda" cuando entras al informe.
+/// Más adelante, si quieres, la podemos derivar también de
+/// `paletsBaseStreamProvider` para que no haga ningún .get() extra.
 class PaletFilterOptions {
   PaletFilterOptions({
     required this.camaras,
