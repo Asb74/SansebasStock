@@ -37,5 +37,7 @@ final variedadColorsProvider = FutureProvider<Map<String, Color>>((ref) async {
     result[variedad] = colorValue;
   }
 
+  debugPrint('MVariedad colors loaded: ${result.length} items. Sample keys: ${result.keys.take(5).join(', ')}');
+
   return result;
 });

@@ -591,10 +591,6 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                           ),
                         ),
                         data: (occupied) {
-                          final coloresPorVariedad = ref
-                              .watch(variedadColorsProvider)
-                              .maybeWhen(data: (data) => data, orElse: () => const <String, Color>{});
-
                           final filasPorLado = camera.filas;
                           final colsPorLado = camera.posicionesMax;
 
@@ -635,7 +631,6 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                             ref: ref,
                             camera: camera,
                             occupied: occupied,
-                            coloresPorVariedad: coloresPorVariedad,
                             nivel: nivelActual,
                             cell: cell,
                             gap: gap,
@@ -932,7 +927,6 @@ class _CameraCanvas extends StatelessWidget {
     required this.ref,
     required this.camera,
     required this.occupied,
-    required this.coloresPorVariedad,
     required this.nivel,
     required this.cell,
     required this.gap,
@@ -944,7 +938,6 @@ class _CameraCanvas extends StatelessWidget {
   final WidgetRef ref;
   final CameraModel camera;
   final Map<StorageSlotCoordinate, StockEntry> occupied;
-  final Map<String, Color> coloresPorVariedad;
   final int nivel;
   final double cell;
   final double gap;
@@ -1028,10 +1021,23 @@ class _CameraCanvas extends StatelessWidget {
   Color? _colorForEntry(StockEntry? entry) {
     if (entry == null) return null;
     final data = entry.data;
-    final variedad =
-        (data['Variedad'] ?? data['VARIEDAD'] ?? '').toString().toUpperCase().trim();
-    if (variedad.isEmpty) return null;
-    return coloresPorVariedad[variedad];
+    final coloresAsync = ref.watch(variedadColorsProvider);
+    final hueco = (data['HUECO'] ?? '').toString().toUpperCase().trim();
+    final esOcupado = hueco == 'OCUPADO';
+
+    return coloresAsync.when(
+      loading: () => const Color(0xFFF2F3F5),
+      error: (_, __) => const Color(0xFFF2F3F5),
+      data: (colores) {
+        final variedad =
+            (data['VARIEDAD'] ?? data['Variedad'] ?? '').toString().toUpperCase().trim();
+        debugPrint('Variedad stock: "$variedad"  color: ${colores[variedad]}');
+
+        if (!esOcupado) return const Color(0xFFF2F3F5);
+
+        return colores[variedad] ?? const Color(0xFFF2F3F5);
+      },
+    );
   }
 
   Widget _buildHeaderRow(TextStyle style) {
