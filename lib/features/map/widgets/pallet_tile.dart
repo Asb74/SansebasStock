@@ -5,15 +5,20 @@ class PalletTile extends StatelessWidget {
     super.key,
     required this.ocupado,
     this.p,
+    this.color,
   });
 
   final bool ocupado;
   final String? p;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    final background = ocupado ? const Color(0xFF8BC34A) : const Color(0xFFF2F3F5);
-    final border = ocupado ? const Color(0xFF5E8E2E) : const Color(0xFFB9C1CC);
+    const libreColor = Color(0xFFF2F3F5);
+    final background = color ?? (ocupado ? const Color(0xFF8BC34A) : libreColor);
+    final border = ocupado
+        ? (color ?? const Color(0xFF5E8E2E))
+        : const Color(0xFFB9C1CC);
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(6),
