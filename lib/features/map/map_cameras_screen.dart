@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/camera_model.dart';
 import '../../providers/camera_providers.dart';
+import '../../providers/palets_providers.dart';
 import 'camera_map_screen.dart';
 
 class MapCamerasScreen extends ConsumerWidget {
@@ -48,6 +49,9 @@ class MapCamerasScreen extends ConsumerWidget {
                 subtitle: Text(subtitle),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
+                  ref.read(mapaCamaraSeleccionadaProvider.notifier).state =
+                      camera.displayNumero;
+                  ref.read(mapaNivelSeleccionadoProvider.notifier).state = 1;
                   // ANTES:
                   // context.push(
                   //   '/map/${camera.displayNumero}',

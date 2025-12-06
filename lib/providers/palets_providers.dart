@@ -6,6 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/palet.dart';
 import '../models/palet_filters.dart';
 
+/// Cámara seleccionada en la pantalla de mapa (ej: "01", "02"...)
+final mapaCamaraSeleccionadaProvider = StateProvider<String?>((ref) => null);
+
+/// Nivel seleccionado (1, 2, 3...)
+final mapaNivelSeleccionadoProvider = StateProvider<int?>((ref) => null);
+
 /// Proveedor de filtros activos seleccionados por el usuario.
 final paletFiltersProvider =
     StateProvider<PaletFilters>((ref) => const PaletFilters());
@@ -80,6 +86,28 @@ final paletsStreamProvider = Provider<AsyncValue<List<Palet>>>((ref) {
   final filters = ref.watch(paletFiltersProvider);
 
   return baseAsync.whenData((palets) => _applyFilters(palets, filters));
+});
+
+/// Palets a dibujar en el mapa, filtrados EN MEMORIA a partir del stream base
+final paletsMapaProvider = Provider<AsyncValue<List<Palet>>>((ref) {
+  final baseAsync = ref.watch(paletsBaseStreamProvider);
+  final camara = ref.watch(mapaCamaraSeleccionadaProvider);
+  final nivel = ref.watch(mapaNivelSeleccionadoProvider);
+
+  return baseAsync.whenData((palets) {
+    return palets.where((p) {
+      if (camara != null && camara.isNotEmpty && p.camara != camara) {
+        return false;
+      }
+      if (nivel != null) {
+        if (p.nivel != nivel) return false;
+      }
+
+      if (p.hueco.toLowerCase() != 'ocupado') return false;
+
+      return true;
+    }).toList();
+  });
 });
 
 /// Totales calculados en cliente para evitar consultas agregadas.
