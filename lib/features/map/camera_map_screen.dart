@@ -1018,26 +1018,27 @@ class _CameraCanvas extends StatelessWidget {
     return digits.substring(digits.length - 10);
   }
 
-  Color? _colorForEntry(StockEntry? entry) {
+  Color? _colorForEntry(StockEntry? entry, Map<String, Color> colores) {
     if (entry == null) return null;
     final data = entry.data;
-    final coloresAsync = ref.watch(variedadColorsProvider);
     final hueco = (data['HUECO'] ?? '').toString().toUpperCase().trim();
     final esOcupado = hueco == 'OCUPADO';
 
-    return coloresAsync.when(
-      loading: () => const Color(0xFFF2F3F5),
-      error: (_, __) => const Color(0xFFF2F3F5),
-      data: (colores) {
-        final variedad =
-            (data['VARIEDAD'] ?? data['Variedad'] ?? '').toString().toUpperCase().trim();
-        debugPrint('Variedad stock: "$variedad"  color: ${colores[variedad]}');
+    if (!esOcupado) return const Color(0xFFF2F3F5);
 
-        if (!esOcupado) return const Color(0xFFF2F3F5);
+    final key = (data['variedad'] ?? data['VARIEDAD'] ?? data['Variedad'] ?? '')
+        .toString()
+        .toUpperCase()
+        .trim();
 
-        return colores[variedad] ?? const Color(0xFFF2F3F5);
-      },
-    );
+    Color colorPalet;
+    if (colores.containsKey(key)) {
+      colorPalet = colores[key]!;
+    } else {
+      colorPalet = Colors.grey.shade400;
+    }
+
+    return colorPalet;
   }
 
   Widget _buildHeaderRow(TextStyle style) {
@@ -1114,8 +1115,9 @@ class _CameraCanvas extends StatelessWidget {
     StockEntry? entry,
   ) {
     final ocupado = entry != null;
+    final colores = ref.watch(variedadColorsProvider).value ?? {};
     final digits = entry != null ? _digitsForEntry(entry) : null;
-    final color = ocupado ? (_colorForEntry(entry) ?? const Color(0xFFF2F3F5)) : null;
+    final color = ocupado ? _colorForEntry(entry, colores) : null;
 
     Widget baseTile = PalletTile(
       ocupado: ocupado,
