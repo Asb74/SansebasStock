@@ -4,12 +4,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:sansebas_stock/features/ops/ops_providers.dart';
 import 'package:sansebas_stock/services/stock_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/camera_model.dart';
+import '../../models/palet.dart';
 import '../../providers/camera_providers.dart';
+import '../../providers/palets_providers.dart';
 import 'widgets/pallet_tile.dart';
 import 'providers/variedad_colors_provider.dart';
 
@@ -39,9 +40,6 @@ int positionIndexForLookup({
     aisleIsCentral: aisleIsCentral,
   );
 }
-
-final selectedLevelProvider =
-    StateProvider.autoDispose.family<int, String>((ref, numero) => 1);
 
 class PalletDragData {
   final StockEntry entry;
@@ -118,6 +116,67 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
     _animCtrl.dispose();
     _ivController.dispose();
     super.dispose();
+  }
+
+  StorageSide _sideFromEstanteria(String rawEstanteria) {
+    final upper = rawEstanteria.toUpperCase();
+    if (upper.endsWith('I') || upper.endsWith('L')) {
+      return StorageSide.left;
+    }
+    if (upper.endsWith('D') || upper.endsWith('R')) {
+      return StorageSide.right;
+    }
+    return StorageSide.right;
+  }
+
+  StorageSlotCoordinate? _coordinateFromPalet(Palet palet, CameraPasillo pasillo) {
+    final rawFila = palet.estanteria;
+    final digits = RegExp(r'\d+').firstMatch(rawFila)?.group(0);
+    final fila = int.tryParse(digits ?? rawFila);
+    if (fila == null || fila <= 0) return null;
+
+    final pos = palet.posicion;
+    if (pos <= 0) return null;
+
+    final side = pasillo == CameraPasillo.central
+        ? _sideFromEstanteria(rawFila)
+        : StorageSide.right;
+
+    return StorageSlotCoordinate(side: side, fila: fila, posicion: pos);
+  }
+
+  Map<StorageSlotCoordinate, StockEntry> _mapPaletsToEntries(
+    List<Palet> palets,
+    CameraModel camera,
+  ) {
+    final entries = <StorageSlotCoordinate, StockEntry>{};
+
+    for (final palet in palets) {
+      final coordinate = _coordinateFromPalet(palet, camera.pasillo);
+      if (coordinate == null) continue;
+
+      entries[coordinate] = StockEntry(
+        id: palet.id,
+        coordinate: coordinate,
+        data: {
+          'CAMARA': palet.camara,
+          'ESTANTERIA': palet.estanteria,
+          'NIVEL': palet.nivel,
+          'POSICION': palet.posicion,
+          'HUECO': palet.hueco,
+          'CULTIVO': palet.cultivo,
+          'VARIEDAD': palet.variedad,
+          'CALIBRE': palet.calibre,
+          'MARCA': palet.marca,
+          'NETO': palet.neto,
+          'LINEA': palet.linea,
+          'P': palet.codigo,
+        },
+        palletCode: palet.codigo,
+      );
+    }
+
+    return entries;
   }
 
   void _storeMatrix() {
@@ -285,9 +344,6 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
     }
 
     final StockService stockService = ref.read(stockServiceProvider);
-    final provider = stockByCameraLevelProvider(
-      CameraLevelKey(numero: camera.displayNumero, nivel: nivel, pasillo: camera.pasillo),
-    );
 
     final entry = from.entry;
     final nivelValue = entry.data['NIVEL'];
@@ -328,9 +384,9 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
         ),
       );
 
-      ref.invalidate(provider);
+      ref.invalidate(paletsBaseStreamProvider);
     } catch (e) {
-      ref.invalidate(provider);
+      ref.invalidate(paletsBaseStreamProvider);
       final message = e.toString().replaceFirst('Exception: ', '');
       messenger.showSnackBar(
         SnackBar(
@@ -532,22 +588,23 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
         }
 
         final cameraNumero = camera.displayNumero;
-        final nivelController = ref.watch(selectedLevelProvider(cameraNumero));
+        final cameraNotifier = ref.read(mapaCamaraSeleccionadaProvider.notifier);
+        if (cameraNotifier.state != cameraNumero) {
+          cameraNotifier.state = cameraNumero;
+        }
+
+        final nivelSeleccionado = ref.watch(mapaNivelSeleccionadoProvider);
         final nivelActual =
-            nivelController.clamp(1, math.max(camera.niveles, 1)).toInt();
-        if (nivelActual != nivelController) {
+            (nivelSeleccionado ?? 1).clamp(1, math.max(camera.niveles, 1)).toInt();
+        if (nivelActual != nivelSeleccionado) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              ref.read(selectedLevelProvider(cameraNumero).notifier).state = nivelActual;
+              ref.read(mapaNivelSeleccionadoProvider.notifier).state = nivelActual;
             }
           });
         }
 
-        final stockAsync = ref.watch(
-          stockByCameraLevelProvider(
-            CameraLevelKey(numero: cameraNumero, nivel: nivelActual, pasillo: camera.pasillo),
-          ),
-        );
+        final paletsAsync = ref.watch(paletsMapaProvider);
 
         return Scaffold(
           appBar: AppBar(title: Text('Cámara ${cameraNumero}')),
@@ -569,7 +626,7 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                       selected: selected,
                       onSelected: (_) {
                         if (!selected) {
-                          ref.read(selectedLevelProvider(cameraNumero).notifier).state = nivel;
+                          ref.read(mapaNivelSeleccionadoProvider.notifier).state = nivel;
                         }
                       },
                     );
@@ -579,7 +636,7 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
-                      return stockAsync.when(
+                      return paletsAsync.when(
                         loading: () => const Center(child: CircularProgressIndicator()),
                         error: (error, __) => Center(
                           child: Padding(
@@ -590,11 +647,13 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                             ),
                           ),
                         ),
-                        data: (occupied) {
+                        data: (palets) {
                           final coloresVariedad =
                               ref.watch(variedadColorsProvider).value ?? {};
                           final filasPorLado = camera.filas;
                           final colsPorLado = camera.posicionesMax;
+
+                          final occupied = _mapPaletsToEntries(palets, camera);
 
                           final canvasSize = _CameraCanvas.computeSize(
                             pasillo: camera.pasillo,
