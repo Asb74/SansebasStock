@@ -11,6 +11,7 @@ import '../../models/camera_model.dart';
 import '../../models/palet.dart';
 import '../../providers/camera_providers.dart';
 import '../../providers/palets_providers.dart';
+import '../ops/ops_providers.dart';
 import 'widgets/pallet_tile.dart';
 import 'providers/variedad_colors_provider.dart';
 
