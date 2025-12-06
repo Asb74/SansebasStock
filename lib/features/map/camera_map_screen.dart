@@ -591,6 +591,8 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                           ),
                         ),
                         data: (occupied) {
+                          final coloresVariedad =
+                              ref.watch(variedadColorsProvider).value ?? {};
                           final filasPorLado = camera.filas;
                           final colsPorLado = camera.posicionesMax;
 
@@ -696,7 +698,11 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                                 ),
                               ),
                               Positioned.fill(
-                                child: DraggableLegend(key: _legendKey),
+                                child: DraggableLegend(
+                                  key: _legendKey,
+                                  palets: occupied.values.toList(),
+                                  coloresVariedad: coloresVariedad,
+                                ),
                               ),
                             ],
                           );
@@ -741,8 +747,22 @@ class _ZoomButton extends StatelessWidget {
   }
 }
 
+class LegendItem {
+  final String variedad;
+  final Color color;
+
+  const LegendItem({required this.variedad, required this.color});
+}
+
 class DraggableLegend extends StatefulWidget {
-  const DraggableLegend({super.key});
+  const DraggableLegend({
+    super.key,
+    required this.palets,
+    required this.coloresVariedad,
+  });
+
+  final List<StockEntry> palets;
+  final Map<String, Color> coloresVariedad;
 
   @override
   State<DraggableLegend> createState() => _DraggableLegendState();
@@ -753,7 +773,8 @@ class _DraggableLegendState extends State<DraggableLegend> {
   bool visible = true;
   bool faded = false;
 
-  static const Size _legendSize = Size(180, 120);
+  static const double _legendWidth = 200;
+  static const Size _legendSize = Size(_legendWidth, 260);
 
   @override
   void initState() {
@@ -829,41 +850,16 @@ class _DraggableLegendState extends State<DraggableLegend> {
           borderRadius: BorderRadius.circular(12),
           color: Theme.of(context).cardColor,
           child: ConstrainedBox(
-            constraints: BoxConstraints.tight(_legendSize),
+            constraints: const BoxConstraints(
+              minWidth: _legendWidth,
+              maxWidth: _legendWidth,
+            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _LegendDot(color: const Color(0xFFF2F3F5)),
-                      const SizedBox(width: 8),
-                      const Text('Libre'),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _LegendDot(color: const Color(0xFF8BC34A)),
-                      const SizedBox(width: 8),
-                      const Text('Ocupado'),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: IconButton(
-                      onPressed: _toggleVisibility,
-                      icon: const Icon(Icons.close, size: 18),
-                      padding: EdgeInsets.zero,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                ],
+              child: _LegendPanel(
+                palets: widget.palets,
+                coloresVariedad: widget.coloresVariedad,
+                onClose: _toggleVisibility,
               ),
             ),
           ),
@@ -918,6 +914,107 @@ class _LegendDot extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: Colors.black12),
       ),
+    );
+  }
+}
+
+class _LegendPanel extends StatelessWidget {
+  const _LegendPanel({
+    required this.palets,
+    required this.coloresVariedad,
+    required this.onClose,
+  });
+
+  final List<StockEntry> palets;
+  final Map<String, Color> coloresVariedad;
+  final VoidCallback onClose;
+
+  List<LegendItem> _buildLegendItems() {
+    final itemsByVariedad = <String, LegendItem>{};
+
+    for (final palet in palets) {
+      final hueco = (palet.data['HUECO'] ?? '').toString().toUpperCase().trim();
+      if (hueco != 'OCUPADO') continue;
+
+      final variedad = (palet.data['variedad'] ??
+              palet.data['VARIEDAD'] ??
+              palet.data['Variedad'] ??
+              '')
+          .toString()
+          .toUpperCase()
+          .trim();
+
+      if (variedad.isEmpty) continue;
+
+      final color = coloresVariedad[variedad] ?? Colors.grey.shade400;
+      itemsByVariedad[variedad] = LegendItem(variedad: variedad, color: color);
+    }
+
+    final items = itemsByVariedad.values.toList()
+      ..sort((a, b) => a.variedad.compareTo(b.variedad));
+
+    return items;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final legendItems = _buildLegendItems();
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            _LegendDot(color: Color(0xFFF2F3F5)),
+            SizedBox(width: 8),
+            Text('Libre'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: const [
+            _LegendDot(color: Color(0xFF8BC34A)),
+            SizedBox(width: 8),
+            Text('Ocupado'),
+          ],
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Variedades:',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        ...legendItems.map(
+          (item) => Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _LegendDot(color: item.color),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    item.variedad,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: IconButton(
+            onPressed: onClose,
+            icon: const Icon(Icons.close, size: 18),
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+          ),
+        ),
+      ],
     );
   }
 }
