@@ -29,15 +29,15 @@ final variedadColorsProvider = FutureProvider<Map<String, Color>>((ref) async {
 
   for (final doc in snapshot.docs) {
     final data = doc.data();
-    final variedad = (data['Variedad'] ?? data['VARIEDAD'] ?? '').toString().toUpperCase().trim();
-    final colorValue = accessColorToFlutter(data['COLOR']?.toString());
+    final variedad = (data['variedad'] ?? '').toString().toUpperCase().trim();
+    final colorValue = accessColorToFlutter(data['color']?.toString());
 
     if (variedad.isEmpty || colorValue == null) continue;
 
     result[variedad] = colorValue;
   }
 
-  debugPrint('MVariedad colors loaded: ${result.length} items. Sample keys: ${result.keys.take(5).join(', ')}');
+  debugPrint('MVariedad colors loaded: ${result.length}');
 
   return result;
 });
