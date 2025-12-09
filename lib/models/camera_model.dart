@@ -27,6 +27,38 @@ extension CameraPasilloX on CameraPasillo {
   }
 }
 
+enum CameraTipo { expedicion, recepcion }
+
+extension CameraTipoX on CameraTipo {
+  String get label {
+    switch (this) {
+      case CameraTipo.expedicion:
+        return 'Expedición';
+      case CameraTipo.recepcion:
+        return 'Recepción';
+    }
+  }
+
+  String get firestoreValue {
+    switch (this) {
+      case CameraTipo.expedicion:
+        return 'expedicion';
+      case CameraTipo.recepcion:
+        return 'recepcion';
+    }
+  }
+
+  static CameraTipo fromFirestore(String? raw) {
+    switch ((raw ?? '').toLowerCase()) {
+      case 'recepcion':
+        return CameraTipo.recepcion;
+      case 'expedicion':
+      default:
+        return CameraTipo.expedicion;
+    }
+  }
+}
+
 class CameraModel extends Equatable {
   const CameraModel({
     required this.id,
@@ -35,6 +67,7 @@ class CameraModel extends Equatable {
     required this.niveles,
     required this.pasillo,
     required this.posicionesMax,
+    required this.tipo,
     this.createdAt,
     this.updatedAt,
   });
@@ -48,6 +81,7 @@ class CameraModel extends Equatable {
     final posicionesMax =
         _readPositiveInt(data['posicionesMax'] ?? data['HUECOS_POR_ESTANTERIA']);
     final pasillo = CameraPasilloX.fromString(data['pasillo']?.toString());
+    final tipo = CameraTipoX.fromFirestore(data['tipo'] as String?);
 
     DateTime? createdAt;
     final rawCreated = data['createdAt'];
@@ -67,6 +101,7 @@ class CameraModel extends Equatable {
       niveles: niveles,
       pasillo: pasillo,
       posicionesMax: posicionesMax,
+      tipo: tipo,
       createdAt: createdAt,
       updatedAt: updatedAt,
     );
@@ -78,6 +113,7 @@ class CameraModel extends Equatable {
   final int niveles;
   final CameraPasillo pasillo;
   final int posicionesMax;
+  final CameraTipo tipo;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -97,6 +133,7 @@ class CameraModel extends Equatable {
       'niveles': niveles,
       'pasillo': pasillo.asFirestoreValue,
       'posicionesMax': posicionesMax,
+      'tipo': tipo.firestoreValue,
       if (createdAt != null) 'createdAt': Timestamp.fromDate(createdAt!),
       if (updatedAt != null) 'updatedAt': Timestamp.fromDate(updatedAt!),
     };
@@ -109,6 +146,7 @@ class CameraModel extends Equatable {
     int? niveles,
     CameraPasillo? pasillo,
     int? posicionesMax,
+    CameraTipo? tipo,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -119,6 +157,7 @@ class CameraModel extends Equatable {
       niveles: niveles ?? this.niveles,
       pasillo: pasillo ?? this.pasillo,
       posicionesMax: posicionesMax ?? this.posicionesMax,
+      tipo: tipo ?? this.tipo,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -156,6 +195,7 @@ class CameraModel extends Equatable {
         niveles,
         pasillo,
         posicionesMax,
+        tipo,
         createdAt,
         updatedAt,
       ];
