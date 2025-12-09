@@ -5,6 +5,8 @@ import '../features/auth/login_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/tools/compare_loteado_stock_screen.dart';
+import '../features/tools/assign_storage/assign_storage_cameras_screen.dart';
+import '../features/tools/assign_storage/assign_storage_rows_screen.dart';
 import '../features/tools/tools_screen.dart';
 
 /// Configuración principal de rutas para SansebasStock.
@@ -43,6 +45,22 @@ final GoRouter appRouter = GoRouter(
           name: 'tools-compare',
           builder: (BuildContext context, GoRouterState state) =>
               const CompareLoteadoStockScreen(),
+        ),
+        GoRoute(
+          path: 'assign-storage',
+          name: 'tools-assign-storage',
+          builder: (BuildContext context, GoRouterState state) =>
+              const AssignStorageCamerasScreen(),
+          routes: [
+            GoRoute(
+              path: ':cameraId',
+              name: 'tools-assign-storage-camera',
+              builder: (BuildContext context, GoRouterState state) {
+                final cameraId = state.pathParameters['cameraId'] ?? '';
+                return AssignStorageRowsScreen(cameraId: cameraId);
+              },
+            ),
+          ],
         ),
       ],
     ),

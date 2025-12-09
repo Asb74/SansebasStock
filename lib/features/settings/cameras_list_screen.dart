@@ -28,8 +28,9 @@ class CamerasListScreen extends ConsumerWidget {
               final totalEstanterias = camera.pasillo == CameraPasillo.central
                   ? camera.filas * 2
                   : camera.filas;
+              final tipoLabel = camera.tipo.label;
               final subtitle =
-                  'Estanterías: $totalEstanterias · Niveles: ${camera.niveles} · Posiciones: ${camera.posicionesMax} · Pasillo: ${camera.pasillo.label}';
+                  'Tipo: $tipoLabel · Estanterías: $totalEstanterias · Niveles: ${camera.niveles} · Posiciones: ${camera.posicionesMax} · Pasillo: ${camera.pasillo.label}';
               return ListTile(
                 leading: CircleAvatar(child: Text(camera.displayNumero)),
                 title: Text('Cámara ${camera.displayNumero}'),
@@ -105,6 +106,7 @@ class CamerasListScreen extends ConsumerWidget {
       text: camera != null ? camera.posicionesMax.toString() : '',
     );
     CameraPasillo pasillo = camera?.pasillo ?? CameraPasillo.central;
+    CameraTipo tipo = camera?.tipo ?? CameraTipo.expedicion;
     final formKey = GlobalKey<FormState>();
 
     await showDialog<void>(
@@ -193,6 +195,24 @@ class CamerasListScreen extends ConsumerWidget {
                     },
                   ),
                   const SizedBox(height: 16),
+                  DropdownButtonFormField<CameraTipo>(
+                    value: tipo,
+                    decoration: const InputDecoration(labelText: 'Tipo de cámara'),
+                    items: CameraTipo.values
+                        .map(
+                          (value) => DropdownMenuItem(
+                            value: value,
+                            child: Text(value.label),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) {
+                        tipo = value;
+                      }
+                    },
+                  ),
+                  const SizedBox(height: 16),
                   DropdownButtonFormField<CameraPasillo>(
                     value: pasillo,
                     decoration: const InputDecoration(labelText: 'Pasillo'),
@@ -237,6 +257,7 @@ class CamerasListScreen extends ConsumerWidget {
                   niveles: niveles,
                   pasillo: pasillo,
                   posicionesMax: posiciones,
+                  tipo: tipo,
                   createdAt: camera?.createdAt,
                   updatedAt: camera?.updatedAt,
                 );

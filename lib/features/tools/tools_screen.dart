@@ -25,6 +25,17 @@ class ToolsScreen extends ConsumerWidget {
               onTap: () => context.pushNamed('tools-compare'),
             ),
           ),
+          Card(
+            child: ListTile(
+              title: const Text('Asignar lugar de almacenamiento'),
+              subtitle: const Text(
+                'Configura qué productos se almacenan en cada fila de las cámaras de recepción',
+              ),
+              leading: const Icon(Icons.warehouse_outlined),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.pushNamed('tools-assign-storage'),
+            ),
+          ),
         ],
       ),
     );
