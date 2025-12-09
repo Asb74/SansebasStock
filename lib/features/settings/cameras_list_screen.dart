@@ -97,6 +97,7 @@ class CamerasListScreen extends ConsumerWidget {
   }
 
   Future<void> _showCameraDialog(BuildContext context, WidgetRef ref, {CameraModel? camera}) async {
+    final bool isEditing = camera != null;
     final numeroController = TextEditingController(text: camera?.displayNumero ?? '');
     final filasController =
         TextEditingController(text: camera != null ? camera.filas.toString() : '');
@@ -126,6 +127,7 @@ class CamerasListScreen extends ConsumerWidget {
                   TextFormField(
                     controller: numeroController,
                     keyboardType: TextInputType.number,
+                    readOnly: isEditing,
                     decoration: const InputDecoration(
                       labelText: 'Número',
                       helperText: 'Usa dos dígitos (01, 02, ...)',
@@ -245,13 +247,14 @@ class CamerasListScreen extends ConsumerWidget {
                   return;
                 }
                 final numero = numeroController.text.padLeft(2, '0');
+                final id = camera?.id ?? numero;
                 final filas = int.parse(filasController.text);
                 final niveles = int.parse(nivelesController.text);
                 final posiciones = int.parse(posicionesController.text);
                 final repository = ref.read(cameraRepositoryProvider);
 
                 final model = CameraModel(
-                  id: numero,
+                  id: id,
                   numero: numero,
                   filas: filas,
                   niveles: niveles,
