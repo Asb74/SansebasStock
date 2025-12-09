@@ -50,6 +50,7 @@ class AssignStorageCamerasScreen extends ConsumerWidget {
                 onTap: () => context.pushNamed(
                   'tools-assign-storage-camera',
                   pathParameters: {'cameraId': camera.numero},
+                  extra: camera,
                 ),
               );
             },
