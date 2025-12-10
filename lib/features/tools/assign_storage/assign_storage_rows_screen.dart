@@ -133,7 +133,7 @@ class AssignStorageRowsScreen extends ConsumerWidget {
                                             variedadesValidas.contains(row.variedad)
                                                 ? row.variedad
                                                 : null;
-                                        final nuevoCalibre = calibresValidas.contains(row.calibre)
+                                        final nuevoCalibre = calibresValidos.contains(row.calibre)
                                             ? row.calibre
                                             : null;
                                         final nuevaCategoria =
