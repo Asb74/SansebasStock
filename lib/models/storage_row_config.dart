@@ -1,10 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+const _sentinel = Object();
+
 class StorageRowConfig {
   StorageRowConfig({
     required this.cameraId,
     required this.rowId,
     required this.fila,
+    this.cultivo,
     this.marca,
     this.variedad,
     this.calibre,
@@ -15,6 +18,7 @@ class StorageRowConfig {
   final String cameraId;
   final String rowId; // id del doc en Firestore (p.ej. "1")
   final int fila; // número de fila
+  final String? cultivo;
   final String? marca;
   final String? variedad;
   final String? calibre;
@@ -30,6 +34,7 @@ class StorageRowConfig {
       cameraId: cameraId,
       rowId: rowId,
       fila: (data['fila'] as int?) ?? int.parse(rowId),
+      cultivo: data['cultivo'] as String?,
       marca: data['marca'] as String?,
       variedad: data['variedad'] as String?,
       calibre: data['calibre'] as String?,
@@ -42,6 +47,7 @@ class StorageRowConfig {
     return {
       'camara': cameraId,
       'fila': fila,
+      'cultivo': cultivo,
       'marca': marca,
       'variedad': variedad,
       'calibre': calibre,
@@ -51,19 +57,21 @@ class StorageRowConfig {
   }
 
   StorageRowConfig copyWith({
-    String? marca,
-    String? variedad,
-    String? calibre,
-    String? categoria,
+    Object? cultivo = _sentinel,
+    Object? marca = _sentinel,
+    Object? variedad = _sentinel,
+    Object? calibre = _sentinel,
+    Object? categoria = _sentinel,
   }) {
     return StorageRowConfig(
       cameraId: cameraId,
       rowId: rowId,
       fila: fila,
-      marca: marca ?? this.marca,
-      variedad: variedad ?? this.variedad,
-      calibre: calibre ?? this.calibre,
-      categoria: categoria ?? this.categoria,
+      cultivo: cultivo == _sentinel ? this.cultivo : cultivo as String?,
+      marca: marca == _sentinel ? this.marca : marca as String?,
+      variedad: variedad == _sentinel ? this.variedad : variedad as String?,
+      calibre: calibre == _sentinel ? this.calibre : calibre as String?,
+      categoria: categoria == _sentinel ? this.categoria : categoria as String?,
       updatedAt: updatedAt,
     );
   }
