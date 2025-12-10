@@ -50,7 +50,14 @@ class AssignStorageRowsScreen extends ConsumerWidget {
                       final existing = byFila[fila];
                       final isOccupied = occupiedRows.contains(fila);
 
-                      final cultivoSeleccionado = existing?.cultivo;
+                      final row = existing ??
+                          StorageRowConfig(
+                            cameraId: camera.numero,
+                            rowId: fila.toString(),
+                            fila: fila,
+                          );
+
+                      final cultivoSeleccionado = row.cultivo;
                       final variedadesOptions = cultivoSeleccionado == null
                           ? maestros.variedades
                           : maestros.variedadesPorCultivo[cultivoSeleccionado] ?? const [];
@@ -60,6 +67,13 @@ class AssignStorageRowsScreen extends ConsumerWidget {
                       final categoriasOptions = cultivoSeleccionado == null
                           ? maestros.categorias
                           : maestros.categoriasPorCultivo[cultivoSeleccionado] ?? const [];
+
+                      final selectedVariedad =
+                          variedadesOptions.contains(row.variedad) ? row.variedad : null;
+                      final selectedCalibre =
+                          calibresOptions.contains(row.calibre) ? row.calibre : null;
+                      final selectedCategoria =
+                          categoriasOptions.contains(row.categoria) ? row.categoria : null;
 
                       return Card(
                         color: isOccupied ? Colors.red.shade50 : Colors.green.shade50,
@@ -105,77 +119,76 @@ class AssignStorageRowsScreen extends ConsumerWidget {
                                       value: cultivoSeleccionado,
                                       options: maestros.cultivos,
                                       enabled: !isOccupied,
-                                      onChanged: (value) {
-                                        _saveRow(
-                                          ref,
-                                          fila,
-                                          existing,
-                                          camera.numero,
+                                      onChanged: (value) async {
+                                        if (value == null) return;
+
+                                        final variedadesValidas =
+                                            maestros.variedadesPorCultivo[value] ?? [];
+                                        final calibresValidos =
+                                            maestros.calibresPorCultivo[value] ?? [];
+                                        final categoriasValidas =
+                                            maestros.categoriasPorCultivo[value] ?? [];
+
+                                        final nuevaVariedad =
+                                            variedadesValidas.contains(row.variedad)
+                                                ? row.variedad
+                                                : null;
+                                        final nuevoCalibre = calibresValidas.contains(row.calibre)
+                                            ? row.calibre
+                                            : null;
+                                        final nuevaCategoria =
+                                            categoriasValidas.contains(row.categoria)
+                                                ? row.categoria
+                                                : null;
+
+                                        final updated = row.copyWith(
                                           cultivo: value,
-                                          variedad: null,
-                                          calibre: null,
-                                          categoria: null,
+                                          variedad: nuevaVariedad,
+                                          calibre: nuevoCalibre,
+                                          categoria: nuevaCategoria,
                                         );
+
+                                        await _saveRow(ref, updated);
                                       },
                                     ),
                                     _buildDropdown(
                                       label: 'Marca',
-                                      value: existing?.marca,
+                                      value: row.marca,
                                       options: maestros.marcas,
                                       enabled: !isOccupied,
-                                      onChanged: (value) {
-                                        _saveRow(
-                                          ref,
-                                          fila,
-                                          existing,
-                                          camera.numero,
-                                          marca: value,
-                                        );
+                                      onChanged: (value) async {
+                                        final updated = row.copyWith(marca: value);
+                                        await _saveRow(ref, updated);
                                       },
                                     ),
                                     _buildDropdown(
                                       label: 'Variedad',
-                                      value: existing?.variedad,
+                                      value: selectedVariedad,
                                       options: variedadesOptions,
                                       enabled: !isOccupied,
-                                      onChanged: (value) {
-                                        _saveRow(
-                                          ref,
-                                          fila,
-                                          existing,
-                                          camera.numero,
-                                          variedad: value,
-                                        );
+                                      onChanged: (value) async {
+                                        final updated = row.copyWith(variedad: value);
+                                        await _saveRow(ref, updated);
                                       },
                                     ),
                                     _buildDropdown(
                                       label: 'Calibre',
-                                      value: existing?.calibre,
+                                      value: selectedCalibre,
                                       options: calibresOptions,
                                       enabled: !isOccupied,
-                                      onChanged: (value) {
-                                        _saveRow(
-                                          ref,
-                                          fila,
-                                          existing,
-                                          camera.numero,
-                                          calibre: value,
-                                        );
+                                      onChanged: (value) async {
+                                        final updated = row.copyWith(calibre: value);
+                                        await _saveRow(ref, updated);
                                       },
                                     ),
                                     _buildDropdown(
                                       label: 'Categoría',
-                                      value: existing?.categoria,
+                                      value: selectedCategoria,
                                       options: categoriasOptions,
                                       enabled: !isOccupied,
-                                      onChanged: (value) {
-                                        _saveRow(
-                                          ref,
-                                          fila,
-                                          existing,
-                                          camera.numero,
-                                          categoria: value,
-                                        );
+                                      onChanged: (value) async {
+                                        final updated = row.copyWith(categoria: value);
+                                        await _saveRow(ref, updated);
                                       },
                                     ),
                                   ],
@@ -223,36 +236,13 @@ class AssignStorageRowsScreen extends ConsumerWidget {
     );
   }
 
-  void _saveRow(
+  Future<void> _saveRow(
     WidgetRef ref,
-    int fila,
-    StorageRowConfig? existing,
-    String cameraId, {
-    String? cultivo,
-    String? marca,
-    String? variedad,
-    String? calibre,
-    String? categoria,
-  }) {
+    StorageRowConfig row,
+  ) async {
     final repo = ref.read(storageConfigRepositoryProvider);
 
-    final rowId = fila.toString();
-    final base = existing ??
-        StorageRowConfig(
-          cameraId: cameraId,
-          rowId: rowId,
-          fila: fila,
-        );
-
-    final updated = base.copyWith(
-      cultivo: cultivo,
-      marca: marca,
-      variedad: variedad,
-      calibre: calibre,
-      categoria: categoria,
-    );
-
-    repo.saveRow(updated);
+    await repo.saveRow(row);
   }
 }
 
