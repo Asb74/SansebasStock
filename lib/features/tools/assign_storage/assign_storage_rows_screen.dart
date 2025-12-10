@@ -19,6 +19,7 @@ class AssignStorageRowsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final rowsAsync = ref.watch(storageRowsByCameraProvider(camera.numero));
     final maestrosAsync = ref.watch(maestrosOptionsProvider);
+    final occupiedAsync = ref.watch(occupiedRowsByCameraProvider(camera.numero));
 
     final totalEstanterias =
         camera.pasillo == CameraPasillo.central ? camera.filas * 2 : camera.filas;
@@ -35,75 +36,156 @@ class AssignStorageRowsScreen extends ConsumerWidget {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Error cargando configuración: $e')),
             data: (rows) {
-              final byFila = {for (final r in rows) r.fila: r};
+              return occupiedAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => Center(child: Text('Error cargando filas ocupadas: $e')),
+                data: (occupiedRows) {
+                  final byFila = {for (final r in rows) r.fila: r};
 
-              return ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: totalEstanterias,
-                itemBuilder: (context, index) {
-                  final fila = index + 1;
-                  final existing = byFila[fila];
+                  return ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: totalEstanterias,
+                    itemBuilder: (context, index) {
+                      final fila = index + 1;
+                      final existing = byFila[fila];
+                      final isOccupied = occupiedRows.contains(fila);
 
-                  return Card(
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            width: 60,
-                            child: Text(
-                              'Fila $fila',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
+                      final cultivoSeleccionado = existing?.cultivo;
+                      final variedadesOptions = cultivoSeleccionado == null
+                          ? maestros.variedades
+                          : maestros.variedadesPorCultivo[cultivoSeleccionado] ?? const [];
+                      final calibresOptions = cultivoSeleccionado == null
+                          ? maestros.calibres
+                          : maestros.calibresPorCultivo[cultivoSeleccionado] ?? const [];
+                      final categoriasOptions = cultivoSeleccionado == null
+                          ? maestros.categorias
+                          : maestros.categoriasPorCultivo[cultivoSeleccionado] ?? const [];
+
+                      return Card(
+                        color: isOccupied ? Colors.red.shade50 : Colors.green.shade50,
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: 90,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Fila $fila',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    if (isOccupied)
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 4),
+                                        child: Text(
+                                          'Fila ocupada (no editable)',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .labelSmall
+                                              ?.copyWith(color: Colors.red),
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ),
-                            ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Wrap(
+                                  spacing: 12,
+                                  runSpacing: 8,
+                                  children: [
+                                    _buildDropdown(
+                                      label: 'Cultivo',
+                                      value: cultivoSeleccionado,
+                                      options: maestros.cultivos,
+                                      enabled: !isOccupied,
+                                      onChanged: (value) {
+                                        _saveRow(
+                                          ref,
+                                          fila,
+                                          existing,
+                                          camera.numero,
+                                          cultivo: value,
+                                          variedad: null,
+                                          calibre: null,
+                                          categoria: null,
+                                        );
+                                      },
+                                    ),
+                                    _buildDropdown(
+                                      label: 'Marca',
+                                      value: existing?.marca,
+                                      options: maestros.marcas,
+                                      enabled: !isOccupied,
+                                      onChanged: (value) {
+                                        _saveRow(
+                                          ref,
+                                          fila,
+                                          existing,
+                                          camera.numero,
+                                          marca: value,
+                                        );
+                                      },
+                                    ),
+                                    _buildDropdown(
+                                      label: 'Variedad',
+                                      value: existing?.variedad,
+                                      options: variedadesOptions,
+                                      enabled: !isOccupied,
+                                      onChanged: (value) {
+                                        _saveRow(
+                                          ref,
+                                          fila,
+                                          existing,
+                                          camera.numero,
+                                          variedad: value,
+                                        );
+                                      },
+                                    ),
+                                    _buildDropdown(
+                                      label: 'Calibre',
+                                      value: existing?.calibre,
+                                      options: calibresOptions,
+                                      enabled: !isOccupied,
+                                      onChanged: (value) {
+                                        _saveRow(
+                                          ref,
+                                          fila,
+                                          existing,
+                                          camera.numero,
+                                          calibre: value,
+                                        );
+                                      },
+                                    ),
+                                    _buildDropdown(
+                                      label: 'Categoría',
+                                      value: existing?.categoria,
+                                      options: categoriasOptions,
+                                      enabled: !isOccupied,
+                                      onChanged: (value) {
+                                        _saveRow(
+                                          ref,
+                                          fila,
+                                          existing,
+                                          camera.numero,
+                                          categoria: value,
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Wrap(
-                              spacing: 12,
-                              runSpacing: 8,
-                              children: [
-                                _buildDropdown(
-                                  label: 'Marca',
-                                  value: existing?.marca,
-                                  options: maestros.marcas,
-                                  onChanged: (value) {
-                                    _saveRow(ref, fila, existing, camera.numero, marca: value);
-                                  },
-                                ),
-                                _buildDropdown(
-                                  label: 'Variedad',
-                                  value: existing?.variedad,
-                                  options: maestros.variedades,
-                                  onChanged: (value) {
-                                    _saveRow(ref, fila, existing, camera.numero, variedad: value);
-                                  },
-                                ),
-                                _buildDropdown(
-                                  label: 'Calibre',
-                                  value: existing?.calibre,
-                                  options: maestros.calibres,
-                                  onChanged: (value) {
-                                    _saveRow(ref, fila, existing, camera.numero, calibre: value);
-                                  },
-                                ),
-                                _buildDropdown(
-                                  label: 'Categoría',
-                                  value: existing?.categoria,
-                                  options: maestros.categorias,
-                                  onChanged: (value) {
-                                    _saveRow(ref, fila, existing, camera.numero, categoria: value);
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   );
                 },
               );
@@ -119,19 +201,24 @@ class AssignStorageRowsScreen extends ConsumerWidget {
     required String? value,
     required List<String> options,
     required ValueChanged<String?> onChanged,
+    bool enabled = true,
   }) {
     return SizedBox(
       width: 180,
       child: DropdownButtonFormField<String>(
         value: value != null && options.contains(value) ? value : null,
         decoration: InputDecoration(labelText: label),
-        items: options
-            .map((e) => DropdownMenuItem(
-                  value: e,
-                  child: Text(e),
-                ))
-            .toList(),
-        onChanged: onChanged,
+        items: [
+          const DropdownMenuItem(
+            value: null,
+            child: Text('(Sin valor)'),
+          ),
+          ...options.map((e) => DropdownMenuItem(
+                value: e,
+                child: Text(e),
+              )),
+        ],
+        onChanged: enabled ? onChanged : null,
       ),
     );
   }
@@ -141,6 +228,7 @@ class AssignStorageRowsScreen extends ConsumerWidget {
     int fila,
     StorageRowConfig? existing,
     String cameraId, {
+    String? cultivo,
     String? marca,
     String? variedad,
     String? calibre,
@@ -157,6 +245,7 @@ class AssignStorageRowsScreen extends ConsumerWidget {
         );
 
     final updated = base.copyWith(
+      cultivo: cultivo,
       marca: marca,
       variedad: variedad,
       calibre: calibre,

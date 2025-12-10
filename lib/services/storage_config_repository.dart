@@ -30,4 +30,23 @@ class StorageConfigRepository {
         .doc(row.rowId)
         .set(row.toMap(), SetOptions(merge: true));
   }
+
+  Stream<Set<int>> watchOccupiedRows(String cameraId) {
+    return _firestore
+        .collection('Stock')
+        .where('CAMARA', isEqualTo: cameraId)
+        .where('HUECO', isEqualTo: 'Ocupado')
+        .snapshots()
+        .map((snapshot) {
+      final result = <int>{};
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        final estanteria = int.tryParse(data['ESTANTERIA']?.toString() ?? '');
+        if (estanteria != null) {
+          result.add(estanteria);
+        }
+      }
+      return result;
+    });
+  }
 }

@@ -14,3 +14,9 @@ final storageRowsByCameraProvider =
   final repo = ref.watch(storageConfigRepositoryProvider);
   return repo.watchRows(cameraId);
 });
+
+final occupiedRowsByCameraProvider =
+    StreamProvider.family<Set<int>, String>((ref, cameraId) {
+  final repo = ref.watch(storageConfigRepositoryProvider);
+  return repo.watchOccupiedRows(cameraId);
+});
