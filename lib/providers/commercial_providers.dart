@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/commercial_filters.dart';
 import '../models/commercial_group_row.dart';
+import '../models/commercial_variety_summary.dart';
 import '../models/palet.dart';
 import 'palets_providers.dart';
 
@@ -124,6 +125,34 @@ final commercialGroupedRowsProvider =
   });
 });
 
+final commercialVarietySummaryProvider =
+    Provider<AsyncValue<List<CommercialVarietySummary>>>((ref) {
+  final paletsAsync = ref.watch(filteredCommercialPaletsProvider);
+
+  return paletsAsync.whenData((palets) {
+    final Map<String, _VarietyAcc> acc = {};
+
+    for (final p in palets) {
+      final variedad = (p.variedad ?? '').trim();
+      if (variedad.isEmpty) continue;
+
+      final bucket = acc.putIfAbsent(variedad, () {
+        return _VarietyAcc(variedad: variedad);
+      });
+
+      bucket.countPalets += 1;
+      bucket.totalNeto += p.neto;
+    }
+
+    final result = acc.values
+        .map((a) => a.toSummary())
+        .toList()
+      ..sort((a, b) => a.variedad.compareTo(b.variedad));
+
+    return result;
+  });
+});
+
 enum _FilterField {
   cultivo,
   variedad,
@@ -233,6 +262,22 @@ class _GroupAccumulator {
       pedido: pedido,
       countPalets: countPalets,
       totalNeto: totalNeto,
+    );
+  }
+}
+
+class _VarietyAcc {
+  _VarietyAcc({required this.variedad});
+
+  final String variedad;
+  int totalNeto = 0;
+  int countPalets = 0;
+
+  CommercialVarietySummary toSummary() {
+    return CommercialVarietySummary(
+      variedad: variedad,
+      totalNeto: totalNeto,
+      countPalets: countPalets,
     );
   }
 }
