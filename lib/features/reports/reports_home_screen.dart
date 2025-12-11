@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../ui/stock/stock_filter_page.dart';
+import 'commercial_dashboard_screen.dart';
 
 class ReportsHomeScreen extends StatelessWidget {
   const ReportsHomeScreen({super.key});
@@ -22,6 +23,22 @@ class ReportsHomeScreen extends StatelessWidget {
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const StockFilterPage(),
+                  ),
+                );
+              },
+            ),
+          ),
+          Card(
+            child: ListTile(
+              title: const Text('Informe comercial (dashboard)'),
+              subtitle:
+                  const Text('KPIs, filtros dinámicos y tabla configurable'),
+              leading: const Icon(Icons.dashboard_customize_outlined),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const CommercialDashboardScreen(),
                   ),
                 );
               },
