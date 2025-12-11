@@ -166,12 +166,10 @@ class PaletLocationService {
   }
 
   _Slot? _firstFreeSlot(
-    List<Palet> occupied,
-    {
-      required int niveles,
-      required int posicionesMax,
-    },
-  ) {
+    List<Palet> occupied, {
+    required int niveles,
+    required int posicionesMax,
+  }) {
     if (niveles <= 0 || posicionesMax <= 0) return null;
 
     final taken = occupied

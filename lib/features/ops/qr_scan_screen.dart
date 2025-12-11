@@ -486,33 +486,6 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
     }
   }
 
-  bool _esQrPalet(String raw) {
-    return raw.toUpperCase().contains('P=');
-  }
-
-  Future<void> _toggleTorch() async {
-    final controller = _controller;
-    if (controller == null) {
-      return;
-    }
-    if (_busy) {
-      return;
-    }
-
-    try {
-      await controller.toggleTorch();
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _torchState =
-            _torchState == TorchState.on ? TorchState.off : TorchState.on;
-      });
-    } on Exception {
-      _showError('No se pudo alternar la linterna.');
-    }
-  }
-
   Widget _buildTorchButton() {
     final bool isOn = _torchState == TorchState.on;
     return _ScannerControlButton(
