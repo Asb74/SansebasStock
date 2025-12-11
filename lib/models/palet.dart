@@ -16,6 +16,12 @@ class Palet extends Equatable {
     required this.nivel,
     required this.linea,
     required this.posicion,
+    this.cajas,
+    this.categoria,
+    this.confeccion,
+    this.pedido,
+    this.vida,
+    this.rawData = const {},
   });
 
   final String id;
@@ -31,6 +37,12 @@ class Palet extends Equatable {
   final int nivel;
   final int linea;
   final int posicion;
+  final int? cajas;
+  final String? categoria;
+  final String? confeccion;
+  final String? pedido;
+  final String? vida;
+  final Map<String, dynamic> rawData;
 
   bool get estaOcupado => hueco.toLowerCase() == 'ocupado';
 
@@ -71,6 +83,12 @@ class Palet extends Equatable {
       nivel: _asInt(data['NIVEL']),
       linea: _asInt(data['LINEA']),
       posicion: _asInt(data['POSICION']),
+      cajas: _asInt(data['CAJAS']),
+      categoria: _asString('CATEGORIA'),
+      confeccion: _asString('CONFECCION'),
+      pedido: _asString('PEDIDO'),
+      vida: _asString('VIDA'),
+      rawData: Map<String, dynamic>.unmodifiable(data),
     );
   }
 
@@ -88,6 +106,12 @@ class Palet extends Equatable {
     int? nivel,
     int? linea,
     int? posicion,
+    int? cajas,
+    String? categoria,
+    String? confeccion,
+    String? pedido,
+    String? vida,
+    Map<String, dynamic>? rawData,
   }) {
     return Palet(
       id: id ?? this.id,
@@ -103,6 +127,12 @@ class Palet extends Equatable {
       nivel: nivel ?? this.nivel,
       linea: linea ?? this.linea,
       posicion: posicion ?? this.posicion,
+      cajas: cajas ?? this.cajas,
+      categoria: categoria ?? this.categoria,
+      confeccion: confeccion ?? this.confeccion,
+      pedido: pedido ?? this.pedido,
+      vida: vida ?? this.vida,
+      rawData: rawData ?? this.rawData,
     );
   }
 
@@ -121,6 +151,11 @@ class Palet extends Equatable {
       'NIVEL': nivel,
       'LINEA': linea,
       'POSICION': posicion,
+      if (cajas != null) 'CAJAS': cajas,
+      if (categoria != null) 'CATEGORIA': categoria,
+      if (confeccion != null) 'CONFECCION': confeccion,
+      if (pedido != null) 'PEDIDO': pedido,
+      if (vida != null) 'VIDA': vida,
     };
   }
 
@@ -139,5 +174,10 @@ class Palet extends Equatable {
         nivel,
         linea,
         posicion,
+        cajas,
+        categoria,
+        confeccion,
+        pedido,
+        vida,
       ];
 }
