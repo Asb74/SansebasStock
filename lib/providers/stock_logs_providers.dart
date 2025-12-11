@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/palet.dart';
 import '../models/stock_log_entry.dart';
 import '../services/stock_logs_repository.dart';
 
@@ -9,13 +10,13 @@ final stockLogsRepositoryProvider = Provider<StockLogsRepository>((ref) {
 });
 
 final lastMovementProvider =
-    FutureProvider.family<StockLogEntry?, String>((ref, palletId) async {
+    FutureProvider.family<StockLogEntry?, Palet>((ref, palet) async {
   final repo = ref.watch(stockLogsRepositoryProvider);
-  return repo.fetchLastMovement(palletId);
+  return repo.fetchLastMovement(palet);
 });
 
 final palletMovementsProvider =
-    StreamProvider.family<List<StockLogEntry>, String>((ref, palletId) {
+    StreamProvider.family<List<StockLogEntry>, Palet>((ref, palet) {
   final repo = ref.watch(stockLogsRepositoryProvider);
-  return repo.watchMovements(palletId);
+  return repo.watchMovements(palet);
 });

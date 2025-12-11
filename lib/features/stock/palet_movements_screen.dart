@@ -2,20 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../models/palet.dart';
 import '../../providers/stock_logs_providers.dart';
 
 class PaletMovementsScreen extends ConsumerWidget {
-  const PaletMovementsScreen({super.key, required this.palletId});
+  const PaletMovementsScreen({super.key, required this.palet});
 
-  final String palletId;
+  final Palet palet;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final movementsAsync = ref.watch(palletMovementsProvider(palletId));
+    final movementsAsync = ref.watch(palletMovementsProvider(palet));
+    final searchPalletId = '${palet.linea}${palet.codigo}';
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Movimientos $palletId'),
+        title: Text('Movimientos $searchPalletId'),
       ),
       body: movementsAsync.when(
         data: (logs) {
