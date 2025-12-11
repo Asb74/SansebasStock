@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:sansebas_stock/services/stock_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,7 +12,9 @@ import '../../models/camera_model.dart';
 import '../../models/palet.dart';
 import '../../providers/camera_providers.dart';
 import '../../providers/palets_providers.dart';
+import '../../providers/stock_logs_providers.dart';
 import '../ops/ops_providers.dart';
+import '../stock/palet_movements_screen.dart';
 import 'widgets/pallet_tile.dart';
 import 'providers/variedad_colors_provider.dart';
 
@@ -156,23 +159,32 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
       final coordinate = _coordinateFromPalet(palet, camera.pasillo);
       if (coordinate == null) continue;
 
+      final data = Map<String, dynamic>.from(palet.rawData);
+      data.addAll({
+        'CAMARA': palet.camara,
+        'ESTANTERIA': palet.estanteria,
+        'NIVEL': palet.nivel,
+        'POSICION': palet.posicion,
+        'HUECO': palet.hueco,
+        'CULTIVO': palet.cultivo,
+        'VARIEDAD': palet.variedad,
+        'CALIBRE': palet.calibre,
+        'MARCA': palet.marca,
+        'NETO': palet.neto,
+        'LINEA': palet.linea,
+        'P': palet.codigo,
+      });
+
+      if (palet.cajas != null) data['CAJAS'] = palet.cajas;
+      if (palet.categoria != null) data['CATEGORIA'] = palet.categoria;
+      if (palet.confeccion != null) data['CONFECCION'] = palet.confeccion;
+      if (palet.pedido != null) data['PEDIDO'] = palet.pedido;
+      if (palet.vida != null) data['VIDA'] = palet.vida;
+
       entries[coordinate] = StockEntry(
         id: palet.id,
         coordinate: coordinate,
-        data: {
-          'CAMARA': palet.camara,
-          'ESTANTERIA': palet.estanteria,
-          'NIVEL': palet.nivel,
-          'POSICION': palet.posicion,
-          'HUECO': palet.hueco,
-          'CULTIVO': palet.cultivo,
-          'VARIEDAD': palet.variedad,
-          'CALIBRE': palet.calibre,
-          'MARCA': palet.marca,
-          'NETO': palet.neto,
-          'LINEA': palet.linea,
-          'P': palet.codigo,
-        },
+        data: data,
         palletCode: palet.codigo,
       );
     }
@@ -492,6 +504,40 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                         final docRef = FirebaseFirestore.instance
                             .collection('Stock')
                             .doc(entry.id);
+                        final lastMovementAsync =
+                            ref.watch(lastMovementProvider(entry.palletCode));
+
+                        final fieldWidgets = <Widget>[];
+
+                        void addField(String label, dynamic value) {
+                          if (value == null) return;
+                          final text = value.toString().trim();
+                          if (text.isEmpty) return;
+                          fieldWidgets.add(
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: Text('$label: $text'),
+                            ),
+                          );
+                        }
+
+                        addField('CAMARA', data['CAMARA']);
+                        addField('ESTANTERIA', data['ESTANTERIA']);
+                        addField('NIVEL', data['NIVEL']);
+                        addField('POSICION', data['POSICION']);
+                        addField('HUECO', data['HUECO']);
+                        addField('CULTIVO', data['CULTIVO']);
+                        addField('VARIEDAD', data['VARIEDAD']);
+                        addField('CALIBRE', data['CALIBRE']);
+                        addField('MARCA', data['MARCA']);
+                        addField('NETO', data['NETO']);
+                        addField('LINEA', data['LINEA']);
+                        addField('P', data['P']);
+                        addField('CAJAS', data['CAJAS']);
+                        addField('CATEGORIA', data['CATEGORIA']);
+                        addField('CONFECCION', data['CONFECCION']);
+                        addField('PEDIDO', data['PEDIDO']);
+                        addField('VIDA', data['VIDA']);
 
                         Future<void> handleUpdate() async {
                           final confirmed = await showDialog<bool>(
@@ -530,14 +576,70 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                           content: SingleChildScrollView(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
-                              children: data.entries
-                                  .map(
-                                    (e) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 4),
-                                      child: Text('${e.key}: ${e.value}'),
-                                    ),
-                                  )
-                                  .toList(),
+                              children: [
+                                ...fieldWidgets,
+                                lastMovementAsync.when(
+                                  data: (log) {
+                                    if (log == null) {
+                                      return const Padding(
+                                        padding: EdgeInsets.only(top: 8),
+                                        child: Text('Sin movimientos registrados.'),
+                                      );
+                                    }
+
+                                    final formattedDate =
+                                        DateFormat('dd/MM/yyyy HH:mm').format(log.timestamp);
+
+                                    return Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Último movimiento',
+                                            style: TextStyle(fontWeight: FontWeight.bold),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.only(top: 4, bottom: 4),
+                                            child: Text(
+                                              '$formattedDate · ${log.campo}: "${log.from ?? ''}" → "${log.to ?? ''}"',
+                                            ),
+                                          ),
+                                          InkWell(
+                                            onTap: () {
+                                              Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                  builder: (_) => PaletMovementsScreen(
+                                                    palletId: entry.palletCode,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                            child: Text(
+                                              log.userName ??
+                                                  log.userEmail ??
+                                                  'Usuario desconocido',
+                                              style: TextStyle(
+                                                color:
+                                                    Theme.of(context).colorScheme.primary,
+                                                decoration: TextDecoration.underline,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  },
+                                  loading: () => const Padding(
+                                    padding: EdgeInsets.only(top: 8),
+                                    child: LinearProgressIndicator(),
+                                  ),
+                                  error: (e, _) => Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Text('Error al cargar último movimiento: $e'),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           actions: [
