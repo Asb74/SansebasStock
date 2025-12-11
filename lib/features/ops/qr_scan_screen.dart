@@ -1,6 +1,7 @@
 import 'dart:io' show Platform; // DESKTOP-GUARD
 import 'dart:math' as math;
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:collection/collection.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -38,6 +39,8 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   bool _analyzingFromGallery = false;
   TorchState _torchState = TorchState.off;
   DateTime? _lastDetection;
+  String? _lastScannedCode;
+  DateTime? _lastScanTime;
   final PaletLocationService _locationService = PaletLocationService();
 
   static const Duration _detectionCooldown = Duration(milliseconds: 1200);
@@ -169,6 +172,21 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
     }
   }
 
+  Future<void> _onBarcodeScanned(String code) async {
+    final now = DateTime.now();
+
+    if (_lastScannedCode == code &&
+        _lastScanTime != null &&
+        now.difference(_lastScanTime!) < const Duration(milliseconds: 700)) {
+      return;
+    }
+
+    _lastScannedCode = code;
+    _lastScanTime = now;
+
+    await _handle(code);
+  }
+
   Future<void> _onScanUbicacion(String raw) async {
     final Ubicacion? ubicacion = _parseUbicacion(raw);
     if (ubicacion == null) {
@@ -285,11 +303,12 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
       return null;
     }
 
-    return _locationService.findAutoLocationForIncomingPalet(
+    return _locationService.findAutoLocationForIncomingPaletFresh(
       palet: descriptor,
       cameras: cameras,
       storageConfigByCamera: storageConfig,
       currentStockByCameraAndRow: stockByRow,
+      firestore: FirebaseFirestore.instance,
     );
   }
 
@@ -323,10 +342,12 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
       return base;
     }
 
-    final slot = _locationService.findFirstAvailableSlot(
-      camera: camera,
+    final slot = await _locationService.findNextFreeSlotFresh(
+      camara: camera.displayNumero,
       fila: fila,
-      currentStockByCameraAndRow: stockByRow,
+      niveles: camera.niveles,
+      posicionesMax: camera.posicionesMax,
+      firestore: FirebaseFirestore.instance,
     );
 
     if (slot == null) {
@@ -499,6 +520,10 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   Future<void> _handleSuccess(StockProcessResult result) async {
     ref.read(ubicacionPendienteProvider.notifier).state = null;
 
+    _lastScannedCode = null;
+    _lastScanTime = null;
+    _lastDetection = null;
+
     try {
       await _controller?.stop();
     } catch (_) {}
@@ -581,7 +606,7 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
                 return;
               }
 
-              await _handle(raw);
+              await _onBarcodeScanned(raw);
             },
           ),
           const Positioned.fill(
