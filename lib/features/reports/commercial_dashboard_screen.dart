@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../models/commercial_filters.dart';
 import '../../models/commercial_group_row.dart';
+import '../../models/commercial_variety_summary.dart';
 import '../../models/saved_commercial_view.dart';
 import '../../providers/commercial_providers.dart';
 import '../../services/commercial_views_repository.dart';
@@ -25,12 +26,16 @@ class _CommercialDashboardScreenState
   Widget build(BuildContext context) {
     final filters = ref.watch(commercialFiltersProvider);
     final groupedAsync = ref.watch(commercialGroupedRowsProvider);
+    final varietySummaryAsync = ref.watch(commercialVarietySummaryProvider);
     final totalsAsync = ref.watch(commercialTotalsProvider);
     final filterOptions = ref.watch(commercialFilterOptionsProvider);
     final columns = ref.watch(commercialColumnsProvider);
     final savedViewsAsync = ref.watch(savedCommercialViewsProvider);
 
     final groupedRows = groupedAsync.value ?? <CommercialGroupRow>[];
+    final isVarietySummaryView = columns.length == 2 &&
+        columns.contains(CommercialColumn.variedad) &&
+        columns.contains(CommercialColumn.totalNeto);
     final savedViews = savedViewsAsync.value ?? <SavedCommercialView>[];
 
     return Scaffold(
@@ -125,22 +130,36 @@ class _CommercialDashboardScreenState
                 ],
               ),
             ),
-            groupedAsync.when(
-              data: (rows) => _GroupedTable(
-                rows: rows,
-                columns: columns,
-              ),
-              loading: () => const Padding(
-                padding: EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              ),
-              error: (error, _) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Center(
-                  child: Text('Error al cargar: $error'),
-                ),
-              ),
-            ),
+            isVarietySummaryView
+                ? varietySummaryAsync.when(
+                    data: (rows) => _VarietySummaryTable(rows: rows),
+                    loading: () => const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                    error: (error, _) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: Text('Error al cargar: $error'),
+                      ),
+                    ),
+                  )
+                : groupedAsync.when(
+                    data: (rows) => _GroupedTable(
+                      rows: rows,
+                      columns: columns,
+                    ),
+                    loading: () => const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(child: CircularProgressIndicator()),
+                    ),
+                    error: (error, _) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: Text('Error al cargar: $error'),
+                      ),
+                    ),
+                  ),
           ],
         ),
       ),
@@ -709,6 +728,42 @@ class _KpiCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _VarietySummaryTable extends StatelessWidget {
+  const _VarietySummaryTable({required this.rows});
+
+  final List<CommercialVarietySummary> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    if (rows.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: Text('No hay datos para mostrar')),
+      );
+    }
+
+    final dataRows = rows.map((row) {
+      return DataRow(
+        cells: [
+          DataCell(Text(row.variedad)),
+          DataCell(Text('${row.totalNeto} kg')),
+        ],
+      );
+    }).toList();
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        columns: const [
+          DataColumn(label: Text('Variedad')),
+          DataColumn(label: Text('Neto total')),
+        ],
+        rows: dataRows,
       ),
     );
   }
