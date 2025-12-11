@@ -1,30 +1,85 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../models/commercial_filters.dart';
-import '../../models/palet.dart';
+import '../../models/commercial_group_row.dart';
+import '../../models/saved_commercial_view.dart';
 import '../../providers/commercial_providers.dart';
+import '../../services/commercial_views_repository.dart';
+import '../../utils/export_utils.dart';
 
-class CommercialDashboardScreen extends ConsumerWidget {
+class CommercialDashboardScreen extends ConsumerStatefulWidget {
   const CommercialDashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CommercialDashboardScreen> createState() =>
+      _CommercialDashboardScreenState();
+}
+
+class _CommercialDashboardScreenState
+    extends ConsumerState<CommercialDashboardScreen> {
+  @override
+  Widget build(BuildContext context) {
     final filters = ref.watch(commercialFiltersProvider);
-    final paletsAsync = ref.watch(filteredCommercialPaletsProvider);
+    final groupedAsync = ref.watch(commercialGroupedRowsProvider);
     final totalsAsync = ref.watch(commercialTotalsProvider);
     final filterOptions = ref.watch(commercialFilterOptionsProvider);
     final columns = ref.watch(commercialColumnsProvider);
+    final savedViewsAsync = ref.watch(savedCommercialViewsProvider);
+
+    final groupedRows = groupedAsync.value ?? <CommercialGroupRow>[];
+    final savedViews = savedViewsAsync.value ?? <SavedCommercialView>[];
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Informe comercial'),
+        actions: [
+          IconButton(
+            onPressed:
+                groupedRows.isEmpty ? null : () => _exportCommercialCsv(context),
+            icon: const Icon(Icons.file_download_outlined),
+            tooltip: 'Exportar CSV',
+          ),
+          IconButton(
+            onPressed:
+                groupedRows.isEmpty ? null : () => _exportCommercialPdf(context),
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            tooltip: 'Exportar PDF',
+          ),
+          IconButton(
+            onPressed: () => _onSaveView(context, filters, columns),
+            icon: const Icon(Icons.bookmark_add_outlined),
+            tooltip: 'Guardar vista',
+          ),
+          PopupMenuButton<_ViewsMenuAction>(
+            onSelected: (action) =>
+                _onViewsAction(context, action, savedViews),
+            itemBuilder: (context) => const <PopupMenuEntry<_ViewsMenuAction>>[
+              PopupMenuItem(
+                value: _ViewsMenuAction.load,
+                child: Text('Cargar vista guardada'),
+              ),
+              PopupMenuItem(
+                value: _ViewsMenuAction.rename,
+                child: Text('Renombrar vista'),
+              ),
+              PopupMenuItem(
+                value: _ViewsMenuAction.delete,
+                child: Text('Borrar vista'),
+              ),
+            ],
+          ),
+        ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(filteredCommercialPaletsProvider);
           ref.invalidate(commercialFilterOptionsProvider);
           ref.invalidate(commercialTotalsProvider);
+          ref.invalidate(savedCommercialViewsProvider);
         },
         child: ListView(
           padding: const EdgeInsets.all(16),
@@ -45,15 +100,34 @@ class CommercialDashboardScreen extends ConsumerWidget {
             const SizedBox(height: 16),
             Align(
               alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () => _openColumnsDialog(context, ref, columns),
-                icon: const Text('⚙️'),
-                label: const Text('Columnas'),
+              child: Wrap(
+                spacing: 8,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => _openColumnsDialog(context, ref, columns),
+                    icon: const Text('⚙️'),
+                    label: const Text('Columnas'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: groupedRows.isEmpty
+                        ? null
+                        : () => _exportCommercialCsv(context),
+                    icon: const Icon(Icons.file_download_outlined),
+                    label: const Text('Exportar CSV'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: groupedRows.isEmpty
+                        ? null
+                        : () => _exportCommercialPdf(context),
+                    icon: const Icon(Icons.picture_as_pdf_outlined),
+                    label: const Text('Exportar PDF'),
+                  ),
+                ],
               ),
             ),
-            paletsAsync.when(
-              data: (palets) => _PaletsTable(
-                palets: palets,
+            groupedAsync.when(
+              data: (rows) => _GroupedTable(
+                rows: rows,
                 columns: columns,
               ),
               loading: () => const Padding(
@@ -122,7 +196,275 @@ class CommercialDashboardScreen extends ConsumerWidget {
       },
     );
   }
+
+  Future<void> _exportCommercialCsv(BuildContext context) async {
+    final grouped = ref.read(commercialGroupedRowsProvider).value ?? [];
+    try {
+      final file = await exportCommercialCsv(grouped);
+      await Share.shareXFiles([XFile(file.path)], text: 'Informe comercial');
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al exportar CSV: $error')),
+      );
+    }
+  }
+
+  Future<void> _exportCommercialPdf(BuildContext context) async {
+    final grouped = ref.read(commercialGroupedRowsProvider).value ?? [];
+    final filters = ref.read(commercialFiltersProvider);
+    try {
+      final descripcionFiltros = _describeFilters(filters);
+      final file = await exportCommercialPdf(
+        grouped,
+        title: 'Informe comercial — $descripcionFiltros',
+      );
+      final bytes = await file.readAsBytes();
+      await Printing.sharePdf(
+        bytes: bytes,
+        filename: file.uri.pathSegments.last,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error al exportar PDF: $error')),
+      );
+    }
+  }
+
+  String _describeFilters(CommercialFilters filters) {
+    final buffer = <String>[];
+    if (filters.cultivos.isNotEmpty) {
+      buffer.add('Cultivo ${filters.cultivos.join(', ')}');
+    }
+    if (filters.variedades.isNotEmpty) {
+      buffer.add('Var. ${filters.variedades.join(', ')}');
+    }
+    if (filters.calibres.isNotEmpty) {
+      buffer.add('Cal. ${filters.calibres.join(', ')}');
+    }
+    if (filters.categorias.isNotEmpty) {
+      buffer.add('Cat. ${filters.categorias.join(', ')}');
+    }
+    if (filters.marcas.isNotEmpty) {
+      buffer.add('Marca ${filters.marcas.join(', ')}');
+    }
+    if (filters.pedidos.isNotEmpty) {
+      buffer.add('Pedido ${filters.pedidos.join(', ')}');
+    }
+    if (filters.vidaRange != null) {
+      final formatter = DateFormat('dd/MM/yyyy');
+      buffer.add(
+        'Vida ${formatter.format(filters.vidaRange!.start)} - ${formatter.format(filters.vidaRange!.end)}',
+      );
+    }
+    if (buffer.isEmpty) return 'Todos';
+    return buffer.join(' · ');
+  }
+
+  Future<void> _onSaveView(
+    BuildContext context,
+    CommercialFilters filters,
+    Set<CommercialColumn> columns,
+  ) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Guardar vista'),
+          content: TextField(
+            controller: controller,
+            decoration: const InputDecoration(
+              labelText: 'Nombre de la vista',
+              hintText: 'Ej. Comercial calibres',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (controller.text.trim().isEmpty) return;
+                Navigator.pop(context, controller.text.trim());
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result == null || result.isEmpty) return;
+
+    try {
+      await ref
+          .read(commercialViewsRepositoryProvider)
+          .saveView(result, filters, columns);
+      if (!mounted) return;
+      ref.invalidate(savedCommercialViewsProvider);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Vista "$result" guardada.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo guardar la vista: $error')),
+      );
+    }
+  }
+
+  Future<void> _onViewsAction(
+    BuildContext context,
+    _ViewsMenuAction action,
+    List<SavedCommercialView> views,
+  ) async {
+    if (views.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No hay vistas guardadas.')),
+      );
+      return;
+    }
+
+    switch (action) {
+      case _ViewsMenuAction.load:
+        await _showViewsSelector(
+          context,
+          views,
+          title: 'Cargar vista',
+          onSelected: (view) async {
+            final repo = ref.read(commercialViewsRepositoryProvider);
+            final filters = await repo.loadFilters(view.id);
+            final columns = await repo.loadColumns(view.id);
+            if (filters != null) {
+              ref.read(commercialFiltersProvider.notifier).state = filters;
+            }
+            if (columns != null) {
+              ref.read(commercialColumnsProvider.notifier).state = columns;
+            }
+          },
+        );
+        return;
+      case _ViewsMenuAction.rename:
+        await _showViewsSelector(
+          context,
+          views,
+          title: 'Renombrar vista',
+          onSelected: (view) async {
+            final controller = TextEditingController(text: view.name);
+            final newName = await showDialog<String>(
+              context: context,
+              builder: (context) {
+                return AlertDialog(
+                  title: const Text('Renombrar vista'),
+                  content: TextField(
+                    controller: controller,
+                    decoration: const InputDecoration(labelText: 'Nuevo nombre'),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancelar'),
+                    ),
+                    FilledButton(
+                      onPressed: () {
+                        if (controller.text.trim().isEmpty) return;
+                        Navigator.pop(context, controller.text.trim());
+                      },
+                      child: const Text('Guardar'),
+                    ),
+                  ],
+                );
+              },
+            );
+            if (newName != null && newName.isNotEmpty) {
+              await ref
+                  .read(commercialViewsRepositoryProvider)
+                  .renameView(view.id, newName);
+              ref.invalidate(savedCommercialViewsProvider);
+            }
+          },
+        );
+        return;
+      case _ViewsMenuAction.delete:
+        await _showViewsSelector(
+          context,
+          views,
+          title: 'Borrar vista',
+          onSelected: (view) async {
+            final confirm = await showDialog<bool>(
+              context: context,
+              builder: (context) {
+                return AlertDialog(
+                  title: const Text('Borrar vista'),
+                  content: Text('¿Borrar "${view.name}"?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancelar'),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Borrar'),
+                    ),
+                  ],
+                );
+              },
+            );
+            if (confirm == true) {
+              await ref
+                  .read(commercialViewsRepositoryProvider)
+                  .deleteView(view.id);
+              ref.invalidate(savedCommercialViewsProvider);
+            }
+          },
+        );
+        return;
+    }
+  }
+
+  Future<void> _showViewsSelector(
+    BuildContext context,
+    List<SavedCommercialView> views, {
+    required String title,
+    required Future<void> Function(SavedCommercialView view) onSelected,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 300,
+            child: ListView.builder(
+              itemCount: views.length,
+              itemBuilder: (context, index) {
+                final view = views[index];
+                final subtitle = view.updatedAt != null
+                    ? DateFormat('dd/MM/yyyy HH:mm').format(view.updatedAt!)
+                    : null;
+                return ListTile(
+                  title: Text(view.name),
+                  subtitle: subtitle != null ? Text(subtitle) : null,
+                  trailing: Text(_describeFilters(view.filters)),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await onSelected(view);
+                  },
+                );
+              },
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
+
+enum _ViewsMenuAction { load, rename, delete }
 
 class _FiltersSection extends StatelessWidget {
   const _FiltersSection({
@@ -372,15 +714,15 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-class _PaletsTable extends StatelessWidget {
-  const _PaletsTable({required this.palets, required this.columns});
+class _GroupedTable extends StatelessWidget {
+  const _GroupedTable({required this.rows, required this.columns});
 
-  final List<Palet> palets;
+  final List<CommercialGroupRow> rows;
   final Set<CommercialColumn> columns;
 
   @override
   Widget build(BuildContext context) {
-    if (palets.isEmpty) {
+    if (rows.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 24),
         child: Center(child: Text('No hay datos para mostrar')),
@@ -391,9 +733,9 @@ class _PaletsTable extends StatelessWidget {
         .map((column) => DataColumn(label: Text(_columnLabel(column))))
         .toList();
 
-    final dataRows = palets.map((palet) {
+    final dataRows = rows.map((row) {
       final cells = columns.map((column) {
-        return DataCell(Text(_columnValue(palet, column)));
+        return DataCell(Text(_columnValue(row, column)));
       }).toList();
       return DataRow(cells: cells);
     }).toList();
@@ -485,6 +827,10 @@ String _columnLabel(CommercialColumn column) {
       return 'Vida';
     case CommercialColumn.neto:
       return 'Neto';
+    case CommercialColumn.paletsCount:
+      return 'Palets';
+    case CommercialColumn.totalNeto:
+      return 'Neto total';
     case CommercialColumn.linea:
       return 'Línea';
     case CommercialColumn.confeccion:
@@ -494,38 +840,42 @@ String _columnLabel(CommercialColumn column) {
   }
 }
 
-String _columnValue(Palet palet, CommercialColumn column) {
+String _columnValue(CommercialGroupRow row, CommercialColumn column) {
   switch (column) {
     case CommercialColumn.camara:
-      return palet.camara;
+      return '';
     case CommercialColumn.estanteria:
-      return palet.estanteria;
+      return '';
     case CommercialColumn.nivel:
-      return palet.nivel.toString();
+      return '';
     case CommercialColumn.posicion:
-      return palet.posicion.toString();
+      return '';
     case CommercialColumn.cultivo:
-      return palet.cultivo;
+      return row.cultivo ?? '';
     case CommercialColumn.variedad:
-      return palet.variedad;
+      return row.variedad ?? '';
     case CommercialColumn.calibre:
-      return palet.calibre;
+      return row.calibre ?? '';
     case CommercialColumn.marca:
-      return palet.marca;
+      return row.marca ?? '';
     case CommercialColumn.categoria:
-      return palet.categoria ?? '';
+      return row.categoria ?? '';
     case CommercialColumn.pedido:
-      return palet.pedido ?? '';
+      return row.pedido ?? '';
     case CommercialColumn.vida:
-      return palet.vida ?? '';
+      return '';
     case CommercialColumn.neto:
-      return '${palet.neto} kg';
+      return '';
+    case CommercialColumn.paletsCount:
+      return row.countPalets.toString();
+    case CommercialColumn.totalNeto:
+      return '${row.totalNeto} kg';
     case CommercialColumn.linea:
-      return palet.linea.toString();
+      return '';
     case CommercialColumn.confeccion:
-      return palet.confeccion ?? '';
+      return '';
     case CommercialColumn.codigo:
-      return palet.codigo;
+      return '';
   }
 }
 
