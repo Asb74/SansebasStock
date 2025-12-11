@@ -20,3 +20,9 @@ final occupiedRowsByCameraProvider =
   final repo = ref.watch(storageConfigRepositoryProvider);
   return repo.watchOccupiedRows(cameraId);
 });
+
+final storageConfigByCameraProvider =
+    StreamProvider<Map<String, List<StorageRowConfig>>>((ref) {
+  final repo = ref.watch(storageConfigRepositoryProvider);
+  return repo.watchAllRowsByCamera();
+});

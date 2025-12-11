@@ -1,6 +1,7 @@
 import 'dart:io' show Platform; // DESKTOP-GUARD
 import 'dart:math' as math;
 
+import 'package:collection/collection.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +9,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:sansebas_stock/features/ops/ops_providers.dart';
 import 'package:sansebas_stock/features/qr/qr_parser.dart' as qr;
+import 'package:sansebas_stock/models/camera_model.dart';
+import 'package:sansebas_stock/models/palet.dart';
+import 'package:sansebas_stock/providers/camera_providers.dart';
+import 'package:sansebas_stock/providers/palets_providers.dart';
+import 'package:sansebas_stock/providers/storage_config_providers.dart';
+import 'package:sansebas_stock/services/palet_location_service.dart';
 import 'package:sansebas_stock/services/stock_service.dart';
 
 class QrScanScreen extends ConsumerStatefulWidget {
@@ -31,6 +38,7 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   bool _analyzingFromGallery = false;
   TorchState _torchState = TorchState.off;
   DateTime? _lastDetection;
+  final PaletLocationService _locationService = PaletLocationService();
 
   static const Duration _detectionCooldown = Duration(milliseconds: 1200);
 
@@ -184,13 +192,35 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
     final stockService = ref.read(stockServiceProvider);
     final ubicacionPendiente = ref.read(ubicacionPendienteProvider);
 
+    final paletId = '${parsed.linea}${parsed.p}';
+    final paletsBase = ref.read(paletsBaseStreamProvider).value;
+    final currentPalet = paletsBase?.firstWhereOrNull((p) => p.id == paletId);
+    final requiresLocation = currentPalet == null || !currentPalet.estaOcupado;
+    final descriptor = _buildPaletDescriptor(parsed, currentPalet);
+
     StockLocation? ubicacion;
     if (ubicacionPendiente != null) {
       ubicacion = StockLocation(
-        camara: ubicacionPendiente.camara,
-        estanteria: ubicacionPendiente.estanteria,
+        camara: ubicacionPendiente.camara.padLeft(2, '0'),
+        estanteria: ubicacionPendiente.estanteria.padLeft(2, '0'),
         nivel: ubicacionPendiente.nivel,
       );
+    } else if (requiresLocation) {
+      final autoLocation = await _tryFindAutoLocation(descriptor);
+      if (autoLocation != null) {
+        final confirmed = await _showAutoLocationDialog(
+          autoLocation,
+          descriptor,
+          parsed,
+        );
+        if (confirmed == true) {
+          ubicacion = _stockLocationFromAuto(autoLocation);
+        }
+      }
+    }
+
+    if (requiresLocation && ubicacion != null) {
+      ubicacion = await _resolveSlotForLocation(ubicacion) ?? ubicacion;
     }
 
     try {
@@ -213,6 +243,187 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
         _showError(e.message);
       }
     }
+  }
+
+  PaletLocationDescriptor _buildPaletDescriptor(
+    qr.ParsedQr parsed,
+    Palet? existing,
+  ) {
+    String? preferExisting(String? existingValue, String? fallback) {
+      if (existingValue != null && existingValue.trim().isNotEmpty) {
+        return existingValue.trim();
+      }
+      if (fallback != null && fallback.trim().isNotEmpty) {
+        return fallback.trim();
+      }
+      return null;
+    }
+
+    String? rawField(String key) {
+      final value = parsed.rawFields[key.toUpperCase()] ?? parsed.rawFields[key];
+      if (value == null || value.trim().isEmpty) return null;
+      return value.trim();
+    }
+
+    return PaletLocationDescriptor(
+      cultivo: preferExisting(existing?.cultivo, rawField('CULTIVO')),
+      marca: preferExisting(existing?.marca, rawField('MARCA')),
+      variedad: preferExisting(existing?.variedad, rawField('VARIEDAD')),
+      calibre: preferExisting(existing?.calibre, rawField('CALIBRE')),
+      categoria: rawField('CATEGORIA'),
+    );
+  }
+
+  Future<AutoLocationResult?> _tryFindAutoLocation(
+    PaletLocationDescriptor descriptor,
+  ) async {
+    final cameras = ref.read(camerasStreamProvider).value;
+    final storageConfig = ref.read(storageConfigByCameraProvider).value;
+    final stockByRow = ref.read(paletsByCameraAndRowProvider).value;
+
+    if (cameras == null || storageConfig == null || stockByRow == null) {
+      return null;
+    }
+
+    return _locationService.findAutoLocationForIncomingPalet(
+      palet: descriptor,
+      cameras: cameras,
+      storageConfigByCamera: storageConfig,
+      currentStockByCameraAndRow: stockByRow,
+    );
+  }
+
+  StockLocation _stockLocationFromAuto(AutoLocationResult autoLocation) {
+    return StockLocation(
+      camara: autoLocation.camera.displayNumero,
+      estanteria: autoLocation.fila.toString().padLeft(2, '0'),
+      nivel: autoLocation.nivel,
+      posicion: autoLocation.posicion,
+    );
+  }
+
+  Future<StockLocation?> _resolveSlotForLocation(StockLocation base) async {
+    if (base.posicion != null) {
+      return base;
+    }
+
+    final cameras = ref.read(camerasStreamProvider).value;
+    final stockByRow = ref.read(paletsByCameraAndRowProvider).value;
+    if (cameras == null || stockByRow == null) {
+      return base;
+    }
+
+    final camera = _findCamera(base.camara, cameras);
+    if (camera == null) {
+      return base;
+    }
+
+    final fila = _parseFila(base.estanteria);
+    if (fila == null) {
+      return base;
+    }
+
+    final slot = _locationService.findFirstAvailableSlot(
+      camera: camera,
+      fila: fila,
+      currentStockByCameraAndRow: stockByRow,
+    );
+
+    if (slot == null) {
+      return base;
+    }
+
+    return StockLocation(
+      camara: camera.displayNumero,
+      estanteria: fila.toString().padLeft(2, '0'),
+      nivel: slot.nivel,
+      posicion: slot.posicion,
+    );
+  }
+
+  CameraModel? _findCamera(String camara, List<CameraModel> cameras) {
+    final normalized = camara.trim();
+    final padded = normalized.padLeft(2, '0');
+
+    for (final camera in cameras) {
+      final keys = {
+        camera.id.trim(),
+        camera.numero.trim(),
+        camera.displayNumero,
+      };
+      if (keys.contains(normalized) || keys.contains(padded)) {
+        return camera;
+      }
+    }
+    return null;
+  }
+
+  int? _parseFila(String estanteria) {
+    final digits = RegExp(r'\d+').firstMatch(estanteria.trim())?.group(0);
+    if (digits == null) return null;
+    return int.tryParse(digits);
+  }
+
+  Future<bool?> _showAutoLocationDialog(
+    AutoLocationResult result,
+    PaletLocationDescriptor descriptor,
+    qr.ParsedQr parsed,
+  ) {
+    final titulo =
+        'CÁMARA ${result.camera.displayNumero} – FILA ${result.fila.toString().padLeft(2, '0')}';
+
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog.fullscreen(
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(false),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  Text(
+                    titulo,
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Nivel ${result.nivel} · Posición ${result.posicion}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 24),
+                  _AutoLocationInfo(
+                    paletCode: parsed.p.toString().padLeft(10, '0'),
+                    descriptor: descriptor,
+                  ),
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text('Confirmar ubicación'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(false),
+                    child: const Text('Elegir manualmente'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   bool _esQrUbicacion(String raw) {
@@ -245,6 +456,33 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
       return null;
     } catch (_) {
       return null;
+    }
+  }
+
+  bool _esQrPalet(String raw) {
+    return raw.toUpperCase().contains('P=');
+  }
+
+  Future<void> _toggleTorch() async {
+    final controller = _controller;
+    if (controller == null) {
+      return;
+    }
+    if (_busy) {
+      return;
+    }
+
+    try {
+      await controller.toggleTorch();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _torchState =
+            _torchState == TorchState.on ? TorchState.off : TorchState.on;
+      });
+    } on Exception {
+      _showError('No se pudo alternar la linterna.');
     }
   }
 
@@ -496,6 +734,57 @@ class _DesktopQrPlaceholder extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _AutoLocationInfo extends StatelessWidget {
+  const _AutoLocationInfo({
+    required this.paletCode,
+    required this.descriptor,
+  });
+
+  final String paletCode;
+  final PaletLocationDescriptor descriptor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final entries = <MapEntry<String, String?>>[
+      MapEntry('Palet', paletCode),
+      MapEntry('Cultivo', descriptor.cultivo),
+      MapEntry('Variedad', descriptor.variedad),
+      MapEntry('Marca', descriptor.marca),
+      MapEntry('Calibre', descriptor.calibre),
+      MapEntry('Categoría', descriptor.categoria),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final entry in entries)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  entry.key,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  entry.value?.isNotEmpty == true
+                      ? entry.value!
+                      : '—',
+                  style: theme.textTheme.titleMedium,
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
