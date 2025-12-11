@@ -7,7 +7,7 @@ import '../../../providers/camera_providers.dart';
 import '../../../providers/maestros_options_providers.dart';
 import '../../../providers/storage_config_providers.dart';
 
-class AssignStorageRowsScreen extends ConsumerWidget {
+class AssignStorageRowsScreen extends ConsumerStatefulWidget {
   const AssignStorageRowsScreen({
     super.key,
     required this.camera,
@@ -16,17 +16,46 @@ class AssignStorageRowsScreen extends ConsumerWidget {
   final CameraModel camera;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final rowsAsync = ref.watch(storageRowsByCameraProvider(camera.numero));
-    final maestrosAsync = ref.watch(maestrosOptionsProvider);
-    final occupiedAsync = ref.watch(occupiedRowsByCameraProvider(camera.numero));
+  ConsumerState<AssignStorageRowsScreen> createState() =>
+      _AssignStorageRowsScreenState();
+}
 
-    final totalEstanterias =
-        camera.pasillo == CameraPasillo.central ? camera.filas * 2 : camera.filas;
+class _AssignStorageRowsScreenState
+    extends ConsumerState<AssignStorageRowsScreen> {
+  List<StorageRowConfig>? _rows;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.listen<AsyncValue<List<StorageRowConfig>>>(
+      storageRowsByCameraProvider(widget.camera.numero),
+      (previous, next) {
+        next.whenData((rows) {
+          setState(() {
+            _rows = rows;
+          });
+        });
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rowsAsync =
+        ref.watch(storageRowsByCameraProvider(widget.camera.numero));
+    final maestrosAsync = ref.watch(maestrosOptionsProvider);
+    final occupiedAsync =
+        ref.watch(occupiedRowsByCameraProvider(widget.camera.numero));
+
+    final totalEstanterias = widget.camera.pasillo == CameraPasillo.central
+        ? widget.camera.filas * 2
+        : widget.camera.filas;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Configurar almacenamiento — Cámara ${camera.displayNumero}'),
+        title: Text(
+          'Configurar almacenamiento — Cámara ${widget.camera.displayNumero}',
+        ),
       ),
       body: maestrosAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -35,7 +64,8 @@ class AssignStorageRowsScreen extends ConsumerWidget {
           return rowsAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Error cargando configuración: $e')),
-            data: (rows) {
+            data: (rowsFromStream) {
+              final rows = _rows ?? rowsFromStream;
               return occupiedAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(child: Text('Error cargando filas ocupadas: $e')),
@@ -52,7 +82,7 @@ class AssignStorageRowsScreen extends ConsumerWidget {
 
                       final row = existing ??
                           StorageRowConfig(
-                            cameraId: camera.numero,
+                            cameraId: widget.camera.numero,
                             rowId: fila.toString(),
                             fila: fila,
                           );
@@ -148,7 +178,7 @@ class AssignStorageRowsScreen extends ConsumerWidget {
                                           categoria: nuevaCategoria,
                                         );
 
-                                        await _saveRow(ref, updated);
+                                        await _updateRowAndSave(updated);
                                       },
                                     ),
                                     _buildDropdown(
@@ -158,7 +188,7 @@ class AssignStorageRowsScreen extends ConsumerWidget {
                                       enabled: !isOccupied,
                                       onChanged: (value) async {
                                         final updated = row.copyWith(marca: value);
-                                        await _saveRow(ref, updated);
+                                        await _updateRowAndSave(updated);
                                       },
                                     ),
                                     _buildDropdown(
@@ -168,7 +198,7 @@ class AssignStorageRowsScreen extends ConsumerWidget {
                                       enabled: !isOccupied,
                                       onChanged: (value) async {
                                         final updated = row.copyWith(variedad: value);
-                                        await _saveRow(ref, updated);
+                                        await _updateRowAndSave(updated);
                                       },
                                     ),
                                     _buildDropdown(
@@ -178,7 +208,7 @@ class AssignStorageRowsScreen extends ConsumerWidget {
                                       enabled: !isOccupied,
                                       onChanged: (value) async {
                                         final updated = row.copyWith(calibre: value);
-                                        await _saveRow(ref, updated);
+                                        await _updateRowAndSave(updated);
                                       },
                                     ),
                                     _buildDropdown(
@@ -188,7 +218,7 @@ class AssignStorageRowsScreen extends ConsumerWidget {
                                       enabled: !isOccupied,
                                       onChanged: (value) async {
                                         final updated = row.copyWith(categoria: value);
-                                        await _saveRow(ref, updated);
+                                        await _updateRowAndSave(updated);
                                       },
                                     ),
                                   ],
@@ -236,13 +266,33 @@ class AssignStorageRowsScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _saveRow(
-    WidgetRef ref,
-    StorageRowConfig row,
-  ) async {
-    final repo = ref.read(storageConfigRepositoryProvider);
+  Future<void> _updateRowAndSave(StorageRowConfig row) async {
+    setState(() {
+      final updatedRows = [...?_rows];
+      final index = updatedRows.indexWhere((r) => r.rowId == row.rowId);
 
-    await repo.saveRow(row);
+      if (index == -1) {
+        updatedRows.add(row);
+      } else {
+        updatedRows[index] = row;
+      }
+
+      _rows = updatedRows;
+    });
+
+    try {
+      final repo = ref.read(storageConfigRepositoryProvider);
+      await repo.saveRow(row);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No se pudo guardar la configuración de la fila ${row.fila}: $e',
+          ),
+        ),
+      );
+    }
   }
 }
 
