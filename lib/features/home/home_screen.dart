@@ -7,8 +7,8 @@ import 'package:go_router/go_router.dart';
 
 import '../map/map_cameras_screen.dart';
 import '../ops/qr_scan_screen.dart';
+import '../reports/reports_home_screen.dart';
 import '../settings/settings_home_screen.dart';
-import '../../ui/stock/stock_filter_page.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -90,16 +90,16 @@ class HomeScreen extends ConsumerWidget {
                   },
                 ),
 
-                // --- INFORME DE STOCK ---
+                // --- INFORMES ---
                 _HomeActionCard(
-                  title: 'Informe de stock',
-                  subtitle: 'Filtra palets y exporta resultados',
-                  icon: Icons.inventory_outlined,
+                  title: 'Informes',
+                  subtitle: 'Accede a los distintos informes',
+                  icon: Icons.assessment_outlined,
                   color: theme.colorScheme.tertiary,
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => const StockFilterPage(),
+                        builder: (_) => const ReportsHomeScreen(),
                       ),
                     );
                   },

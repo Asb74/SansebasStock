@@ -37,28 +37,101 @@ final paletsBaseStreamProvider = StreamProvider<List<Palet>>((ref) {
   });
 });
 
-/// Aplica los filtros de PaletFilters sobre una lista de Palet en memoria.
-List<Palet> _applyFilters(List<Palet> palets, PaletFilters filters) {
+enum _FilterField {
+  camara,
+  estanteria,
+  hueco,
+  cultivo,
+  variedad,
+  calibre,
+  marca,
+  categoria,
+  pedido,
+  vida,
+  confeccion,
+  netoMin,
+  netoMax,
+}
+
+bool _matchesFilters(
+  Palet palet,
+  PaletFilters filters, {
+  Set<_FilterField> except = const {},
+}) {
   bool matches(String? filter, String? value) {
     if (filter == null || filter.isEmpty) return true;
     if (value == null) return false;
     return value == filter;
   }
 
-  final filtered = palets.where((p) {
-    if (!matches(filters.camara, p.camara)) return false;
-    if (!matches(filters.estanteria, p.estanteria)) return false;
-    if (!matches(filters.hueco, p.hueco)) return false;
-    if (!matches(filters.cultivo, p.cultivo)) return false;
-    if (!matches(filters.variedad, p.variedad)) return false;
-    if (!matches(filters.calibre, p.calibre)) return false;
-    if (!matches(filters.marca, p.marca)) return false;
+  if (!except.contains(_FilterField.camara) &&
+      !matches(filters.camara, palet.camara)) {
+    return false;
+  }
+  if (!except.contains(_FilterField.estanteria) &&
+      !matches(filters.estanteria, palet.estanteria)) {
+    return false;
+  }
+  if (!except.contains(_FilterField.hueco) &&
+      !matches(filters.hueco, palet.hueco)) {
+    return false;
+  }
+  if (!except.contains(_FilterField.cultivo) &&
+      !matches(filters.cultivo, palet.cultivo)) {
+    return false;
+  }
+  if (!except.contains(_FilterField.variedad) &&
+      !matches(filters.variedad, palet.variedad)) {
+    return false;
+  }
+  if (!except.contains(_FilterField.calibre) &&
+      !matches(filters.calibre, palet.calibre)) {
+    return false;
+  }
+  if (!except.contains(_FilterField.marca) &&
+      !matches(filters.marca, palet.marca)) {
+    return false;
+  }
+  if (!except.contains(_FilterField.categoria) &&
+      !matches(filters.categoria, palet.categoria)) {
+    return false;
+  }
+  if (!except.contains(_FilterField.pedido) &&
+      !matches(filters.pedido, palet.pedido)) {
+    return false;
+  }
+  if (!except.contains(_FilterField.vida) &&
+      !matches(filters.vida, palet.vida)) {
+    return false;
+  }
+  if (!except.contains(_FilterField.confeccion) &&
+      !matches(filters.confeccion, palet.confeccion)) {
+    return false;
+  }
 
-    if (filters.netoMin != null && p.neto < filters.netoMin!) return false;
-    if (filters.netoMax != null && p.neto > filters.netoMax!) return false;
+  if (!except.contains(_FilterField.netoMin) &&
+      filters.netoMin != null &&
+      palet.neto < filters.netoMin!) {
+    return false;
+  }
+  if (!except.contains(_FilterField.netoMax) &&
+      filters.netoMax != null &&
+      palet.neto > filters.netoMax!) {
+    return false;
+  }
 
-    return true;
-  }).toList(growable: false);
+  return true;
+}
+
+/// Aplica los filtros de PaletFilters sobre una lista de Palet en memoria.
+List<Palet> _applyFilters(
+  List<Palet> palets,
+  PaletFilters filters, {
+  Set<_FilterField> except = const {},
+}) {
+  final filtered = palets
+      .where((p) => _matchesFilters(p, filters, except: except))
+      .toList(growable: false);
 
   // Mantenemos el mismo orden que antes: CAMARA, ESTANTERIA, NIVEL, POSICION
   filtered.sort((a, b) {
@@ -172,6 +245,10 @@ class PaletFilterOptions {
     required this.variedades,
     required this.calibres,
     required this.marcas,
+    required this.categorias,
+    required this.pedidos,
+    required this.vidas,
+    required this.confecciones,
   });
 
   final List<String> camaras;
@@ -181,6 +258,10 @@ class PaletFilterOptions {
   final List<String> variedades;
   final List<String> calibres;
   final List<String> marcas;
+  final List<String> categorias;
+  final List<String> pedidos;
+  final List<String> vidas;
+  final List<String> confecciones;
 }
 
 final paletFilterOptionsProvider = Provider<PaletFilterOptions?>((ref) {
@@ -190,8 +271,6 @@ final paletFilterOptionsProvider = Provider<PaletFilterOptions?>((ref) {
 
   if (palets == null) return null;
 
-  final filtered = _applyFilters(palets, filters);
-
   final camaras = <String>{};
   final estanterias = <String>{};
   final huecos = <String>{};
@@ -199,6 +278,10 @@ final paletFilterOptionsProvider = Provider<PaletFilterOptions?>((ref) {
   final variedades = <String>{};
   final calibres = <String>{};
   final marcas = <String>{};
+  final categorias = <String>{};
+  final pedidos = <String>{};
+  final vidas = <String>{};
+  final confecciones = <String>{};
 
   void addValue(String value, Set<String> target) {
     final normalized = value.trim();
@@ -207,14 +290,40 @@ final paletFilterOptionsProvider = Provider<PaletFilterOptions?>((ref) {
     }
   }
 
-  for (final palet in filtered) {
-    addValue(palet.camara, camaras);
-    addValue(palet.estanteria, estanterias);
-    addValue(palet.hueco, huecos);
-    addValue(palet.cultivo, cultivos);
-    addValue(palet.variedad, variedades);
-    addValue(palet.calibre, calibres);
-    addValue(palet.marca, marcas);
+  for (final palet in palets) {
+    if (_matchesFilters(palet, filters, except: {_FilterField.camara})) {
+      addValue(palet.camara, camaras);
+    }
+    if (_matchesFilters(palet, filters, except: {_FilterField.estanteria})) {
+      addValue(palet.estanteria, estanterias);
+    }
+    if (_matchesFilters(palet, filters, except: {_FilterField.hueco})) {
+      addValue(palet.hueco, huecos);
+    }
+    if (_matchesFilters(palet, filters, except: {_FilterField.cultivo})) {
+      addValue(palet.cultivo, cultivos);
+    }
+    if (_matchesFilters(palet, filters, except: {_FilterField.variedad})) {
+      addValue(palet.variedad, variedades);
+    }
+    if (_matchesFilters(palet, filters, except: {_FilterField.calibre})) {
+      addValue(palet.calibre, calibres);
+    }
+    if (_matchesFilters(palet, filters, except: {_FilterField.marca})) {
+      addValue(palet.marca, marcas);
+    }
+    if (_matchesFilters(palet, filters, except: {_FilterField.categoria})) {
+      addValue(palet.categoria, categorias);
+    }
+    if (_matchesFilters(palet, filters, except: {_FilterField.pedido})) {
+      addValue(palet.pedido, pedidos);
+    }
+    if (_matchesFilters(palet, filters, except: {_FilterField.vida})) {
+      addValue(palet.vida, vidas);
+    }
+    if (_matchesFilters(palet, filters, except: {_FilterField.confeccion})) {
+      addValue(palet.confeccion, confecciones);
+    }
   }
 
   List<String> sortSet(Set<String> set) => set.toList()
@@ -228,6 +337,10 @@ final paletFilterOptionsProvider = Provider<PaletFilterOptions?>((ref) {
     variedades: sortSet(variedades),
     calibres: sortSet(calibres),
     marcas: sortSet(marcas),
+    categorias: sortSet(categorias),
+    pedidos: sortSet(pedidos),
+    vidas: sortSet(vidas),
+    confecciones: sortSet(confecciones),
   );
 });
 

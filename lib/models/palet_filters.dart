@@ -10,6 +10,10 @@ class PaletFilters extends Equatable {
     this.variedad,
     this.calibre,
     this.marca,
+    this.categoria,
+    this.pedido,
+    this.vida,
+    this.confeccion,
     this.netoMin,
     this.netoMax,
   });
@@ -21,6 +25,10 @@ class PaletFilters extends Equatable {
   final String? variedad;
   final String? calibre;
   final String? marca;
+  final String? categoria;
+  final String? pedido;
+  final String? vida;
+  final String? confeccion;
   final int? netoMin;
   final int? netoMax;
 
@@ -32,6 +40,10 @@ class PaletFilters extends Equatable {
     String? variedad,
     String? calibre,
     String? marca,
+    String? categoria,
+    String? pedido,
+    String? vida,
+    String? confeccion,
     int? netoMin,
     int? netoMax,
     bool resetCamara = false,
@@ -41,6 +53,10 @@ class PaletFilters extends Equatable {
     bool resetVariedad = false,
     bool resetCalibre = false,
     bool resetMarca = false,
+    bool resetCategoria = false,
+    bool resetPedido = false,
+    bool resetVida = false,
+    bool resetConfeccion = false,
     bool resetNetoMin = false,
     bool resetNetoMax = false,
   }) {
@@ -52,6 +68,10 @@ class PaletFilters extends Equatable {
       variedad: resetVariedad ? null : variedad ?? this.variedad,
       calibre: resetCalibre ? null : calibre ?? this.calibre,
       marca: resetMarca ? null : marca ?? this.marca,
+      categoria: resetCategoria ? null : categoria ?? this.categoria,
+      pedido: resetPedido ? null : pedido ?? this.pedido,
+      vida: resetVida ? null : vida ?? this.vida,
+      confeccion: resetConfeccion ? null : confeccion ?? this.confeccion,
       netoMin: resetNetoMin ? null : netoMin ?? this.netoMin,
       netoMax: resetNetoMax ? null : netoMax ?? this.netoMax,
     );
@@ -66,6 +86,10 @@ class PaletFilters extends Equatable {
       if (variedad != null) 'variedad': variedad,
       if (calibre != null) 'calibre': calibre,
       if (marca != null) 'marca': marca,
+      if (categoria != null) 'categoria': categoria,
+      if (pedido != null) 'pedido': pedido,
+      if (vida != null) 'vida': vida,
+      if (confeccion != null) 'confeccion': confeccion,
       if (netoMin != null) 'netoMin': netoMin,
       if (netoMax != null) 'netoMax': netoMax,
     };
@@ -96,6 +120,10 @@ class PaletFilters extends Equatable {
       variedad: _asString('variedad'),
       calibre: _asString('calibre'),
       marca: _asString('marca'),
+      categoria: _asString('categoria'),
+      pedido: _asString('pedido'),
+      vida: _asString('vida'),
+      confeccion: _asString('confeccion'),
       netoMin: _asInt('netoMin'),
       netoMax: _asInt('netoMax'),
     );
@@ -109,6 +137,10 @@ class PaletFilters extends Equatable {
       variedad == null &&
       calibre == null &&
       marca == null &&
+      categoria == null &&
+      pedido == null &&
+      vida == null &&
+      confeccion == null &&
       netoMin == null &&
       netoMax == null;
 
@@ -121,6 +153,10 @@ class PaletFilters extends Equatable {
         variedad,
         calibre,
         marca,
+        categoria,
+        pedido,
+        vida,
+        confeccion,
         netoMin,
         netoMax,
       ];
