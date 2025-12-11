@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../models/camera_model.dart';
 import '../models/palet.dart';
 import '../models/storage_row_config.dart';
@@ -32,8 +34,117 @@ class AutoLocationResult {
   final int posicion;
 }
 
+class NextSlotResult {
+  const NextSlotResult({required this.nivel, required this.posicion});
+
+  final int nivel;
+  final int posicion;
+}
+
 class PaletLocationService {
   AutoLocationResult? findAutoLocationForIncomingPalet({
+    required PaletLocationDescriptor palet,
+    required List<CameraModel> cameras,
+    required Map<String, List<StorageRowConfig>> storageConfigByCamera,
+    required Map<String, List<Palet>> currentStockByCameraAndRow,
+  }) {
+    final candidates = _rowCandidates(
+      palet: palet,
+      cameras: cameras,
+      storageConfigByCamera: storageConfigByCamera,
+      currentStockByCameraAndRow: currentStockByCameraAndRow,
+    );
+
+    for (final candidate in candidates) {
+      if (candidate.nextSlot == null) continue;
+      if (candidate.ocupados >= candidate.capacidad) continue;
+
+      return AutoLocationResult(
+        camera: candidate.camera,
+        fila: candidate.fila,
+        nivel: candidate.nextSlot!.nivel,
+        posicion: candidate.nextSlot!.posicion,
+      );
+    }
+
+    return null;
+  }
+
+  Future<AutoLocationResult?> findAutoLocationForIncomingPaletFresh({
+    required PaletLocationDescriptor palet,
+    required List<CameraModel> cameras,
+    required Map<String, List<StorageRowConfig>> storageConfigByCamera,
+    required Map<String, List<Palet>> currentStockByCameraAndRow,
+    required FirebaseFirestore firestore,
+  }) async {
+    final candidates = _rowCandidates(
+      palet: palet,
+      cameras: cameras,
+      storageConfigByCamera: storageConfigByCamera,
+      currentStockByCameraAndRow: currentStockByCameraAndRow,
+    );
+
+    for (final candidate in candidates) {
+      final slot = await findNextFreeSlotFresh(
+        camara: candidate.camera.displayNumero,
+        fila: candidate.fila,
+        niveles: candidate.niveles,
+        posicionesMax: candidate.posicionesMax,
+        firestore: firestore,
+      );
+
+      if (slot == null) {
+        continue;
+      }
+
+      return AutoLocationResult(
+        camera: candidate.camera,
+        fila: candidate.fila,
+        nivel: slot.nivel,
+        posicion: slot.posicion,
+      );
+    }
+
+    return null;
+  }
+
+  _Slot? findFirstAvailableSlot({
+    required CameraModel camera,
+    required int fila,
+    required Map<String, List<Palet>> currentStockByCameraAndRow,
+  }) {
+    final stock = _occupiedForRow(
+      currentStockByCameraAndRow,
+      _cameraKeys(camera),
+      fila,
+    );
+
+    return _firstFreeSlot(
+      stock,
+      niveles: camera.niveles,
+      posicionesMax: camera.posicionesMax,
+    );
+  }
+
+  List<Palet> _occupiedForRow(
+    Map<String, List<Palet>> stockMap,
+    Set<String> cameraKeys,
+    int fila,
+  ) {
+    final normalizedFila = fila.toString().padLeft(2, '0');
+    final matches = <Palet>[];
+
+    for (final cameraKey in cameraKeys) {
+      final candidates = stockMap['${cameraKey.trim()}|$normalizedFila'];
+      if (candidates != null) {
+        matches.addAll(candidates);
+      }
+    }
+
+    return matches;
+  }
+
+  List<_RowCandidate> _rowCandidates({
     required PaletLocationDescriptor palet,
     required List<CameraModel> cameras,
     required Map<String, List<StorageRowConfig>> storageConfigByCamera,
@@ -77,6 +188,8 @@ class PaletLocationService {
             capacidad: capacity,
             ocupados: occupiedCount,
             nextSlot: nextSlot,
+            niveles: lookup.camera.niveles,
+            posicionesMax: lookup.camera.posicionesMax,
           ),
         );
       }
@@ -92,55 +205,7 @@ class PaletLocationService {
       return a.fila.compareTo(b.fila);
     });
 
-    for (final candidate in candidates) {
-      if (candidate.nextSlot == null) continue;
-      if (candidate.ocupados >= candidate.capacidad) continue;
-
-      return AutoLocationResult(
-        camera: candidate.camera,
-        fila: candidate.fila,
-        nivel: candidate.nextSlot!.nivel,
-        posicion: candidate.nextSlot!.posicion,
-      );
-    }
-
-    return null;
-  }
-
-  _Slot? findFirstAvailableSlot({
-    required CameraModel camera,
-    required int fila,
-    required Map<String, List<Palet>> currentStockByCameraAndRow,
-  }) {
-    final stock = _occupiedForRow(
-      currentStockByCameraAndRow,
-      _cameraKeys(camera),
-      fila,
-    );
-
-    return _firstFreeSlot(
-      stock,
-      niveles: camera.niveles,
-      posicionesMax: camera.posicionesMax,
-    );
-  }
-
-  List<Palet> _occupiedForRow(
-    Map<String, List<Palet>> stockMap,
-    Set<String> cameraKeys,
-    int fila,
-  ) {
-    final normalizedFila = fila.toString().padLeft(2, '0');
-    final matches = <Palet>[];
-
-    for (final cameraKey in cameraKeys) {
-      final candidates = stockMap['${cameraKey.trim()}|$normalizedFila'];
-      if (candidates != null) {
-        matches.addAll(candidates);
-      }
-    }
-
-    return matches;
+    return candidates;
   }
 
   bool _matchesConfig(StorageRowConfig row, PaletLocationDescriptor palet) {
@@ -194,6 +259,48 @@ class PaletLocationService {
     final paddedNumero = numero.padLeft(2, '0');
     return {camera.id.trim(), numero, paddedNumero, camera.displayNumero};
   }
+
+  Future<NextSlotResult?> findNextFreeSlotFresh({
+    required String camara,
+    required int fila,
+    required int niveles,
+    required int posicionesMax,
+    required FirebaseFirestore firestore,
+  }) async {
+    if (niveles <= 0 || posicionesMax <= 0) return null;
+
+    final normalizedCamara = camara.padLeft(2, '0');
+    final normalizedFila = fila.toString().padLeft(2, '0');
+
+    final snapshot = await firestore
+        .collection('Stock')
+        .where('CAMARA', isEqualTo: normalizedCamara)
+        .where('ESTANTERIA', isEqualTo: normalizedFila)
+        .where('HUECO', isEqualTo: 'Ocupado')
+        .get();
+
+    final taken = snapshot.docs.map((doc) {
+      final data = doc.data();
+      final nivel = data['NIVEL'];
+      final posicion = data['POSICION'];
+      return _Slot(
+        nivel: nivel is int ? nivel : int.tryParse(nivel?.toString() ?? '') ?? 0,
+        posicion:
+            posicion is int ? posicion : int.tryParse(posicion?.toString() ?? '') ?? 0,
+      );
+    }).toSet();
+
+    for (int posicion = 1; posicion <= posicionesMax; posicion++) {
+      for (int nivel = 1; nivel <= niveles; nivel++) {
+        final slot = _Slot(nivel: nivel, posicion: posicion);
+        if (!taken.contains(slot)) {
+          return NextSlotResult(nivel: nivel, posicion: posicion);
+        }
+      }
+    }
+
+    return null;
+  }
 }
 
 class _Slot {
@@ -225,6 +332,8 @@ class _RowCandidate {
     required this.capacidad,
     required this.ocupados,
     required this.nextSlot,
+    required this.niveles,
+    required this.posicionesMax,
   });
 
   final CameraModel camera;
@@ -232,4 +341,6 @@ class _RowCandidate {
   final int capacidad;
   final int ocupados;
   final _Slot? nextSlot;
+  final int niveles;
+  final int posicionesMax;
 }
