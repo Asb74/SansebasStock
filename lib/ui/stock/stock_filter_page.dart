@@ -21,37 +21,6 @@ class StockFilterPage extends ConsumerStatefulWidget {
 }
 
 class _StockFilterPageState extends ConsumerState<StockFilterPage> {
-  late final TextEditingController _netoMinController;
-  late final TextEditingController _netoMaxController;
-  ProviderSubscription<PaletFilters>? _filtersSubscription;
-
-  @override
-  void initState() {
-    super.initState();
-    _netoMinController = TextEditingController();
-    _netoMaxController = TextEditingController();
-    _filtersSubscription = ref.listenManual<PaletFilters>(
-      paletFiltersProvider,
-      (previous, next) {
-        final minText = next.netoMin?.toString() ?? '';
-        final maxText = next.netoMax?.toString() ?? '';
-        if (_netoMinController.text != minText) {
-          _netoMinController.text = minText;
-        }
-        if (_netoMaxController.text != maxText) {
-          _netoMaxController.text = maxText;
-        }
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    _filtersSubscription?.close();
-    _netoMinController.dispose();
-    _netoMaxController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -136,8 +105,6 @@ class _StockFilterPageState extends ConsumerState<StockFilterPage> {
                     _FiltersCard(
                       filters: filters,
                       options: filterOptions,
-                      netoMinController: _netoMinController,
-                      netoMaxController: _netoMaxController,
                       onClear: () {
                         ref.read(paletFiltersProvider.notifier).state =
                             const PaletFilters();
@@ -350,6 +317,12 @@ class _StockFilterPageState extends ConsumerState<StockFilterPage> {
     if (filters.variedad != null) buffer.add('Var. ${filters.variedad}');
     if (filters.calibre != null) buffer.add('Cal. ${filters.calibre}');
     if (filters.marca != null) buffer.add('Marca ${filters.marca}');
+    if (filters.categoria != null) buffer.add('Cat. ${filters.categoria}');
+    if (filters.pedido != null) buffer.add('Pedido ${filters.pedido}');
+    if (filters.vida != null) buffer.add('Vida ${filters.vida}');
+    if (filters.confeccion != null) {
+      buffer.add('Conf. ${filters.confeccion}');
+    }
     if (filters.netoMin != null) buffer.add('Neto ≥ ${filters.netoMin}');
     if (filters.netoMax != null) buffer.add('Neto ≤ ${filters.netoMax}');
     if (buffer.isEmpty) return 'Todos';
@@ -561,16 +534,12 @@ class _FiltersCard extends StatelessWidget {
   const _FiltersCard({
     required this.filters,
     required this.options,
-    required this.netoMinController,
-    required this.netoMaxController,
     required this.onClear,
     required this.onFiltersChange,
   });
 
   final PaletFilters filters;
   final PaletFilterOptions? options;
-  final TextEditingController netoMinController;
-  final TextEditingController netoMaxController;
   final VoidCallback onClear;
   final ValueChanged<PaletFilters> onFiltersChange;
 
@@ -686,40 +655,50 @@ class _FiltersCard extends StatelessWidget {
                   ),
                 ),
                 SizedBox(
-                  width: 140,
-                  child: TextField(
-                    controller: netoMinController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Neto ≥',
-                    ),
+                  width: 200,
+                  child: _buildDropdown(
+                    label: 'Categoría',
+                    value: filters.categoria,
+                    options: options?.categorias ?? const <String>[],
+                    allowNull: true,
                     onChanged: (value) {
-                      final parsed = int.tryParse(value);
-                      onFiltersChange(
-                        filters.copyWith(
-                          netoMin: parsed,
-                          resetNetoMin: value.isEmpty,
-                        ),
-                      );
+                      onFiltersChange(filters.copyWith(categoria: value));
                     },
                   ),
                 ),
                 SizedBox(
-                  width: 140,
-                  child: TextField(
-                    controller: netoMaxController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Neto ≤',
-                    ),
+                  width: 200,
+                  child: _buildDropdown(
+                    label: 'Pedido',
+                    value: filters.pedido,
+                    options: options?.pedidos ?? const <String>[],
+                    allowNull: true,
                     onChanged: (value) {
-                      final parsed = int.tryParse(value);
-                      onFiltersChange(
-                        filters.copyWith(
-                          netoMax: parsed,
-                          resetNetoMax: value.isEmpty,
-                        ),
-                      );
+                      onFiltersChange(filters.copyWith(pedido: value));
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: 160,
+                  child: _buildDropdown(
+                    label: 'Vida',
+                    value: filters.vida,
+                    options: options?.vidas ?? const <String>[],
+                    allowNull: true,
+                    onChanged: (value) {
+                      onFiltersChange(filters.copyWith(vida: value));
+                    },
+                  ),
+                ),
+                SizedBox(
+                  width: 200,
+                  child: _buildDropdown(
+                    label: 'Confección',
+                    value: filters.confeccion,
+                    options: options?.confecciones ?? const <String>[],
+                    allowNull: true,
+                    onChanged: (value) {
+                      onFiltersChange(filters.copyWith(confeccion: value));
                     },
                   ),
                 ),
