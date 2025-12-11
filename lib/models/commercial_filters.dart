@@ -19,6 +19,61 @@ class CommercialFilters {
   final Set<String> pedidos;
   final DateTimeRange? vidaRange;
 
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'cultivos': cultivos.toList(),
+      'variedades': variedades.toList(),
+      'calibres': calibres.toList(),
+      'categorias': categorias.toList(),
+      'marcas': marcas.toList(),
+      'pedidos': pedidos.toList(),
+      if (vidaRange != null)
+        'vidaRange': {
+          'start': vidaRange!.start.toIso8601String(),
+          'end': vidaRange!.end.toIso8601String(),
+        },
+    };
+  }
+
+  factory CommercialFilters.fromJson(Map<String, dynamic> json) {
+    Set<String> _asSet(String key) {
+      final raw = json[key];
+      if (raw is Iterable) {
+        return raw.map((e) => e.toString()).toSet();
+      }
+      return <String>{};
+    }
+
+    DateTimeRange? _asRange(String key) {
+      final raw = json[key];
+      if (raw is Map<String, dynamic>) {
+        final start = DateTime.tryParse(raw['start']?.toString() ?? '');
+        final end = DateTime.tryParse(raw['end']?.toString() ?? '');
+        if (start != null && end != null) {
+          return DateTimeRange(start: start, end: end);
+        }
+      }
+      if (raw is Map) {
+        final start = DateTime.tryParse(raw['start']?.toString() ?? '');
+        final end = DateTime.tryParse(raw['end']?.toString() ?? '');
+        if (start != null && end != null) {
+          return DateTimeRange(start: start, end: end);
+        }
+      }
+      return null;
+    }
+
+    return CommercialFilters(
+      cultivos: _asSet('cultivos'),
+      variedades: _asSet('variedades'),
+      calibres: _asSet('calibres'),
+      categorias: _asSet('categorias'),
+      marcas: _asSet('marcas'),
+      pedidos: _asSet('pedidos'),
+      vidaRange: _asRange('vidaRange'),
+    );
+  }
+
   CommercialFilters copyWith({
     Set<String>? cultivos,
     Set<String>? variedades,

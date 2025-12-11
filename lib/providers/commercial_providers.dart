@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/commercial_filters.dart';
+import '../models/commercial_group_row.dart';
 import '../models/palet.dart';
 import 'palets_providers.dart';
 
@@ -21,6 +22,8 @@ enum CommercialColumn {
   linea,
   confeccion,
   codigo,
+  paletsCount,
+  totalNeto,
 }
 
 class CommercialFilterOptions {
@@ -60,15 +63,14 @@ final commercialFiltersProvider =
 
 final commercialColumnsProvider =
     StateProvider<Set<CommercialColumn>>((ref) => {
-          CommercialColumn.camara,
-          CommercialColumn.estanteria,
-          CommercialColumn.nivel,
-          CommercialColumn.posicion,
           CommercialColumn.variedad,
           CommercialColumn.calibre,
           CommercialColumn.categoria,
           CommercialColumn.pedido,
-          CommercialColumn.neto,
+          CommercialColumn.marca,
+          CommercialColumn.cultivo,
+          CommercialColumn.paletsCount,
+          CommercialColumn.totalNeto,
         });
 
 final _commercialPaletsProvider = Provider<AsyncValue<List<Palet>>>((ref) {
@@ -76,6 +78,50 @@ final _commercialPaletsProvider = Provider<AsyncValue<List<Palet>>>((ref) {
   return baseAsync.whenData(
     (palets) => palets.where((palet) => palet.estaOcupado).toList(),
   );
+});
+
+final commercialGroupedRowsProvider =
+    Provider<AsyncValue<List<CommercialGroupRow>>>((ref) {
+  final paletsAsync = ref.watch(filteredCommercialPaletsProvider);
+  return paletsAsync.whenData((palets) {
+    final Map<String, _GroupAccumulator> tmp = {};
+
+    for (final p in palets) {
+      final key = [
+        p.cultivo ?? '',
+        p.variedad ?? '',
+        p.calibre ?? '',
+        p.categoria ?? '',
+        p.marca ?? '',
+        p.pedido ?? '',
+      ].join('|');
+
+      final acc = tmp.putIfAbsent(key, () {
+        return _GroupAccumulator(
+          cultivo: p.cultivo,
+          variedad: p.variedad,
+          calibre: p.calibre,
+          categoria: p.categoria,
+          marca: p.marca,
+          pedido: p.pedido,
+        );
+      });
+
+      acc.countPalets += 1;
+      acc.totalNeto += p.neto;
+    }
+
+    final rows = tmp.values.map((acc) => acc.toRow()).toList()
+      ..sort((a, b) {
+        final byVar = (a.variedad ?? '').compareTo(b.variedad ?? '');
+        if (byVar != 0) return byVar;
+        final byCal = (a.calibre ?? '').compareTo(b.calibre ?? '');
+        if (byCal != 0) return byCal;
+        return (a.pedido ?? '').compareTo(b.pedido ?? '');
+      });
+
+    return rows;
+  });
 });
 
 enum _FilterField {
@@ -156,6 +202,39 @@ List<Palet> applyCommercialFilters(
   });
 
   return filtered;
+}
+
+class _GroupAccumulator {
+  _GroupAccumulator({
+    this.cultivo,
+    this.variedad,
+    this.calibre,
+    this.categoria,
+    this.marca,
+    this.pedido,
+  });
+
+  final String? cultivo;
+  final String? variedad;
+  final String? calibre;
+  final String? categoria;
+  final String? marca;
+  final String? pedido;
+  int countPalets = 0;
+  int totalNeto = 0;
+
+  CommercialGroupRow toRow() {
+    return CommercialGroupRow(
+      cultivo: cultivo,
+      variedad: variedad,
+      calibre: calibre,
+      categoria: categoria,
+      marca: marca,
+      pedido: pedido,
+      countPalets: countPalets,
+      totalNeto: totalNeto,
+    );
+  }
 }
 
 CommercialFilterOptions computeCommercialOptions(
