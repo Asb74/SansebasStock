@@ -283,7 +283,9 @@ final paletFilterOptionsProvider = Provider<PaletFilterOptions?>((ref) {
   final vidas = <String>{};
   final confecciones = <String>{};
 
-  void addValue(String value, Set<String> target) {
+  void addValue(String? value, Set<String> target) {
+    if (value == null) return;
+
     final normalized = value.trim();
     if (normalized.isNotEmpty) {
       target.add(normalized);
