@@ -133,6 +133,19 @@ Map<String, List<Palet>> groupPaletsPorUbicacion(List<Palet> palets) {
   return grouped;
 }
 
+Map<String, List<Palet>> groupPaletsByCameraAndRow(List<Palet> palets) {
+  final grouped = <String, List<Palet>>{};
+  for (final palet in palets) {
+    if (!palet.estaOcupado) continue;
+
+    final camera = palet.camara.trim();
+    final estanteria = palet.estanteria.trim();
+    final key = '$camera|$estanteria';
+    grouped.putIfAbsent(key, () => <Palet>[]).add(palet);
+  }
+  return grouped;
+}
+
 final paletsTotalsProvider = Provider<AsyncValue<PaletsTotals>>((ref) {
   final paletsAsync = ref.watch(paletsStreamProvider);
   return paletsAsync.whenData(computePaletsTotals);
@@ -142,6 +155,12 @@ final paletsGroupByUbicacionProvider =
     Provider<AsyncValue<Map<String, List<Palet>>>>((ref) {
   final paletsAsync = ref.watch(paletsStreamProvider);
   return paletsAsync.whenData(groupPaletsPorUbicacion);
+});
+
+final paletsByCameraAndRowProvider =
+    Provider<AsyncValue<Map<String, List<Palet>>>>((ref) {
+  final paletsAsync = ref.watch(paletsBaseStreamProvider);
+  return paletsAsync.whenData(groupPaletsByCameraAndRow);
 });
 
 class PaletFilterOptions {

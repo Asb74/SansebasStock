@@ -25,6 +25,21 @@ class StorageConfigRepository {
     });
   }
 
+  Stream<Map<String, List<StorageRowConfig>>> watchAllRowsByCamera() {
+    return _firestore.collectionGroup('rows').snapshots().map((snapshot) {
+      final byCamera = <String, List<StorageRowConfig>>{};
+      for (final doc in snapshot.docs) {
+        final cameraId = doc.reference.parent.parent?.id;
+        if (cameraId == null) continue;
+
+        final row = StorageRowConfig.fromDoc(cameraId, doc.id, doc.data());
+        byCamera.putIfAbsent(cameraId, () => <StorageRowConfig>[]).add(row);
+      }
+
+      return byCamera;
+    });
+  }
+
   Future<void> saveRow(StorageRowConfig row) async {
     await _rowsCol(row.cameraId)
         .doc(row.rowId)

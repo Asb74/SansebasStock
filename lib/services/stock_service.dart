@@ -53,16 +53,19 @@ class StockLocation {
     required this.camara,
     required this.estanteria,
     required this.nivel,
+    this.posicion,
   });
 
   final String camara;
   final String estanteria;
   final int nivel;
+  final int? posicion;
 
   Map<String, dynamic> toMap() => {
         'CAMARA': camara,
         'ESTANTERIA': estanteria,
         'NIVEL': nivel,
+        if (posicion != null) 'POSICION': posicion,
       };
 }
 
@@ -156,7 +159,7 @@ class StockService {
           );
         }
 
-        final int posicion = await _siguientePosicion(ubicacion);
+        final int posicion = ubicacion.posicion ?? await _siguientePosicion(ubicacion);
         final Map<String, dynamic> data = _buildBaseData(qr)
           ..addAll(ubicacion.toMap())
           ..['POSICION'] = posicion
@@ -205,7 +208,7 @@ class StockService {
         );
       }
 
-      final int posicion = await _siguientePosicion(ubicacion);
+      final int posicion = ubicacion.posicion ?? await _siguientePosicion(ubicacion);
       final Map<String, dynamic> data = _buildBaseData(qr)
         ..addAll(ubicacion.toMap())
         ..['POSICION'] = posicion
