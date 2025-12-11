@@ -474,16 +474,15 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
       showDragHandle: true,
       builder: (context) {
         final data = entry.data;
+        final palet = Palet.fromDoc(entry.id, data);
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Palet ${entry.palletCode}',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
+              Text('Palet ${palet.codigo}',
+                  style: Theme.of(context).textTheme.titleLarge),
               const SizedBox(height: 12),
               Text('Fila: F${entry.fila}'),
               Text('Posición: P${entry.posicion}'),
@@ -504,8 +503,7 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                         final docRef = FirebaseFirestore.instance
                             .collection('Stock')
                             .doc(entry.id);
-                        final lastMovementAsync =
-                            ref.watch(lastMovementProvider(entry.palletCode));
+                        final lastMovementAsync = ref.watch(lastMovementProvider(palet));
 
                         final fieldWidgets = <Widget>[];
 
@@ -610,7 +608,7 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                                               Navigator.of(context).push(
                                                 MaterialPageRoute(
                                                   builder: (_) => PaletMovementsScreen(
-                                                    palletId: entry.palletCode,
+                                                    palet: palet,
                                                   ),
                                                 ),
                                               );
