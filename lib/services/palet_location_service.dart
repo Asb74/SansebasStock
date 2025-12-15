@@ -73,15 +73,14 @@ class PaletLocationService {
   Future<AutoLocationResult?> findAutoLocationForIncomingPaletFresh({
     required PaletLocationDescriptor palet,
     required List<CameraModel> cameras,
-    required Map<String, List<StorageRowConfig>> storageConfigByCamera,
     required Map<String, List<Palet>> currentStockByCameraAndRow,
     required FirebaseFirestore firestore,
   }) async {
-    final candidates = _rowCandidates(
+    final candidates = await _rowCandidatesFresh(
       palet: palet,
       cameras: cameras,
-      storageConfigByCamera: storageConfigByCamera,
       currentStockByCameraAndRow: currentStockByCameraAndRow,
+      firestore: firestore,
     );
 
     for (final candidate in candidates) {
@@ -142,6 +141,92 @@ class PaletLocationService {
     }
 
     return matches;
+  }
+
+  Future<List<_RowCandidate>> _rowCandidatesFresh({
+    required PaletLocationDescriptor palet,
+    required List<CameraModel> cameras,
+    required Map<String, List<Palet>> currentStockByCameraAndRow,
+    required FirebaseFirestore firestore,
+  }) async {
+    final normalizedCameras = {
+      for (final camera in cameras)
+        camera.id: _CameraLookup(camera: camera, keys: _cameraKeys(camera)),
+    };
+
+    final candidates = <_RowCandidate>[];
+
+    for (final lookup in normalizedCameras.values) {
+      if (lookup.camera.tipo != CameraTipo.recepcion) continue;
+
+      final rows = await _getConfigsForCamera(lookup.camera.id, firestore);
+      if (rows.isEmpty) continue;
+
+      for (final row in rows) {
+        if (!_matchesConfig(row, palet)) continue;
+
+        final stock = _occupiedForRow(
+          currentStockByCameraAndRow,
+          lookup.keys,
+          row.fila,
+        );
+        final capacity = lookup.camera.niveles * lookup.camera.posicionesMax;
+        if (capacity <= 0) continue;
+
+        final nextSlot = _firstFreeSlot(
+          stock,
+          niveles: lookup.camera.niveles,
+          posicionesMax: lookup.camera.posicionesMax,
+        );
+
+        final occupiedCount = stock.length;
+        candidates.add(
+          _RowCandidate(
+            camera: lookup.camera,
+            fila: row.fila,
+            capacidad: capacity,
+            ocupados: occupiedCount,
+            nextSlot: nextSlot,
+            niveles: lookup.camera.niveles,
+            posicionesMax: lookup.camera.posicionesMax,
+          ),
+        );
+      }
+    }
+
+    candidates.sort((a, b) {
+      final byOcupados = a.ocupados.compareTo(b.ocupados);
+      if (byOcupados != 0) return byOcupados;
+
+      final byCamara = a.camera.numero.compareTo(b.camera.numero);
+      if (byCamara != 0) return byCamara;
+
+      return a.fila.compareTo(b.fila);
+    });
+
+    return candidates;
+  }
+
+  Future<List<StorageRowConfig>> _getConfigsForCamera(
+    String camaraId,
+    FirebaseFirestore firestore,
+  ) async {
+    final snapshot = await firestore
+        .collection('StorageConfig')
+        .doc(camaraId)
+        .collection('rows')
+        .orderBy('fila')
+        .get();
+
+    return snapshot.docs
+        .map(
+          (doc) => StorageRowConfig.fromDoc(
+            camaraId,
+            doc.id,
+            doc.data(),
+          ),
+        )
+        .toList();
   }
 
   List<_RowCandidate> _rowCandidates({
