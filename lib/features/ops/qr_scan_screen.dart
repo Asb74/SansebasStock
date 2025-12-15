@@ -14,7 +14,6 @@ import 'package:sansebas_stock/models/camera_model.dart';
 import 'package:sansebas_stock/models/palet.dart';
 import 'package:sansebas_stock/providers/camera_providers.dart';
 import 'package:sansebas_stock/providers/palets_providers.dart';
-import 'package:sansebas_stock/providers/storage_config_providers.dart';
 import 'package:sansebas_stock/services/palet_location_service.dart';
 import 'package:sansebas_stock/services/stock_service.dart';
 
@@ -42,6 +41,7 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   String? _lastScannedCode;
   DateTime? _lastScanTime;
   final PaletLocationService _locationService = PaletLocationService();
+  Ubicacion? _pendingUbicacion;
 
   static const Duration _detectionCooldown = Duration(milliseconds: 1200);
 
@@ -123,6 +123,18 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
     _navigateBack();
   }
 
+  Future<void> _pauseScanner() async {
+    try {
+      await _controller?.stop();
+    } catch (_) {}
+  }
+
+  Future<void> _resumeScanner() async {
+    try {
+      await _controller?.start();
+    } catch (_) {}
+  }
+
   Future<void> _handle(String raw) async {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) {
@@ -194,8 +206,26 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
       return;
     }
 
-    ref.read(ubicacionPendienteProvider.notifier).state = ubicacion;
-    _showSuccess('Ubicación lista: ${ubicacion.toString()}');
+    _pendingUbicacion = ubicacion;
+
+    await _pauseScanner();
+
+    if (!mounted) {
+      return;
+    }
+
+    final confirmed = await _showUbicacionDialog(ubicacion);
+
+    if (!mounted) {
+      return;
+    }
+
+    if (confirmed == true) {
+      ref.read(ubicacionPendienteProvider.notifier).state = ubicacion;
+    }
+
+    _pendingUbicacion = null;
+    await _resumeScanner();
   }
 
   Future<void> _onScanPalet(String raw) async {
@@ -263,6 +293,51 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
     }
   }
 
+  Future<bool?> _showUbicacionDialog(Ubicacion ubicacion) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog.fullscreen(
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.of(context).pop(false),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  Text(
+                    'Ubicación leída',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Cámara ${ubicacion.camara} · Estantería ${ubicacion.estanteria} · Nivel ${ubicacion.nivel}',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: () => Navigator.of(context).pop(true),
+                    child: const Text('Aceptar'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   PaletLocationDescriptor _buildPaletDescriptor(
     qr.ParsedQr parsed,
     Palet? existing,
@@ -296,17 +371,15 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
     PaletLocationDescriptor descriptor,
   ) async {
     final cameras = ref.read(camerasStreamProvider).value;
-    final storageConfig = ref.read(storageConfigByCameraProvider).value;
     final stockByRow = ref.read(paletsByCameraAndRowProvider).value;
 
-    if (cameras == null || storageConfig == null || stockByRow == null) {
+    if (cameras == null || stockByRow == null) {
       return null;
     }
 
     return _locationService.findAutoLocationForIncomingPaletFresh(
       palet: descriptor,
       cameras: cameras,
-      storageConfigByCamera: storageConfig,
       currentStockByCameraAndRow: stockByRow,
       firestore: FirebaseFirestore.instance,
     );
@@ -552,13 +625,6 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
         content: Text(msg),
         backgroundColor: const Color(0xFFD32F2F),
       ),
-    );
-  }
-
-  void _showSuccess(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg)),
     );
   }
 
