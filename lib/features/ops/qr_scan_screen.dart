@@ -40,6 +40,8 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   DateTime? _lastDetection;
   String? _lastScannedCode;
   DateTime? _lastScanTime;
+  String? _lastProcessedPaletId;
+  DateTime? _lastProcessedAt;
   final PaletLocationService _locationService = PaletLocationService();
   Ubicacion? _pendingUbicacion;
 
@@ -136,18 +138,13 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   }
 
   Future<void> _handle(String raw) async {
-    final trimmed = raw.trim();
-    if (trimmed.isEmpty) {
+    if (_busy) {
       return;
     }
 
-    if (widget.returnScanResult && _esQrPalet(trimmed)) {
-      try {
-        final parsed = qr.parseQr(trimmed);
-        _navigateBackWithResult(parsed.p.toString().padLeft(10, '0'));
-      } on FormatException catch (e) {
-        _showError(e.message);
-      }
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      await _resumeScanner();
       return;
     }
 
@@ -157,6 +154,17 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
     });
 
     try {
+      if (widget.returnScanResult && _esQrPalet(trimmed)) {
+        try {
+          final parsed = qr.parseQr(trimmed);
+          _navigateBackWithResult(parsed.p.toString().padLeft(10, '0'));
+          return;
+        } on FormatException catch (e) {
+          _showError(e.message);
+          return;
+        }
+      }
+
       if (_esQrUbicacion(trimmed)) {
         await _onScanUbicacion(trimmed);
       } else if (_esQrPalet(trimmed)) {
@@ -177,6 +185,7 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
       }
     } finally {
       if (mounted) {
+        await _resumeScanner();
         setState(() {
           _busy = false;
         });
@@ -185,6 +194,9 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   }
 
   Future<void> _onBarcodeScanned(String code) async {
+    if (_busy) {
+      return;
+    }
     final now = DateTime.now();
 
     if (_lastScannedCode == code &&
@@ -195,6 +207,8 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
 
     _lastScannedCode = code;
     _lastScanTime = now;
+
+    await _pauseScanner();
 
     await _handle(code);
   }
@@ -241,6 +255,15 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
     final ubicacionPendiente = ref.read(ubicacionPendienteProvider);
 
     final paletId = '${parsed.linea}${parsed.p}';
+    final now = DateTime.now();
+    if (_lastProcessedPaletId == paletId &&
+        _lastProcessedAt != null &&
+        now.difference(_lastProcessedAt!) < const Duration(seconds: 3)) {
+      return;
+    }
+    _lastProcessedPaletId = paletId;
+    _lastProcessedAt = now;
+
     final paletsBase = ref.read(paletsBaseStreamProvider).value;
     final currentPalet = paletsBase?.firstWhereOrNull((p) => p.id == paletId);
     final requiresLocation = currentPalet == null || !currentPalet.estaOcupado;

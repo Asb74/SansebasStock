@@ -20,6 +20,16 @@ class PaletLocationDescriptor {
   final String? categoria;
 }
 
+String? norm(String? v) =>
+    v == null ? null : v.trim().toUpperCase().replaceAll(RegExp(r'\s+'), ' ');
+
+bool isActiveRow(StorageRowConfig row) {
+  return row.cultivo?.isNotEmpty == true &&
+      row.variedad?.isNotEmpty == true &&
+      row.calibre?.isNotEmpty == true &&
+      row.categoria?.isNotEmpty == true;
+}
+
 class AutoLocationResult {
   const AutoLocationResult({
     required this.camera,
@@ -76,35 +86,12 @@ class PaletLocationService {
     required Map<String, List<Palet>> currentStockByCameraAndRow,
     required FirebaseFirestore firestore,
   }) async {
-    final candidates = await _rowCandidatesFresh(
+    return _rowCandidatesFresh(
       palet: palet,
       cameras: cameras,
       currentStockByCameraAndRow: currentStockByCameraAndRow,
       firestore: firestore,
     );
-
-    for (final candidate in candidates) {
-      final slot = await findNextFreeSlotFresh(
-        camara: candidate.camera.displayNumero,
-        fila: candidate.fila,
-        niveles: candidate.niveles,
-        posicionesMax: candidate.posicionesMax,
-        firestore: firestore,
-      );
-
-      if (slot == null) {
-        continue;
-      }
-
-      return AutoLocationResult(
-        camera: candidate.camera,
-        fila: candidate.fila,
-        nivel: slot.nivel,
-        posicion: slot.posicion,
-      );
-    }
-
-    return null;
   }
 
   _Slot? findFirstAvailableSlot({
@@ -143,26 +130,26 @@ class PaletLocationService {
     return matches;
   }
 
-  Future<List<_RowCandidate>> _rowCandidatesFresh({
+  Future<AutoLocationResult?> _rowCandidatesFresh({
     required PaletLocationDescriptor palet,
     required List<CameraModel> cameras,
     required Map<String, List<Palet>> currentStockByCameraAndRow,
     required FirebaseFirestore firestore,
   }) async {
-    final normalizedCameras = {
-      for (final camera in cameras)
-        camera.id: _CameraLookup(camera: camera, keys: _cameraKeys(camera)),
-    };
+    final orderedCameras = cameras
+        .where((camera) => camera.tipo == CameraTipo.recepcion)
+        .toList()
+      ..sort((a, b) => a.numero.compareTo(b.numero));
 
-    final candidates = <_RowCandidate>[];
-
-    for (final lookup in normalizedCameras.values) {
-      if (lookup.camera.tipo != CameraTipo.recepcion) continue;
-
+    for (final camera in orderedCameras) {
+      final lookup = _CameraLookup(camera: camera, keys: _cameraKeys(camera));
       final rows = await _getConfigsForCamera(lookup.camera.id, firestore);
       if (rows.isEmpty) continue;
 
-      for (final row in rows) {
+      final filteredRows = rows.where(isActiveRow).toList()
+        ..sort((a, b) => a.fila.compareTo(b.fila));
+
+      for (final row in filteredRows) {
         if (!_matchesConfig(row, palet)) continue;
 
         final stock = _occupiedForRow(
@@ -180,31 +167,18 @@ class PaletLocationService {
         );
 
         final occupiedCount = stock.length;
-        candidates.add(
-          _RowCandidate(
+        if (nextSlot != null && occupiedCount < capacity) {
+          return AutoLocationResult(
             camera: lookup.camera,
             fila: row.fila,
-            capacidad: capacity,
-            ocupados: occupiedCount,
-            nextSlot: nextSlot,
-            niveles: lookup.camera.niveles,
-            posicionesMax: lookup.camera.posicionesMax,
-          ),
-        );
+            nivel: nextSlot.nivel,
+            posicion: nextSlot.posicion,
+          );
+        }
       }
     }
 
-    candidates.sort((a, b) {
-      final byOcupados = a.ocupados.compareTo(b.ocupados);
-      if (byOcupados != 0) return byOcupados;
-
-      final byCamara = a.camera.numero.compareTo(b.camera.numero);
-      if (byCamara != 0) return byCamara;
-
-      return a.fila.compareTo(b.fila);
-    });
-
-    return candidates;
+    return null;
   }
 
   Future<List<StorageRowConfig>> _getConfigsForCamera(
@@ -235,20 +209,22 @@ class PaletLocationService {
     required Map<String, List<StorageRowConfig>> storageConfigByCamera,
     required Map<String, List<Palet>> currentStockByCameraAndRow,
   }) {
-    final normalizedCameras = {
-      for (final camera in cameras)
-        camera.id: _CameraLookup(camera: camera, keys: _cameraKeys(camera)),
-    };
+    final normalizedCameras = cameras
+        .where((camera) => camera.tipo == CameraTipo.recepcion)
+        .toList()
+      ..sort((a, b) => a.numero.compareTo(b.numero));
 
     final candidates = <_RowCandidate>[];
 
-    for (final lookup in normalizedCameras.values) {
-      if (lookup.camera.tipo != CameraTipo.recepcion) continue;
-
+    for (final camera in normalizedCameras) {
+      final lookup = _CameraLookup(camera: camera, keys: _cameraKeys(camera));
       final rows = storageConfigByCamera[lookup.camera.id];
       if (rows == null || rows.isEmpty) continue;
 
-      for (final row in rows) {
+      final filteredRows = rows.where(isActiveRow).toList()
+        ..sort((a, b) => a.fila.compareTo(b.fila));
+
+      for (final row in filteredRows) {
         if (!_matchesConfig(row, palet)) continue;
 
         final stock = _occupiedForRow(
@@ -281,12 +257,8 @@ class PaletLocationService {
     }
 
     candidates.sort((a, b) {
-      final byOcupados = a.ocupados.compareTo(b.ocupados);
-      if (byOcupados != 0) return byOcupados;
-
-      final byCamara = a.camera.numero.compareTo(b.camera.numero);
-      if (byCamara != 0) return byCamara;
-
+      final byCamera = a.camera.numero.compareTo(b.camera.numero);
+      if (byCamera != 0) return byCamera;
       return a.fila.compareTo(b.fila);
     });
 
@@ -295,13 +267,17 @@ class PaletLocationService {
 
   bool _matchesConfig(StorageRowConfig row, PaletLocationDescriptor palet) {
     bool matchesField(String? expected, String? actual) {
-      if (expected == null || expected.trim().isEmpty) {
+      final normalizedExpected = norm(expected);
+      if (normalizedExpected == null || normalizedExpected.isEmpty) {
         return true;
       }
-      if (actual == null || actual.trim().isEmpty) {
+
+      final normalizedActual = norm(actual);
+      if (normalizedActual == null || normalizedActual.isEmpty) {
         return false;
       }
-      return expected.trim().toLowerCase() == actual.trim().toLowerCase();
+
+      return normalizedExpected == normalizedActual;
     }
 
     if (!matchesField(row.cultivo, palet.cultivo)) return false;
