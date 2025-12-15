@@ -216,13 +216,11 @@ class StockService {
 
       await ref.set(data, SetOptions(merge: true));
 
-      if (huecoAnterior.toLowerCase() != 'ocupado') {
-        await _writeStockLog(
-          palletId: docId,
-          fromValue: huecoAnterior,
-          toValue: 'Ocupado',
-        );
-      }
+      await _writeStockLog(
+        palletId: docId,
+        fromValue: huecoAnterior,
+        toValue: 'Ocupado',
+      );
 
       return StockProcessResult(
         action: StockProcessAction.reubicado,
