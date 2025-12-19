@@ -6,6 +6,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import 'cmr_models.dart';
+import 'cmr_utils.dart';
 
 class CmrPdfService {
   CmrPdfService(this._firestore);
@@ -224,24 +225,16 @@ class CmrPdfService {
   }
 
   Future<_CmrAddress> _fetchRemitente(CmrPedido pedido) async {
-    if (pedido.remitente.toUpperCase() == 'COMERCIALIZADOR') {
-      final comercial = await _findByName(
-        collection: 'MComercial',
-        name: pedido.comercializador,
-        fields: const ['Nombre', 'Comercializador', 'COMERCIALIZADOR'],
-      );
-      return _addressFromMap(
-        name: pedido.comercializador,
-        data: comercial,
-      );
-    }
-
-    final destinatario = await _findByName(
-      collection: 'MCliente_Pais',
-      name: pedido.cliente,
-      fields: const ['Cliente', 'Nombre', 'ID', 'Id', 'IdPedidoCliente'],
+    final data = await obtenerDireccionRemitente(
+      firestore: _firestore,
+      pedido: pedido,
     );
-    return _addressFromMap(name: pedido.cliente, data: destinatario);
+
+    final name = pedido.remitente.toUpperCase() == 'COMERCIALIZADOR'
+        ? pedido.comercializador
+        : pedido.cliente;
+
+    return _addressFromMap(name: name, data: data);
   }
 
   Future<_CmrAddress> _fetchDestinatario(CmrPedido pedido) async {

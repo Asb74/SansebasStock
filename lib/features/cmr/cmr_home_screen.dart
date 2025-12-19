@@ -14,6 +14,7 @@ class CmrHomeScreen extends StatefulWidget {
 class _CmrHomeScreenState extends State<CmrHomeScreen> {
   bool _onlyPedidosP = false;
   late Stream<QuerySnapshot<Map<String, dynamic>>> _pedidosStream;
+  bool _loggedPedidosError = false;
 
   @override
   void initState() {
@@ -51,11 +52,12 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
             subtitle: const Text('Filtra IdPedidoLora que empieza por P'),
             onChanged: (value) {
               setState(() {
-                _onlyPedidosP = value;
-                _pedidosStream = _buildPedidosStream(_onlyPedidosP);
-              });
-            },
-          ),
+            _onlyPedidosP = value;
+            _loggedPedidosError = false;
+            _pedidosStream = _buildPedidosStream(_onlyPedidosP);
+          });
+        },
+      ),
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _pedidosStream,
@@ -64,24 +66,32 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (snapshot.hasError) {
-                  final errorText = snapshot.error is FirebaseException
-                      ? 'Firestore: ${(snapshot.error as FirebaseException).code}'
-                          ' - ${(snapshot.error as FirebaseException).message}'
-                      : 'Error: ${snapshot.error}';
+                  if (!_loggedPedidosError) {
+                    final error = snapshot.error;
+                    if (error is FirebaseException) {
+                      debugPrint(
+                        'Firestore error [${error.code}]: ${error.message}',
+                      );
+                    } else {
+                      debugPrint('Error al cargar pedidos: $error');
+                    }
+                    _loggedPedidosError = true;
+                  }
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            errorText,
+                          const Text(
+                            'No se pudieron cargar los pedidos.',
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 16),
                           ElevatedButton(
                             onPressed: () {
                               setState(() {
+                                _loggedPedidosError = false;
                                 _pedidosStream =
                                     _buildPedidosStream(_onlyPedidosP);
                               });
@@ -94,6 +104,7 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
                   );
                 }
 
+                _loggedPedidosError = false;
                 final docs = snapshot.data?.docs ?? [];
                 final pedidos = docs
                     .map(CmrPedido.fromSnapshot)

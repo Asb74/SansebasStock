@@ -244,7 +244,10 @@ class StockService {
     }
   }
 
-  Future<void> liberarPaletParaCmr({required String palletId}) async {
+  Future<void> liberarPaletParaCmr({
+    required String palletId,
+    required String pedidoId,
+  }) async {
     try {
       final ref = _db.collection('Stock').doc(palletId);
       final snapshot = await ref.get();
@@ -257,11 +260,16 @@ class StockService {
 
       final current = snapshot.data() ?? <String, dynamic>{};
       final huecoAnterior = _normalizeHuecoValue(current['HUECO']);
-      if (huecoAnterior.toLowerCase() == 'libre') {
-        return;
+
+      final updateData = <String, dynamic>{
+        'HUECO': 'Libre',
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      if (pedidoId.trim().isNotEmpty) {
+        updateData['PEDIDO'] = pedidoId.trim();
       }
 
-      await ref.set({'HUECO': 'Libre'}, SetOptions(merge: true));
+      await ref.set(updateData, SetOptions(merge: true));
       await _writeStockLog(
         palletId: palletId,
         fromValue: huecoAnterior,
