@@ -1,13 +1,12 @@
-import 'dart:io' show Platform;
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:printing/printing.dart';
+import 'package:sansebas_stock/services/stock_service.dart';
 
 import '../ops/ops_providers.dart';
+import '../ops/qr_scan_screen.dart';
 import '../qr/qr_parser.dart' as qr;
 import 'cmr_models.dart';
 import 'cmr_pdf_service.dart';
@@ -33,64 +32,62 @@ class CmrScanScreen extends ConsumerStatefulWidget {
   ConsumerState<CmrScanScreen> createState() => _CmrScanScreenState();
 }
 
-final bool _isDesktop =
-    Platform.isWindows || Platform.isLinux || Platform.isMacOS;
-final bool _isMobile = Platform.isAndroid || Platform.isIOS;
-
 class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
-  MobileScannerController? _controller;
   bool _busy = false;
   bool _showOverlay = false;
+  bool _scanInProgress = false;
   _ScanOverlayData? _overlayData;
-  String? _lastScannedCode;
-  DateTime? _lastScanTime;
   final Set<String> _scanned = <String>{};
   final Set<String> _invalid = <String>{};
-
-  static const Duration _detectionCooldown = Duration(milliseconds: 800);
+  late final Set<String> _expectedPalets;
+  late final Map<String, int?> _lineaByPalet;
 
   @override
   void initState() {
     super.initState();
-    _scanned.addAll(widget.initialScanned.map(normalizePaletId));
-    _invalid.addAll(widget.initialInvalid.map(normalizePaletId));
-    if (_isMobile) {
-      _controller = MobileScannerController();
-    }
+    _expectedPalets = widget.expectedPalets.map(normalizarPalet).toSet();
+    _lineaByPalet = {
+      for (final entry in widget.lineaByPalet.entries)
+        normalizarPalet(entry.key): entry.value,
+    };
+    _scanned.addAll(widget.initialScanned.map(normalizarPalet));
+    _invalid.addAll(widget.initialInvalid.map(normalizarPalet));
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _startScan();
+      }
+    });
   }
 
-  @override
-  void dispose() {
-    _controller?.dispose();
-    super.dispose();
-  }
-
-  Future<void> _pauseScanner() async {
-    try {
-      await _controller?.stop();
-    } catch (_) {}
-  }
-
-  Future<void> _resumeScanner() async {
-    try {
-      await _controller?.start();
-    } catch (_) {}
-  }
-
-  Future<void> _onBarcodeScanned(String raw) async {
-    if (_busy || _showOverlay) {
+  Future<void> _startScan() async {
+    if (_scanInProgress || _busy || _showOverlay) {
       return;
     }
-    final now = DateTime.now();
-    if (_lastScannedCode == raw &&
-        _lastScanTime != null &&
-        now.difference(_lastScanTime!) < _detectionCooldown) {
+
+    setState(() {
+      _scanInProgress = true;
+    });
+
+    final raw = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => const QrScanScreen(
+          returnScanResult: true,
+          scanResultMode: QrScanResultMode.raw,
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _scanInProgress = false;
+    });
+
+    if (raw == null || raw.trim().isEmpty) {
       return;
     }
-    _lastScannedCode = raw;
-    _lastScanTime = now;
 
-    await _pauseScanner();
     await _handle(raw);
   }
 
@@ -102,18 +99,15 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     });
 
     try {
-      final trimmed = raw.trim();
-      if (!_isPaletQr(trimmed)) {
+      final paletId = _paletIdFromRaw(raw);
+      if (paletId.isEmpty) {
         await _showOverlayResult(
-          paletId: trimmed,
+          paletId: raw.trim(),
           message: 'QR no reconocido',
           status: _OverlayStatus.invalid,
         );
         return;
       }
-
-      final parsed = qr.parseQr(trimmed);
-      final paletId = normalizePaletId('${parsed.linea}${parsed.p}');
 
       if (_scanned.contains(paletId)) {
         await _showOverlayResult(
@@ -124,7 +118,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         return;
       }
 
-      if (!widget.expectedPalets.contains(paletId)) {
+      if (!_expectedPalets.contains(paletId)) {
         _invalid.add(paletId);
         await _showOverlayResult(
           paletId: paletId,
@@ -135,7 +129,10 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       }
 
       final stockService = ref.read(stockServiceProvider);
-      await stockService.liberarPaletParaCmr(palletId: paletId);
+      await stockService.liberarPaletParaCmr(
+        palletId: paletId,
+        pedidoId: widget.pedido.idPedidoLora,
+      );
       _scanned.add(paletId);
 
       await _showOverlayResult(
@@ -144,6 +141,12 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         status: _OverlayStatus.valid,
       );
     } on FormatException catch (e) {
+      await _showOverlayResult(
+        paletId: raw,
+        message: e.message,
+        status: _OverlayStatus.invalid,
+      );
+    } on StockProcessException catch (e) {
       await _showOverlayResult(
         paletId: raw,
         message: e.message,
@@ -162,6 +165,20 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         });
       }
     }
+  }
+
+  String _paletIdFromRaw(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return '';
+    }
+
+    if (trimmed.toUpperCase().contains('P=')) {
+      final parsed = qr.parseQr(trimmed);
+      return normalizarPalet('${parsed.linea}${parsed.p}');
+    }
+
+    return normalizarPalet(trimmed);
   }
 
   Future<void> _showOverlayResult({
@@ -184,12 +201,10 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       _showOverlay = false;
       _overlayData = null;
     });
-    await _resumeScanner();
   }
 
   Future<void> _finalizarCmr() async {
-    final expectedSet = widget.expectedPalets.toSet();
-    final pendientes = expectedSet.difference(_scanned).toList()..sort();
+    final pendientes = _expectedPalets.difference(_scanned).toList()..sort();
 
     final confirm = await _showFinalDialog(pendientes);
     if (confirm != true) {
@@ -203,6 +218,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     final db = FirebaseFirestore.instance;
     final pedidoRef = widget.pedido.ref;
     final user = FirebaseAuth.instance.currentUser;
+    final userName = await _loadUserName(user);
 
     try {
       await db.runTransaction((tx) async {
@@ -218,14 +234,10 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         tx.update(pedidoRef, {
           'Estado': 'Expedido',
           'expedidoAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
           'expedidoPor': user?.uid,
           'expedidoPorEmail': user?.email,
         });
-
-        for (final palet in _scanned) {
-          final stockRef = db.collection('Stock').doc(palet);
-          tx.set(stockRef, {'HUECO': 'Libre'}, SetOptions(merge: true));
-        }
 
         for (final palet in pendientes) {
           final stockRef = db.collection('Stock').doc(palet);
@@ -234,25 +246,21 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
             {
               'PEDIDO': 'S/P',
               'HUECO': 'Ocupado',
+              'updatedAt': FieldValue.serverTimestamp(),
             },
             SetOptions(merge: true),
           );
 
           final incidenciaRef = db.collection('Incidencias').doc();
           tx.set(incidenciaRef, {
-            'type': 'CMR_NO_ESCANEADO',
-            'pedidoId': widget.pedido.idPedidoLora,
-            'pedidoDocId': widget.pedido.id,
             'paletId': palet,
-            'linea': widget.lineaByPalet[palet],
-            'timestamp': FieldValue.serverTimestamp(),
+            'pedidoOriginal': widget.pedido.idPedidoLora,
+            'motivo': 'No cargado en CMR',
+            'fecha': FieldValue.serverTimestamp(),
             'userId': user?.uid,
             'userEmail': user?.email,
-            'accion': 'PASAR_A_SP',
-            'stockDespues': {
-              'PEDIDO': 'S/P',
-              'HUECO': 'Ocupado',
-            },
+            'userName': userName,
+            'estado': 'Pendiente',
           });
         }
       });
@@ -271,13 +279,30 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     }
   }
 
+  Future<String?> _loadUserName(User? user) async {
+    if (user == null) {
+      return null;
+    }
+
+    try {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('UsuariosAutorizados')
+          .doc(user.uid)
+          .get();
+      return snapshot.data()?['Nombre']?.toString();
+    } catch (e) {
+      debugPrint('No se pudo cargar el nombre de usuario: $e');
+      return null;
+    }
+  }
+
   Future<void> _generateAndSharePdf() async {
     final service = CmrPdfService(FirebaseFirestore.instance);
-    final palets = widget.expectedPalets.map(normalizePaletId).toList();
+    final palets = _expectedPalets.toList();
     final file = await service.generatePdf(
       pedido: widget.pedido,
       palets: palets,
-      lineaByPalet: widget.lineaByPalet,
+      lineaByPalet: _lineaByPalet,
     );
 
     await Printing.sharePdf(
@@ -298,7 +323,12 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Esperados: ${widget.expectedPalets.length}'),
+                const Text(
+                  'Los palets no escaneados pasarán a S/P y se registrará '
+                  'una incidencia. ¿Continuar?',
+                ),
+                const SizedBox(height: 12),
+                Text('Esperados: ${_expectedPalets.length}'),
                 Text('Escaneados: ${_scanned.length}'),
                 Text('No escaneados: ${pendientes.length}'),
                 const SizedBox(height: 12),
@@ -330,27 +360,9 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     );
   }
 
-  bool _isPaletQr(String raw) {
-    return raw.toUpperCase().contains('P=');
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_isDesktop) {
-      return _DesktopQrPlaceholder(
-        onClose: () => Navigator.of(context).pop(
-          CmrScanResult(scanned: _scanned, invalid: _invalid),
-        ),
-      );
-    }
-
-    final controller = _controller;
-    if (controller == null) {
-      return const SizedBox.shrink();
-    }
-
     return Scaffold(
-      backgroundColor: Colors.black,
       appBar: AppBar(
         title: const Text('Escaneo CMR'),
         actions: [
@@ -362,51 +374,48 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         ],
       ),
       body: Stack(
-        fit: StackFit.expand,
         children: [
-          MobileScanner(
-            controller: controller,
-            fit: BoxFit.cover,
-            onDetect: (capture) async {
-              if (_busy || _showOverlay) {
-                return;
-              }
-
-              final raw = capture.barcodes
-                  .map((barcode) => barcode.rawValue)
-                  .firstWhere(
-                    (value) => value != null && value.trim().isNotEmpty,
-                    orElse: () => null,
-                  );
-
-              if (raw == null) {
-                return;
-              }
-
-              await _onBarcodeScanned(raw);
-            },
-          ),
-          Align(
-            alignment: Alignment.topCenter,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Card(
+          ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              Card(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(Icons.qr_code_scanner),
                       const SizedBox(width: 8),
                       Text(
-                        'Escaneados: ${_scanned.length}/${widget.expectedPalets.length}',
+                        'Escaneados: ${_scanned.length}/${_expectedPalets.length}',
                         style: Theme.of(context).textTheme.bodyLarge,
                       ),
                     ],
                   ),
                 ),
               ),
-            ),
+              const SizedBox(height: 16),
+              if (_invalid.isNotEmpty) ...[
+                Text(
+                  'Palets no válidos',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 8),
+                ..._invalid.map(
+                  (palet) => Card(
+                    color: Colors.red.withOpacity(0.05),
+                    child: ListTile(
+                      leading: const Icon(Icons.error, color: Colors.redAccent),
+                      title: Text(palet),
+                      subtitle: const Text('No pertenece al pedido'),
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
           if (_showOverlay && _overlayData != null)
             Positioned.fill(
@@ -429,9 +438,9 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _finalizarCmr,
-        icon: const Icon(Icons.check),
-        label: const Text('Finalizar CMR'),
+        onPressed: _scanInProgress || _busy || _showOverlay ? null : _startScan,
+        icon: const Icon(Icons.qr_code_scanner),
+        label: const Text('Escanear palet'),
       ),
     );
   }
@@ -487,42 +496,6 @@ class _ScanOverlay extends StatelessWidget {
               FilledButton(
                 onPressed: onAccept,
                 child: const Text('Aceptar'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DesktopQrPlaceholder extends StatelessWidget {
-  const _DesktopQrPlaceholder({required this.onClose});
-
-  final VoidCallback onClose;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Escaneo CMR'),
-        leading: IconButton(
-          onPressed: onClose,
-          icon: const Icon(Icons.arrow_back),
-          tooltip: 'Volver',
-        ),
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              Icon(Icons.desktop_windows, size: 72),
-              SizedBox(height: 24),
-              Text(
-                'El escaneo de códigos QR está disponible solo en móvil.',
-                textAlign: TextAlign.center,
               ),
             ],
           ),

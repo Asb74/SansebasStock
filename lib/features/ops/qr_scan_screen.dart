@@ -17,10 +17,17 @@ import 'package:sansebas_stock/providers/palets_providers.dart';
 import 'package:sansebas_stock/services/palet_location_service.dart';
 import 'package:sansebas_stock/services/stock_service.dart';
 
+enum QrScanResultMode { parsedPaletId, raw }
+
 class QrScanScreen extends ConsumerStatefulWidget {
-  const QrScanScreen({super.key, this.returnScanResult = false});
+  const QrScanScreen({
+    super.key,
+    this.returnScanResult = false,
+    this.scanResultMode = QrScanResultMode.parsedPaletId,
+  });
 
   final bool returnScanResult;
+  final QrScanResultMode scanResultMode;
 
   @override
   ConsumerState<QrScanScreen> createState() => _QrScanScreenState();
@@ -154,6 +161,12 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
     });
 
     try {
+      if (widget.returnScanResult &&
+          widget.scanResultMode == QrScanResultMode.raw) {
+        _navigateBackWithResult(trimmed);
+        return;
+      }
+
       if (widget.returnScanResult && _esQrPalet(trimmed)) {
         try {
           final parsed = qr.parseQr(trimmed);
