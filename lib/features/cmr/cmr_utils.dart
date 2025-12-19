@@ -23,11 +23,75 @@ String normalizePaletId(String raw) {
   return normalizarPalet(raw);
 }
 
+String parsePaletFromQr(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) {
+    return '';
+  }
+
+  String? candidate;
+  final match = RegExp(r'P=([0-9]+)').firstMatch(trimmed);
+  if (match != null) {
+    candidate = match.group(1);
+  } else if (RegExp(r'^\d+$').hasMatch(trimmed)) {
+    candidate = trimmed;
+  }
+
+  if (candidate == null || candidate.isEmpty) {
+    return '';
+  }
+
+  final normalized = normalizarPalet(candidate);
+  if (!RegExp(r'^\d{10}$').hasMatch(normalized)) {
+    return '';
+  }
+
+  return normalized;
+}
+
 List<String> parsePaletsFromLines(Iterable<String> rawPalets) {
   return rawPalets
       .map(normalizarPalet)
       .where((value) => value.isNotEmpty)
       .toList();
+}
+
+Future<bool> paletPerteneceAPedido({
+  required FirebaseFirestore firestore,
+  required DocumentReference<Map<String, dynamic>> pedidoRef,
+  required String paletId,
+}) async {
+  final snapshot = await pedidoRef.get();
+  if (!snapshot.exists) {
+    return false;
+  }
+
+  final data = snapshot.data() ?? <String, dynamic>{};
+  final rawLineas = data['lineas'] ?? data['Lineas'];
+  if (rawLineas is! Iterable) {
+    return false;
+  }
+
+  for (final item in rawLineas) {
+    if (item is! Map) {
+      continue;
+    }
+
+    final paletRaw = item['Palet']?.toString() ?? '';
+    if (paletRaw.trim().isEmpty) {
+      continue;
+    }
+
+    final palets = paletRaw.split('|');
+    for (final palet in palets) {
+      final normalized = normalizarPalet(palet);
+      if (normalized == paletId) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 Future<Map<String, dynamic>> obtenerDireccionRemitente({

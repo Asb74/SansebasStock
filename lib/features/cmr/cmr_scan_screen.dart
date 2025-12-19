@@ -7,7 +7,6 @@ import 'package:sansebas_stock/services/stock_service.dart';
 
 import '../ops/ops_providers.dart';
 import '../ops/qr_scan_screen.dart';
-import '../qr/qr_parser.dart' as qr;
 import 'cmr_models.dart';
 import 'cmr_pdf_service.dart';
 import 'cmr_utils.dart';
@@ -99,10 +98,10 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     });
 
     try {
-      final paletId = _paletIdFromRaw(raw);
+      final paletId = parsePaletFromQr(raw);
       if (paletId.isEmpty) {
         await _showOverlayResult(
-          paletId: raw.trim(),
+          paletId: '—',
           message: 'QR no reconocido',
           status: _OverlayStatus.invalid,
         );
@@ -118,11 +117,16 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         return;
       }
 
-      if (!_expectedPalets.contains(paletId)) {
+      final pertenece = await paletPerteneceAPedido(
+        firestore: FirebaseFirestore.instance,
+        pedidoRef: widget.pedido.ref,
+        paletId: paletId,
+      );
+      if (!pertenece) {
         _invalid.add(paletId);
         await _showOverlayResult(
           paletId: paletId,
-          message: 'No pertenece al pedido',
+          message: 'Palet $paletId no pertenece a este pedido',
           status: _OverlayStatus.invalid,
         );
         return;
@@ -141,20 +145,23 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         status: _OverlayStatus.valid,
       );
     } on FormatException catch (e) {
+      final paletId = parsePaletFromQr(raw);
       await _showOverlayResult(
-        paletId: raw,
+        paletId: paletId.isEmpty ? '—' : paletId,
         message: e.message,
         status: _OverlayStatus.invalid,
       );
     } on StockProcessException catch (e) {
+      final paletId = parsePaletFromQr(raw);
       await _showOverlayResult(
-        paletId: raw,
+        paletId: paletId.isEmpty ? '—' : paletId,
         message: e.message,
         status: _OverlayStatus.invalid,
       );
     } on FirebaseException {
+      final paletId = parsePaletFromQr(raw);
       await _showOverlayResult(
-        paletId: raw,
+        paletId: paletId.isEmpty ? '—' : paletId,
         message: 'No se pudo actualizar el palet',
         status: _OverlayStatus.invalid,
       );
@@ -165,20 +172,6 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         });
       }
     }
-  }
-
-  String _paletIdFromRaw(String raw) {
-    final trimmed = raw.trim();
-    if (trimmed.isEmpty) {
-      return '';
-    }
-
-    if (trimmed.toUpperCase().contains('P=')) {
-      final parsed = qr.parseQr(trimmed);
-      return normalizarPalet('${parsed.linea}${parsed.p}');
-    }
-
-    return normalizarPalet(trimmed);
   }
 
   Future<void> _showOverlayResult({
