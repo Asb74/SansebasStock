@@ -13,55 +13,32 @@ class CmrHomeScreen extends StatefulWidget {
 
 class _CmrHomeScreenState extends State<CmrHomeScreen> {
   bool _onlyPedidosP = false;
-  String? _errorText;
+  late Stream<QuerySnapshot<Map<String, dynamic>>> _pedidosStream;
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> _pedidosStream(bool soloPedidosP) {
-    try {
-      Query<Map<String, dynamic>> query = FirebaseFirestore.instance
-          .collection('Pedidos')
-          .where('Estado', isEqualTo: 'Pendiente');
+  @override
+  void initState() {
+    super.initState();
+    _pedidosStream = _buildPedidosStream(_onlyPedidosP);
+  }
 
-      if (soloPedidosP) {
-        query = query
-            .where('IdPedidoLora', isGreaterThanOrEqualTo: 'P')
-            .where('IdPedidoLora', isLessThan: 'Q');
-      }
+  Stream<QuerySnapshot<Map<String, dynamic>>> _buildPedidosStream(
+    bool soloPedidosP,
+  ) {
+    Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+        .collection('Pedidos')
+        .where('Estado', isEqualTo: 'Pendiente');
 
-      return query.snapshots().handleError((error, stackTrace) {
-        if (!mounted) return;
-        if (error is FirebaseException) {
-          debugPrint(
-            'CMR FirebaseException: code=${error.code} message=${error.message}',
-          );
-          debugPrintStack(stackTrace: stackTrace);
-          setState(() {
-            _errorText = 'Firestore: ${error.code} - ${error.message}';
-          });
-          return;
-        }
-
-        debugPrint('CMR error: $error');
-        debugPrintStack(stackTrace: stackTrace);
-        setState(() {
-          _errorText = 'Error: $error';
-        });
-      });
-    } catch (error, stackTrace) {
-      debugPrint('CMR error: $error');
-      debugPrintStack(stackTrace: stackTrace);
-      if (mounted) {
-        setState(() {
-          _errorText = 'Error: $error';
-        });
-      }
-      return const Stream.empty();
+    if (soloPedidosP) {
+      query = query
+          .where('IdPedidoLora', isGreaterThanOrEqualTo: 'P')
+          .where('IdPedidoLora', isLessThan: 'Q');
     }
+
+    return query.snapshots();
   }
 
   @override
   Widget build(BuildContext context) {
-    final pedidosStream = _pedidosStream(_onlyPedidosP);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('CMR'),
@@ -75,24 +52,46 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
             onChanged: (value) {
               setState(() {
                 _onlyPedidosP = value;
-                _errorText = null;
+                _pedidosStream = _buildPedidosStream(_onlyPedidosP);
               });
             },
           ),
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: pedidosStream,
+              stream: _pedidosStream,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                if (snapshot.hasError || _errorText != null) {
-                  final errorText = _errorText ??
-                      (snapshot.error is FirebaseException
-                          ? 'Firestore: ${(snapshot.error as FirebaseException).code}'
-                              ' - ${(snapshot.error as FirebaseException).message}'
-                          : 'Error: ${snapshot.error}');
-                  return Center(child: Text(errorText));
+                if (snapshot.hasError) {
+                  final errorText = snapshot.error is FirebaseException
+                      ? 'Firestore: ${(snapshot.error as FirebaseException).code}'
+                          ' - ${(snapshot.error as FirebaseException).message}'
+                      : 'Error: ${snapshot.error}';
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            errorText,
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () {
+                              setState(() {
+                                _pedidosStream =
+                                    _buildPedidosStream(_onlyPedidosP);
+                              });
+                            },
+                            child: const Text('Reintentar'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
                 }
 
                 final docs = snapshot.data?.docs ?? [];
