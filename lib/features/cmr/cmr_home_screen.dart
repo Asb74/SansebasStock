@@ -13,12 +13,54 @@ class CmrHomeScreen extends StatefulWidget {
 
 class _CmrHomeScreenState extends State<CmrHomeScreen> {
   bool _onlyPedidosP = false;
+  String? _errorText;
+
+  Stream<QuerySnapshot<Map<String, dynamic>>> _pedidosStream(bool soloPedidosP) {
+    try {
+      Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+          .collection('Pedidos')
+          .where('Estado', isEqualTo: 'Pendiente');
+
+      if (soloPedidosP) {
+        query = query
+            .where('IdPedidoLora', isGreaterThanOrEqualTo: 'P')
+            .where('IdPedidoLora', isLessThan: 'Q');
+      }
+
+      return query.snapshots().handleError((error, stackTrace) {
+        if (!mounted) return;
+        if (error is FirebaseException) {
+          debugPrint(
+            'CMR FirebaseException: code=${error.code} message=${error.message}',
+          );
+          debugPrintStack(stackTrace: stackTrace);
+          setState(() {
+            _errorText = 'Firestore: ${error.code} - ${error.message}';
+          });
+          return;
+        }
+
+        debugPrint('CMR error: $error');
+        debugPrintStack(stackTrace: stackTrace);
+        setState(() {
+          _errorText = 'Error: $error';
+        });
+      });
+    } catch (error, stackTrace) {
+      debugPrint('CMR error: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (mounted) {
+        setState(() {
+          _errorText = 'Error: $error';
+        });
+      }
+      return const Stream.empty();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final pedidosQuery = FirebaseFirestore.instance
-        .collection('Pedidos')
-        .where('Estado', isEqualTo: 'Pendiente');
+    final pedidosStream = _pedidosStream(_onlyPedidosP);
 
     return Scaffold(
       appBar: AppBar(
@@ -33,20 +75,24 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
             onChanged: (value) {
               setState(() {
                 _onlyPedidosP = value;
+                _errorText = null;
               });
             },
           ),
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: pedidosQuery.snapshots(),
+              stream: pedidosStream,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                if (snapshot.hasError) {
-                  return const Center(
-                    child: Text('No se pudieron cargar los pedidos.'),
-                  );
+                if (snapshot.hasError || _errorText != null) {
+                  final errorText = _errorText ??
+                      (snapshot.error is FirebaseException
+                          ? 'Firestore: ${(snapshot.error as FirebaseException).code}'
+                              ' - ${(snapshot.error as FirebaseException).message}'
+                          : 'Error: ${snapshot.error}');
+                  return Center(child: Text(errorText));
                 }
 
                 final docs = snapshot.data?.docs ?? [];
