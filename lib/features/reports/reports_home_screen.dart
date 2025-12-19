@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../ui/stock/stock_filter_page.dart';
+import '../cmr/cmr_home_screen.dart';
 import 'commercial_dashboard_screen.dart';
 
 class ReportsHomeScreen extends StatelessWidget {
@@ -59,10 +60,20 @@ class ReportsHomeScreen extends StatelessWidget {
             subtitle: 'Próximamente',
             icon: Icons.inventory_2_outlined,
           ),
-          const _ReportPlaceholder(
-            title: 'CMR',
-            subtitle: 'Próximamente',
-            icon: Icons.local_shipping_outlined,
+          Card(
+            child: ListTile(
+              title: const Text('CMR'),
+              subtitle: const Text('Expedir pedidos y generar CMR'),
+              leading: const Icon(Icons.local_shipping_outlined),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const CmrHomeScreen(),
+                  ),
+                );
+              },
+            ),
           ),
           const _ReportPlaceholder(
             title: 'Estadísticos',

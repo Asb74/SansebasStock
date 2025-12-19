@@ -244,6 +244,45 @@ class StockService {
     }
   }
 
+  Future<void> liberarPaletParaCmr({required String palletId}) async {
+    try {
+      final ref = _db.collection('Stock').doc(palletId);
+      final snapshot = await ref.get();
+      if (!snapshot.exists) {
+        throw const StockProcessException(
+          'not-found',
+          'Palet no encontrado en Stock.',
+        );
+      }
+
+      final current = snapshot.data() ?? <String, dynamic>{};
+      final huecoAnterior = _normalizeHuecoValue(current['HUECO']);
+      if (huecoAnterior.toLowerCase() == 'libre') {
+        return;
+      }
+
+      await ref.set({'HUECO': 'Libre'}, SetOptions(merge: true));
+      await _writeStockLog(
+        palletId: palletId,
+        fromValue: huecoAnterior,
+        toValue: 'Libre',
+      );
+    } on FirebaseException catch (e, st) {
+      debugPrint('Firestore error [${e.code}]: ${e.message}');
+      debugPrintStack(label: 'Firestore stack', stackTrace: st);
+      throw StockProcessException(e.code, _friendlyMessage(e.code, e.message));
+    } on StockProcessException {
+      rethrow;
+    } catch (e, st) {
+      debugPrint('Error inesperado al liberar palet: $e');
+      debugPrintStack(label: 'Stack', stackTrace: st);
+      throw const StockProcessException(
+        'unknown',
+        'No se pudo completar la operación.',
+      );
+    }
+  }
+
   Future<int> _siguientePosicion(StockLocation ubicacion) async {
     final QuerySnapshot<Map<String, dynamic>> q = await _db
         .collection('Stock')
