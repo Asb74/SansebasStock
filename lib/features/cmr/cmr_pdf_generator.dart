@@ -99,16 +99,16 @@ class CmrPdfGenerator {
     required String matricula,
   }) {
     const fontSize = 9.0;
-    const field1Left = 60.0;
-    const field1Top = 125.0;
-    const field2Left = 60.0;
-    const field2Top = 205.0;
-    const field3Left = 60.0;
-    const field3Top = 265.0;
-    const field4Left = 60.0;
-    const field4Top = 325.0;
-    const field17Left = 60.0;
-    const field17Top = 610.0;
+    const field1Left = 250.0;
+    const field1Top = 170.0;
+    const field2Left = 250.0;
+    const field2Top = 440.0;
+    const field3Left = 250.0;
+    const field3Top = 710.0;
+    const field4Left = 250.0;
+    const field4Top = 880.0;
+    const field17Left = 1325.0;
+    const field17Top = 445.0;
 
     return pw.Page(
       pageFormat: PdfPageFormat.a4,
@@ -122,7 +122,10 @@ class CmrPdfGenerator {
             pw.Positioned(
               left: field1Left,
               top: field1Top,
-              child: _buildLines(remitenteLines, fontSize: fontSize),
+              child: pw.Text(
+                remitenteLines.join('\n'),
+                style: const pw.TextStyle(fontSize: fontSize),
+              ),
             ),
             pw.Positioned(
               left: field2Left,
@@ -143,36 +146,17 @@ class CmrPdfGenerator {
             pw.Positioned(
               left: field4Left,
               top: field4Top,
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Row(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        almacen,
-                        style: const pw.TextStyle(fontSize: fontSize),
-                      ),
-                      pw.SizedBox(width: 12),
-                      pw.Text(
-                        fechaSalida,
-                        style: const pw.TextStyle(fontSize: fontSize),
-                      ),
-                    ],
-                  ),
-                  pw.Text(
-                    almacenLocation,
-                    style: const pw.TextStyle(fontSize: fontSize),
-                  ),
-                ],
+              child: pw.Text(
+                '$almacen        $fechaSalida\n$almacenLocation',
+                style: const pw.TextStyle(fontSize: fontSize),
               ),
             ),
             pw.Positioned(
               left: field17Left,
               top: field17Top,
-              child: _buildLines(
-                [transportista, matricula],
-                fontSize: fontSize,
+              child: pw.Text(
+                '$transportista\n$matricula',
+                style: const pw.TextStyle(fontSize: fontSize),
               ),
             ),
           ],
@@ -247,22 +231,6 @@ class CmrPdfGenerator {
       }
     }
     return '';
-  }
-
-  static pw.Widget _buildLines(
-    List<String> lines, {
-    required double fontSize,
-  }) {
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        for (final line in lines)
-          pw.Text(
-            line,
-            style: pw.TextStyle(fontSize: fontSize),
-          ),
-      ],
-    );
   }
 
   static Future<Map<String, dynamic>> _fetchAlmacen(
