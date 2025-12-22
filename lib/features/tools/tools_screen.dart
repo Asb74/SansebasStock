@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../cmr/cmr_home_screen.dart';
+
 class ToolsScreen extends ConsumerWidget {
   const ToolsScreen({super.key});
 
@@ -34,6 +36,21 @@ class ToolsScreen extends ConsumerWidget {
               leading: const Icon(Icons.warehouse_outlined),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => context.pushNamed('tools-assign-storage'),
+            ),
+          ),
+          Card(
+            child: ListTile(
+              title: const Text('CMR'),
+              subtitle: const Text('Expedir pedidos y generar CMR'),
+              leading: const Icon(Icons.local_shipping_outlined),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const CmrHomeScreen(),
+                  ),
+                );
+              },
             ),
           ),
         ],
