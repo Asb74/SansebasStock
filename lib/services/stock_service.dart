@@ -248,14 +248,14 @@ class StockService {
     required String palletId,
     required String pedidoId,
   }) async {
+    final stockDocId = '1$palletId';
+    final ref = _db.collection('Stock').doc(stockDocId);
+
     try {
-      final ref = _db.collection('Stock').doc(palletId);
       final snapshot = await ref.get();
       if (!snapshot.exists) {
-        throw const StockProcessException(
-          'not-found',
-          'Palet no encontrado en Stock.',
-        );
+        debugPrint('Palet $palletId no existe en Stock');
+        return;
       }
 
       final current = snapshot.data() ?? <String, dynamic>{};
@@ -271,23 +271,16 @@ class StockService {
 
       await ref.set(updateData, SetOptions(merge: true));
       await _writeStockLog(
-        palletId: palletId,
+        palletId: stockDocId,
         fromValue: huecoAnterior,
         toValue: 'Libre',
       );
     } on FirebaseException catch (e, st) {
       debugPrint('Firestore error [${e.code}]: ${e.message}');
       debugPrintStack(label: 'Firestore stack', stackTrace: st);
-      throw StockProcessException(e.code, _friendlyMessage(e.code, e.message));
-    } on StockProcessException {
-      rethrow;
     } catch (e, st) {
       debugPrint('Error inesperado al liberar palet: $e');
       debugPrintStack(label: 'Stack', stackTrace: st);
-      throw const StockProcessException(
-        'unknown',
-        'No se pudo completar la operación.',
-      );
     }
   }
 
