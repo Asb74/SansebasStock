@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 
 import '../cmr/cmr_models.dart';
 import '../cmr/cmr_pdf_generator.dart';
-import '../cmr/cmr_utils.dart';
 
 class CmrReportsScreen extends StatelessWidget {
   const CmrReportsScreen({super.key});
@@ -88,31 +87,11 @@ class CmrReportsScreen extends StatelessWidget {
     return DateFormat('dd/MM/yyyy').format(fecha);
   }
 
-  int _countPalets(CmrPedido pedido) {
-    final palets = <String>{};
-    for (final linea in pedido.lineas) {
-      for (final raw in linea.palets) {
-        final normalized = normalizePaletId(raw);
-        if (normalized.isEmpty) continue;
-        palets.add(normalized);
-      }
-    }
-    return palets.length;
-  }
-
   Future<void> _printCmr(BuildContext context, CmrPedido pedido) async {
     try {
-      final formatter = DateFormat('dd/MM/yyyy');
-      final fecha = pedido.expedidoAt ?? pedido.fechaSalida ?? DateTime.now();
       final data = await CmrPdfGenerator.generate(
-        remitente: pedido.remitente,
-        destinatario: pedido.cliente,
-        transportista: pedido.transportista,
-        fecha: formatter.format(fecha),
-        palets: _countPalets(pedido).toString(),
-        observaciones: pedido.observaciones.isNotEmpty
-            ? pedido.observaciones
-            : 'Sin observaciones',
+        pedido: pedido,
+        firestore: FirebaseFirestore.instance,
       );
 
       await CmrPdfGenerator.printPdf(data);

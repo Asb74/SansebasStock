@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import 'package:sansebas_stock/services/stock_service.dart';
 
 import '../ops/ops_providers.dart';
@@ -297,20 +296,9 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
   }
 
   Future<void> _previewCmrPdf() async {
-    final formatter = DateFormat('dd/MM/yyyy');
-    final fecha = widget.pedido.fechaSalida != null
-        ? formatter.format(widget.pedido.fechaSalida!)
-        : formatter.format(DateTime.now());
-
     final data = await CmrPdfGenerator.generate(
-      remitente: widget.pedido.remitente,
-      destinatario: widget.pedido.cliente,
-      transportista: widget.pedido.transportista,
-      fecha: fecha,
-      palets: _expectedPalets.length.toString(),
-      observaciones: widget.pedido.observaciones.isNotEmpty
-          ? widget.pedido.observaciones
-          : 'Sin observaciones',
+      pedido: widget.pedido,
+      firestore: FirebaseFirestore.instance,
     );
 
     await CmrPdfGenerator.printPdf(data);
