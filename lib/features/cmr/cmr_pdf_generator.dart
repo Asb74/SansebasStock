@@ -192,77 +192,92 @@ class CmrPdfGenerator {
     required double fontSize,
   }) {
     final widgets = <pw.Widget>[];
+    final textStyle = pw.TextStyle(fontSize: fontSize);
     for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
       final row = rows[rowIndex];
       final top = baseTop + (rowIndex * rowHeight);
       widgets.addAll([
-        _positionedMerchText(
+        pw.Positioned(
           left: 60,
           top: top,
-          width: columnWidth,
-          text: row.marca,
-          fontSize: fontSize,
+          child: pw.SizedBox(
+            width: columnWidth,
+            child: pw.Text(
+              row.marca,
+              style: textStyle,
+              maxLines: 1,
+              overflow: pw.TextOverflow.clip,
+            ),
+          ),
         ),
-        _positionedMerchText(
+        pw.Positioned(
           left: 138,
           top: top,
-          width: columnWidth,
-          text: row.totalCajas,
-          fontSize: fontSize,
+          child: pw.SizedBox(
+            width: columnWidth,
+            child: pw.Text(
+              row.totalCajas,
+              style: textStyle,
+              maxLines: 1,
+              overflow: pw.TextOverflow.clip,
+            ),
+          ),
         ),
-        _positionedMerchText(
+        pw.Positioned(
           left: 215,
           top: top,
-          width: columnWidth,
-          text: row.idConfeccion,
-          fontSize: fontSize,
+          child: pw.SizedBox(
+            width: columnWidth,
+            child: pw.Text(
+              row.idConfeccion,
+              style: textStyle,
+              maxLines: 1,
+              overflow: pw.TextOverflow.clip,
+            ),
+          ),
         ),
-        _positionedMerchText(
+        pw.Positioned(
           left: 284,
           top: top,
-          width: columnWidth,
-          text: row.grupoVarietal,
-          fontSize: fontSize,
+          child: pw.SizedBox(
+            width: columnWidth,
+            child: pw.Text(
+              row.grupoVarietal,
+              style: textStyle,
+              maxLines: 1,
+              overflow: pw.TextOverflow.clip,
+            ),
+          ),
         ),
-        _positionedMerchText(
+        pw.Positioned(
           left: 436,
           top: top,
-          width: columnWidth,
-          text: row.totalNeto,
-          fontSize: fontSize,
+          child: pw.SizedBox(
+            width: columnWidth,
+            child: pw.Text(
+              row.totalNeto,
+              style: textStyle,
+              maxLines: 1,
+              overflow: pw.TextOverflow.clip,
+            ),
+          ),
         ),
-        _positionedMerchText(
+        pw.Positioned(
           left: 506,
           top: top,
-          width: columnWidth,
-          text: row.totalPalets,
-          fontSize: fontSize,
+          child: pw.SizedBox(
+            width: columnWidth,
+            child: pw.Text(
+              row.totalPalets,
+              style: textStyle,
+              maxLines: 1,
+              overflow: pw.TextOverflow.clip,
+            ),
+          ),
         ),
       ]);
     }
     return widgets;
-  }
-
-  static pw.Widget _positionedMerchText({
-    required double left,
-    required double top,
-    required double width,
-    required String text,
-    required double fontSize,
-  }) {
-    return pw.Positioned(
-      left: left,
-      top: top,
-      child: pw.SizedBox(
-        width: width,
-        child: pw.Text(
-          text,
-          style: pw.TextStyle(fontSize: fontSize),
-          maxLines: 1,
-          overflow: pw.TextOverflow.clip,
-        ),
-      ),
-    );
   }
 
   static List<String> _buildRemitenteLines({
