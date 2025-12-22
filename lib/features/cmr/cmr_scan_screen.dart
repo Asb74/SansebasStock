@@ -235,6 +235,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         for (final palet in pendientes) {
           final stockDocId = '1$palet';
           final stockRef = db.collection('Stock').doc(stockDocId);
+          await tx.get(stockRef);
           tx.set(
             stockRef,
             {
