@@ -225,7 +225,7 @@ class CmrPdfGenerator {
           fontSize: fontSize,
         ),
         _positionedMerchText(
-          left: 170,
+          left: 436,
           top: top,
           width: columnWidth,
           text: row.totalNeto,
