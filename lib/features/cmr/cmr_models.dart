@@ -36,6 +36,7 @@ class CmrPedido {
     required this.comercializador,
     required this.remitente,
     required this.fechaSalida,
+    required this.expedidoAt,
     required this.transportista,
     required this.matricula,
     required this.termografos,
@@ -77,6 +78,7 @@ class CmrPedido {
       comercializador: data['Comercializador']?.toString() ?? '',
       remitente: data['Remitente']?.toString() ?? '',
       fechaSalida: _asDate(data['FechaSalida']),
+      expedidoAt: _asDate(data['expedidoAt']),
       transportista: data['Transportista']?.toString() ?? '',
       matricula: data['Matricula']?.toString() ?? '',
       termografos: data['Termografos']?.toString() ?? '',
@@ -97,6 +99,7 @@ class CmrPedido {
   final String comercializador;
   final String remitente;
   final DateTime? fechaSalida;
+  final DateTime? expedidoAt;
   final String transportista;
   final String matricula;
   final String termografos;
