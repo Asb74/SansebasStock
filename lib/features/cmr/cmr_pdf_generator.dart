@@ -23,7 +23,6 @@ class CmrPdfGenerator {
     doc.addPage(
       _buildPage(
         background: expedidorBg,
-        copia: 'Ejemplar expedidor',
         remitente: remitente,
         destinatario: destinatario,
         transportista: transportista,
@@ -35,7 +34,6 @@ class CmrPdfGenerator {
     doc.addPage(
       _buildPage(
         background: destinatarioBg,
-        copia: 'Ejemplar destinatario',
         remitente: remitente,
         destinatario: destinatario,
         transportista: transportista,
@@ -47,7 +45,6 @@ class CmrPdfGenerator {
     doc.addPage(
       _buildPage(
         background: transportistaBg,
-        copia: 'Ejemplar transportista',
         remitente: remitente,
         destinatario: destinatario,
         transportista: transportista,
@@ -67,7 +64,6 @@ class CmrPdfGenerator {
 
   static pw.Page _buildPage({
     required pw.MemoryImage background,
-    required String copia,
     required String remitente,
     required String destinatario,
     required String transportista,
@@ -84,49 +80,54 @@ class CmrPdfGenerator {
             pw.Positioned.fill(
               child: pw.Image(background, fit: pw.BoxFit.fill),
             ),
-            // Textos de prueba para validar el layout. Ajustar posiciones
-            // cuando se mapeen todas las casillas definitivas.
             pw.Positioned(
-              left: 40,
-              top: 70,
+              left: 60,
+              top: 150,
               child: pw.Text(
-                copia,
-                style: pw.TextStyle(
-                  fontSize: 12,
-                  fontWeight: pw.FontWeight.bold,
-                ),
+                remitente,
+                style: const pw.TextStyle(fontSize: 9),
               ),
             ),
             pw.Positioned(
-              left: 40,
-              top: 120,
-              child: pw.Text('Remitente: $remitente'),
+              left: 60,
+              top: 210,
+              child: pw.Text(
+                destinatario,
+                style: const pw.TextStyle(fontSize: 9),
+              ),
             ),
             pw.Positioned(
-              left: 40,
-              top: 170,
-              child: pw.Text('Destinatario: $destinatario'),
-            ),
-            pw.Positioned(
-              left: 40,
-              top: 220,
-              child: pw.Text('Transportista: $transportista'),
-            ),
-            pw.Positioned(
-              left: 40,
+              left: 60,
               top: 270,
-              child: pw.Text('Fecha: $fecha'),
+              child: pw.Text(
+                transportista,
+                style: const pw.TextStyle(fontSize: 9),
+              ),
             ),
             pw.Positioned(
-              left: 40,
-              top: 320,
-              child: pw.Text('Número de palets: $palets'),
+              left: 430,
+              top: 110,
+              child: pw.Text(
+                fecha,
+                style: const pw.TextStyle(fontSize: 9),
+              ),
             ),
             pw.Positioned(
-              left: 40,
-              top: 370,
-              right: 40,
-              child: pw.Text('Observaciones: $observaciones'),
+              left: 420,
+              top: 470,
+              child: pw.Text(
+                palets,
+                style: const pw.TextStyle(fontSize: 9),
+              ),
+            ),
+            pw.Positioned(
+              left: 60,
+              top: 640,
+              right: 60,
+              child: pw.Text(
+                observaciones,
+                style: const pw.TextStyle(fontSize: 9),
+              ),
             ),
           ],
         );
