@@ -244,9 +244,12 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
             },
             SetOptions(merge: true),
           );
+        }
+      });
 
-          final incidenciaRef = db.collection('Incidencias').doc();
-          tx.set(incidenciaRef, {
+      try {
+        for (final palet in pendientes) {
+          await db.collection('Incidencias').doc().set({
             'paletId': palet,
             'pedidoOriginal': widget.pedido.idPedidoLora,
             'motivo': 'No cargado en CMR',
@@ -257,7 +260,9 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
             'estado': 'Pendiente',
           });
         }
-      });
+      } catch (e) {
+        debugPrint('No se pudo guardar la incidencia: $e');
+      }
 
       if (!mounted) return;
       await _generateAndSharePdf();
