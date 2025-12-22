@@ -99,16 +99,16 @@ class CmrPdfGenerator {
     required String matricula,
   }) {
     const fontSize = 9.0;
-    const field1Left = 250.0;
-    const field1Top = 170.0;
-    const field2Left = 250.0;
-    const field2Top = 440.0;
-    const field3Left = 250.0;
-    const field3Top = 710.0;
-    const field4Left = 250.0;
-    const field4Top = 880.0;
-    const field17Left = 1325.0;
-    const field17Top = 445.0;
+    const field1Left = 60.0;
+    const field1Top = 40.8;
+    const field2Left = 60.0;
+    const field2Top = 105.6;
+    const field3Left = 60.0;
+    const field3Top = 170.4;
+    const field4Left = 60.0;
+    const field4Top = 211.2;
+    const field17Left = 318.0;
+    const field17Top = 106.8;
 
     return pw.Page(
       pageFormat: PdfPageFormat.a4,
