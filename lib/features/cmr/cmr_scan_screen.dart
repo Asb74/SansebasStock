@@ -2,13 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:printing/printing.dart';
+import 'package:intl/intl.dart';
 import 'package:sansebas_stock/services/stock_service.dart';
 
 import '../ops/ops_providers.dart';
 import '../ops/qr_scan_screen.dart';
 import 'cmr_models.dart';
-import 'cmr_pdf_service.dart';
+import 'cmr_pdf_generator.dart';
 import 'cmr_utils.dart';
 
 class CmrScanScreen extends ConsumerStatefulWidget {
@@ -266,7 +266,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       }
 
       if (!mounted) return;
-      await _generateAndSharePdf();
+      await _previewCmrPdf();
       if (!mounted) return;
       Navigator.of(context).pop(
         CmrScanResult(scanned: _scanned, invalid: _invalid),
@@ -296,19 +296,24 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     }
   }
 
-  Future<void> _generateAndSharePdf() async {
-    final service = CmrPdfService(FirebaseFirestore.instance);
-    final palets = _expectedPalets.toList();
-    final file = await service.generatePdf(
-      pedido: widget.pedido,
-      palets: palets,
-      lineaByPalet: _lineaByPalet,
+  Future<void> _previewCmrPdf() async {
+    final formatter = DateFormat('dd/MM/yyyy');
+    final fecha = widget.pedido.fechaSalida != null
+        ? formatter.format(widget.pedido.fechaSalida!)
+        : formatter.format(DateTime.now());
+
+    final data = await CmrPdfGenerator.generate(
+      remitente: widget.pedido.remitente,
+      destinatario: widget.pedido.cliente,
+      transportista: widget.pedido.transportista,
+      fecha: fecha,
+      palets: _expectedPalets.length.toString(),
+      observaciones: widget.pedido.observaciones.isNotEmpty
+          ? widget.pedido.observaciones
+          : 'Sin observaciones',
     );
 
-    await Printing.sharePdf(
-      bytes: await file.readAsBytes(),
-      filename: 'cmr_${widget.pedido.idPedidoLora}.pdf',
-    );
+    await CmrPdfGenerator.printPdf(data);
   }
 
   Future<bool?> _showFinalDialog(List<String> pendientes) {
