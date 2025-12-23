@@ -36,7 +36,8 @@ class CmrPdfGenerator {
     final fechaSalida = _formatFecha(pedido.fechaSalida);
     final almacenLocation = _buildLocationLine(almacenData);
     final almacenPoblacion = _valueForKey(almacenData, 'Poblacion');
-    final merchandiseData = await _buildMerchandiseRows(pedido: pedido);
+    final merchandiseData =
+        await _buildMerchandiseRows(pedido: pedido, firestore: store);
     final tipoPalet = _resolveTipoPalet(pedido);
     final layout = await _loadLayout();
 
@@ -383,6 +384,7 @@ class CmrPdfGenerator {
 
   static Future<_CmrMerchandiseData> _buildMerchandiseRows({
     required CmrPedido pedido,
+    required FirebaseFirestore firestore,
   }) async {
     final paletIds = parsePaletsFromLines(
       pedido.lineas.expand((linea) => linea.palets),
