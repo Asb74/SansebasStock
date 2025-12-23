@@ -156,6 +156,7 @@ class CmrPdfGenerator {
               casilla: '1',
               value: remitenteLines.join('\n'),
               fontSize: fontSize,
+              multiline: true,
             ),
             ..._buildFieldWidgets(
               layout,
@@ -174,68 +175,59 @@ class CmrPdfGenerator {
               casilla: '4',
               value: '$almacen        $fechaSalida\n$almacenLocation',
               fontSize: fontSize,
+              multiline: true,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '5',
               value: termografos,
               fontSize: fontSize,
-              maxLines: 2,
-              overflow: pw.TextOverflow.clip,
+              multiline: true,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '13',
               value: observaciones,
               fontSize: fontSize,
-              maxLines: 3,
-              overflow: pw.TextOverflow.clip,
+              multiline: true,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '17',
               value: '$transportista\n$matricula',
               fontSize: fontSize,
+              multiline: true,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '22A',
               value: almacenPoblacion,
               fontSize: fontSize,
-              maxLines: 1,
-              overflow: pw.TextOverflow.clip,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '22B',
               value: fechaSalida,
               fontSize: fontSize,
-              maxLines: 1,
-              overflow: pw.TextOverflow.clip,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '26A',
               value: paletRetEntr,
               fontSize: fontSize,
-              maxLines: 1,
-              overflow: pw.TextOverflow.clip,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '26B',
               value: paletRetDev,
               fontSize: fontSize,
-              maxLines: 1,
-              overflow: pw.TextOverflow.clip,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '27',
               value: tipoPalet,
               fontSize: fontSize,
-              maxLines: 2,
-              overflow: pw.TextOverflow.clip,
+              multiline: true,
             ),
             ..._buildMerchandiseWidgets(
               merchandiseData,
@@ -331,8 +323,7 @@ class CmrPdfGenerator {
     required String casilla,
     required String value,
     required double fontSize,
-    int? maxLines,
-    pw.TextOverflow? overflow,
+    bool multiline = false,
   }) {
     final field = layout.getField(casilla);
     if (field == null) {
@@ -342,18 +333,37 @@ class CmrPdfGenerator {
       pw.Positioned(
         left: field.x,
         top: field.y,
-        child: pw.SizedBox(
-          width: field.width,
-          height: field.height,
-          child: pw.Text(
-            value,
-            style: pw.TextStyle(fontSize: fontSize),
-            maxLines: maxLines,
-            overflow: overflow,
-          ),
+        child: _buildCmrText(
+          value: value,
+          field: field,
+          fontSize: fontSize,
+          multiline: multiline,
         ),
       ),
     ];
+  }
+
+  static pw.Widget _buildCmrText({
+    required String value,
+    required CmrFieldLayout field,
+    required double fontSize,
+    required bool multiline,
+  }) {
+    final text = pw.Text(
+      value,
+      style: pw.TextStyle(fontSize: fontSize),
+      softWrap: multiline,
+      maxLines: multiline ? null : 1,
+      overflow: pw.TextOverflow.clip,
+    );
+
+    final box = pw.SizedBox(
+      width: field.width,
+      height: field.height,
+      child: text,
+    );
+
+    return multiline ? pw.ClipRect(child: box) : box;
   }
 
   static Future<CmrLayoutMap> _loadLayout() {
