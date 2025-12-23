@@ -573,6 +573,13 @@ class CmrPdfGenerator {
         ),
       ];
     }
+    // 🔒 Casillas con render manual: NO deben pasar por el motor genérico
+    if (field.casilla == '13' ||
+        field.casilla == '26A' ||
+        field.casilla == '26B' ||
+        field.casilla == '27') {
+      return const [];
+    }
     final boxType = getBoxType(field.casilla);
     return [
       pw.Positioned(
