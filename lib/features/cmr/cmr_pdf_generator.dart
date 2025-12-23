@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:characters/characters.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -11,8 +12,25 @@ import 'cmr_field_layout.dart';
 import 'cmr_models.dart';
 import 'cmr_utils.dart';
 
+enum CmrBoxType { table, multiline, longline }
+
+CmrBoxType getBoxType(String casilla) {
+  if (['5', '13'].contains(casilla)) return CmrBoxType.multiline;
+  if (['27'].contains(casilla)) return CmrBoxType.longline;
+  return CmrBoxType.table;
+}
+
 class CmrPdfGenerator {
   static Future<CmrLayoutMap>? _layoutCache;
+
+  static const Map<String, int> _tableMaxCharsByCasilla = {
+    '6': 16,
+    '7': 6,
+    '8': 14,
+    '9': 12,
+    '11': 8,
+    '12': 6,
+  };
 
   static Future<Uint8List> generate({
     required CmrPedido pedido,
@@ -139,9 +157,6 @@ class CmrPdfGenerator {
     required _CmrMerchandiseData merchandiseData,
     required CmrLayoutMap layout,
   }) {
-    const fontSize = 9.0;
-    const merchFontSize = 8.0;
-
     return pw.Page(
       pageFormat: PdfPageFormat.a4,
       margin: pw.EdgeInsets.zero,
@@ -155,83 +170,64 @@ class CmrPdfGenerator {
               layout,
               casilla: '1',
               value: remitenteLines.join('\n'),
-              fontSize: fontSize,
-              multiline: true,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '2',
               value: destinatario,
-              fontSize: fontSize,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '3',
               value: plataforma,
-              fontSize: fontSize,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '4',
               value: '$almacen        $fechaSalida\n$almacenLocation',
-              fontSize: fontSize,
-              multiline: true,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '5',
               value: termografos,
-              fontSize: fontSize,
-              multiline: true,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '13',
               value: observaciones,
-              fontSize: fontSize,
-              multiline: true,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '17',
               value: '$transportista\n$matricula',
-              fontSize: fontSize,
-              multiline: true,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '22A',
               value: almacenPoblacion,
-              fontSize: fontSize,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '22B',
               value: fechaSalida,
-              fontSize: fontSize,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '26A',
               value: paletRetEntr,
-              fontSize: fontSize,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '26B',
               value: paletRetDev,
-              fontSize: fontSize,
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '27',
               value: tipoPalet,
-              fontSize: fontSize,
-              multiline: true,
             ),
             ..._buildMerchandiseWidgets(
               merchandiseData,
-              fontSize: merchFontSize,
               layout: layout,
             ),
           ],
@@ -242,11 +238,9 @@ class CmrPdfGenerator {
 
   static List<pw.Widget> _buildMerchandiseWidgets(
     _CmrMerchandiseData data, {
-    required double fontSize,
     required CmrLayoutMap layout,
   }) {
     final widgets = <pw.Widget>[];
-    final textStyle = pw.TextStyle(fontSize: fontSize);
     final rows = data.rows;
     final rowHeight = _resolveMerchandiseRowHeight(layout);
     for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
@@ -266,20 +260,17 @@ class CmrPdfGenerator {
         final effectiveHeight =
             rowHeight > 0 ? rowHeight : layoutField.height;
         final top = layoutField.y + (rowIndex * effectiveHeight);
+        final boxType = getBoxType(field.casilla);
+        final widget = _buildBoxWidget(
+          value: field.value,
+          field: layoutField,
+          boxType: boxType,
+        );
         widgets.add(
           pw.Positioned(
             left: layoutField.x,
             top: top,
-            child: pw.SizedBox(
-              width: layoutField.width,
-              height: layoutField.height,
-              child: pw.Text(
-                field.value,
-                style: textStyle,
-                maxLines: 1,
-                overflow: pw.TextOverflow.clip,
-              ),
-            ),
+            child: widget,
           ),
         );
       }
@@ -297,20 +288,17 @@ class CmrPdfGenerator {
         final effectiveHeight =
             rowHeight > 0 ? rowHeight : layoutField.height;
         final top = layoutField.y + (totalRowIndex * effectiveHeight);
+        final boxType = getBoxType(field.casilla);
+        final widget = _buildBoxWidget(
+          value: field.value,
+          field: layoutField,
+          boxType: boxType,
+        );
         widgets.add(
           pw.Positioned(
             left: layoutField.x,
             top: top,
-            child: pw.SizedBox(
-              width: layoutField.width,
-              height: layoutField.height,
-              child: pw.Text(
-                field.value,
-                style: textStyle,
-                maxLines: 1,
-                overflow: pw.TextOverflow.clip,
-              ),
-            ),
+            child: widget,
           ),
         );
       }
@@ -318,52 +306,104 @@ class CmrPdfGenerator {
     return widgets;
   }
 
+  static String hardWrap(String text, int maxChars) {
+    if (maxChars <= 0) return text;
+    final buffer = StringBuffer();
+    var count = 0;
+    for (final char in text.characters) {
+      buffer.write(char);
+      count++;
+      if (count >= maxChars) {
+        buffer.write('\n');
+        count = 0;
+      }
+    }
+    return buffer.toString();
+  }
+
+  static pw.Widget multilineBox(String text, CmrFieldLayout field) {
+    final maxLines = (field.height / 9).floor();
+    return pw.ClipRect(
+      child: pw.SizedBox(
+        width: field.width,
+        height: field.height,
+        child: pw.Text(
+          text,
+          style: pw.TextStyle(fontSize: 8),
+          softWrap: true,
+          maxLines: maxLines,
+          overflow: pw.TextOverflow.clip,
+        ),
+      ),
+    );
+  }
+
+  static pw.Widget longLineBox(String text, CmrFieldLayout field) {
+    return pw.SizedBox(
+      width: field.width,
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(fontSize: 8),
+        maxLines: 1,
+      ),
+    );
+  }
+
+  static pw.Widget tableBox(String text, CmrFieldLayout field) {
+    return pw.SizedBox(
+      width: field.width,
+      height: field.height,
+      child: pw.Text(
+        text,
+        style: pw.TextStyle(fontSize: 8),
+        maxLines: null,
+        overflow: pw.TextOverflow.clip,
+      ),
+    );
+  }
+
+  static int _maxCharsForTableCasilla(String casilla) {
+    return _tableMaxCharsByCasilla[casilla] ?? 9999;
+  }
+
+  static pw.Widget _buildBoxWidget({
+    required String value,
+    required CmrFieldLayout field,
+    required CmrBoxType boxType,
+  }) {
+    switch (boxType) {
+      case CmrBoxType.multiline:
+        return multilineBox(value, field);
+      case CmrBoxType.longline:
+        return longLineBox(value, field);
+      case CmrBoxType.table:
+        final maxChars = _maxCharsForTableCasilla(field.casilla);
+        final wrapped = hardWrap(value, maxChars);
+        return tableBox(wrapped, field);
+    }
+  }
+
   static List<pw.Widget> _buildFieldWidgets(
     CmrLayoutMap layout, {
     required String casilla,
     required String value,
-    required double fontSize,
-    bool multiline = false,
   }) {
     final field = layout.getField(casilla);
     if (field == null) {
       return const [];
     }
+    final boxType = getBoxType(field.casilla);
     return [
       pw.Positioned(
         left: field.x,
         top: field.y,
-        child: _buildCmrText(
+        child: _buildBoxWidget(
           value: value,
           field: field,
-          fontSize: fontSize,
-          multiline: multiline,
+          boxType: boxType,
         ),
       ),
     ];
-  }
-
-  static pw.Widget _buildCmrText({
-    required String value,
-    required CmrFieldLayout field,
-    required double fontSize,
-    required bool multiline,
-  }) {
-    final text = pw.Text(
-      value,
-      style: pw.TextStyle(fontSize: fontSize),
-      softWrap: multiline,
-      maxLines: multiline ? null : 1,
-      overflow: pw.TextOverflow.clip,
-    );
-
-    final box = pw.SizedBox(
-      width: field.width,
-      height: field.height,
-      child: text,
-    );
-
-    return multiline ? pw.ClipRect(child: box) : box;
   }
 
   static Future<CmrLayoutMap> _loadLayout() {
