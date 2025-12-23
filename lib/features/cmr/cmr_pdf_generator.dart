@@ -365,25 +365,32 @@ class CmrPdfGenerator {
   }
 
   static pw.Widget longLineBox(String text, CmrFieldLayout field) {
-    return pw.SizedBox(
-      width: field.width,
-      child: pw.Text(
-        text,
-        style: pw.TextStyle(fontSize: 8),
-        maxLines: 1,
+    return pw.ClipRect(
+      child: pw.SizedBox(
+        width: field.width,
+        height: field.height,
+        child: pw.Text(
+          text,
+          style: pw.TextStyle(fontSize: 8),
+          maxLines: 1,
+          overflow: pw.TextOverflow.clip,
+        ),
       ),
     );
   }
 
   static pw.Widget tableBox(String text, CmrFieldLayout field) {
-    return pw.SizedBox(
-      width: field.width,
-      height: field.height,
-      child: pw.Text(
-        text,
-        style: pw.TextStyle(fontSize: 8),
-        maxLines: null,
-        overflow: pw.TextOverflow.clip,
+    return pw.ClipRect(
+      child: pw.SizedBox(
+        width: field.width,
+        height: field.height,
+        child: pw.Text(
+          text,
+          style: pw.TextStyle(fontSize: 8),
+          maxLines: null,
+          overflow: pw.TextOverflow.clip,
+          softWrap: true,
+        ),
       ),
     );
   }
@@ -437,19 +444,6 @@ class CmrPdfGenerator {
                 overflow: pw.TextOverflow.clip,
               ),
             ),
-          ),
-        ),
-      ];
-    }
-    if (field.casilla == '27') {
-      return [
-        pw.Positioned(
-          left: field.x,
-          top: field.y,
-          child: pw.Text(
-            value,
-            style: pw.TextStyle(fontSize: 8),
-            maxLines: 1,
           ),
         ),
       ];
