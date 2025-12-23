@@ -35,7 +35,8 @@ class CmrPdfGenerator {
     final almacenName = _valueForKey(almacenData, 'Almacen');
     final fechaSalida = _formatFecha(pedido.fechaSalida);
     final almacenLocation = _buildLocationLine(almacenData);
-    final almacenPoblacion = _valueForKey(almacenData, 'Poblacion');
+    final almacenPoblacion =
+        _stringFromKeys(almacenData, const ['Población', 'Poblacion']);
     final merchandiseData =
         await _buildMerchandiseRows(pedido: pedido, firestore: store);
     final tipoPalet = _resolveTipoPalet(pedido);
@@ -394,6 +395,7 @@ class CmrPdfGenerator {
     }
 
     final grouped = <_MerchandiseKey, _MerchandiseGroup>{};
+    final confeccionCache = <String, String>{};
     for (final paletId in paletIds) {
       final stockDocId = '1$paletId';
       final snapshot =
@@ -406,6 +408,15 @@ class CmrPdfGenerator {
       final marca = _stringFromKeys(data, const ['MARCA', 'Marca', 'marca']);
       final idConfeccion =
           _stringFromKeys(data, const ['IDCONFECCION', 'IdConfeccion']);
+      String confeccionDescripcion = '';
+      if (idConfeccion.isNotEmpty) {
+        confeccionDescripcion = confeccionCache[idConfeccion] ??
+            await _fetchConfeccionDescripcion(
+              firestore: firestore,
+              idConfeccion: idConfeccion,
+            );
+        confeccionCache[idConfeccion] = confeccionDescripcion;
+      }
       final cultivo =
           _stringFromKeys(data, const ['CULTIVO', 'Cultivo', 'cultivo']);
       final cajas =
@@ -424,8 +435,13 @@ class CmrPdfGenerator {
           marca: marca,
           idConfeccion: idConfeccion,
           cultivo: cultivo,
+          confeccionDescripcion: confeccionDescripcion,
         ),
       );
+      if (group.confeccionDescripcion.isEmpty &&
+          confeccionDescripcion.isNotEmpty) {
+        group.confeccionDescripcion = confeccionDescripcion;
+      }
       group.totalCajas += cajas;
       group.totalNeto += neto;
       group.totalPalets += 1;
@@ -445,7 +461,9 @@ class CmrPdfGenerator {
       totalPalets += group.totalPalets;
       return _CmrMerchandiseRow(
         marca: group.marca,
-        idConfeccion: group.idConfeccion,
+        idConfeccion: group.confeccionDescripcion.isNotEmpty
+            ? group.confeccionDescripcion
+            : group.idConfeccion,
         cultivo: group.cultivo,
         totalCajas: _formatNum(group.totalCajas),
         totalNeto: _formatNum(group.totalNeto),
@@ -482,6 +500,22 @@ class CmrPdfGenerator {
       return '($pais)';
     }
     return '$baseLine ($pais)';
+  }
+
+  static Future<String> _fetchConfeccionDescripcion({
+    required FirebaseFirestore firestore,
+    required String idConfeccion,
+  }) async {
+    final snapshot = await firestore
+        .collection('MConfecciones')
+        .where('CODIGO', isEqualTo: idConfeccion)
+        .limit(1)
+        .get();
+    if (snapshot.docs.isEmpty) {
+      return '';
+    }
+    final data = snapshot.docs.first.data();
+    return data['DESCRIPCORTA']?.toString().trim() ?? '';
   }
 
   static String _valueForKey(Map<String, dynamic> data, String key) {
@@ -650,11 +684,13 @@ class _MerchandiseGroup {
     required this.marca,
     required this.idConfeccion,
     required this.cultivo,
+    required this.confeccionDescripcion,
   });
 
   final String marca;
   final String idConfeccion;
   final String cultivo;
+  String confeccionDescripcion;
   num totalCajas = 0;
   num totalNeto = 0;
   int totalPalets = 0;
