@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:characters/characters.dart';
@@ -242,7 +243,8 @@ class CmrPdfGenerator {
   }) {
     final widgets = <pw.Widget>[];
     final rows = data.rows;
-    final rowHeight = _resolveMerchandiseRowHeight(layout);
+    final baseRowHeight = _resolveMerchandiseRowHeight(layout);
+    var currentOffsetY = 0.0;
     for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
       final row = rows[rowIndex];
       final fields = [
@@ -254,12 +256,19 @@ class CmrPdfGenerator {
         _MerchandiseField('12', row.totalPalets),
       ];
 
+      var rowHeight = baseRowHeight;
+      for (final field in fields) {
+        final maxChars = _maxCharsForTableCasilla(field.casilla);
+        final wrapped = hardWrap(field.value, maxChars);
+        final lines = wrapped.split('\n').length;
+        final effectiveHeight = (9.0 * lines) + 4;
+        rowHeight = max(rowHeight, effectiveHeight);
+      }
+
       for (final field in fields) {
         final layoutField = layout.getField(field.casilla);
         if (layoutField == null) continue;
-        final effectiveHeight =
-            rowHeight > 0 ? rowHeight : layoutField.height;
-        final top = layoutField.y + (rowIndex * effectiveHeight);
+        final top = layoutField.y + currentOffsetY;
         final boxType = getBoxType(field.casilla);
         final widget = _buildBoxWidget(
           value: field.value,
@@ -274,20 +283,26 @@ class CmrPdfGenerator {
           ),
         );
       }
+      currentOffsetY += rowHeight;
     }
     if (rows.isNotEmpty) {
-      final totalRowIndex = rows.length;
       final totalFields = [
         _MerchandiseField('7', _formatNum(data.totalCajas)),
         _MerchandiseField('11', _formatNum(data.totalNeto)),
         _MerchandiseField('12', data.totalPalets.toString()),
       ];
+      var totalRowHeight = baseRowHeight;
+      for (final field in totalFields) {
+        final maxChars = _maxCharsForTableCasilla(field.casilla);
+        final wrapped = hardWrap(field.value, maxChars);
+        final lines = wrapped.split('\n').length;
+        final effectiveHeight = (9.0 * lines) + 4;
+        totalRowHeight = max(totalRowHeight, effectiveHeight);
+      }
       for (final field in totalFields) {
         final layoutField = layout.getField(field.casilla);
         if (layoutField == null) continue;
-        final effectiveHeight =
-            rowHeight > 0 ? rowHeight : layoutField.height;
-        final top = layoutField.y + (totalRowIndex * effectiveHeight);
+        final top = layoutField.y + currentOffsetY;
         final boxType = getBoxType(field.casilla);
         final widget = _buildBoxWidget(
           value: field.value,
@@ -302,6 +317,7 @@ class CmrPdfGenerator {
           ),
         );
       }
+      currentOffsetY += totalRowHeight;
     }
     return widgets;
   }
@@ -391,6 +407,40 @@ class CmrPdfGenerator {
     final field = layout.getField(casilla);
     if (field == null) {
       return const [];
+    }
+    if (field.casilla == '13') {
+      return [
+        pw.Positioned(
+          left: field.x,
+          top: field.y,
+          child: pw.ClipRect(
+            child: pw.SizedBox(
+              width: field.width,
+              height: field.height,
+              child: pw.Text(
+                value,
+                style: pw.TextStyle(fontSize: 8, lineSpacing: 1.2),
+                softWrap: true,
+                maxLines: (field.height / 10).floor(),
+                overflow: pw.TextOverflow.clip,
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+    if (field.casilla == '27') {
+      return [
+        pw.Positioned(
+          left: field.x,
+          top: field.y,
+          child: pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: 8),
+            maxLines: 1,
+          ),
+        ),
+      ];
     }
     final boxType = getBoxType(field.casilla);
     return [
