@@ -274,11 +274,12 @@ class CmrPdfGenerator {
         final layoutField = layout.getField(field.casilla);
         if (layoutField == null) continue;
         final top = baseY + currentOffsetY;
-        final boxType = getBoxType(field.casilla);
-        final widget = _buildBoxWidget(
-          value: field.value,
-          field: layoutField,
-          boxType: boxType,
+        final maxChars = _maxCharsForTableCasilla(field.casilla);
+        final wrappedText = hardWrap(field.value, maxChars);
+        final widget = tableBox(
+          wrappedText,
+          layoutField,
+          height: rowHeight,
         );
         widgets.add(
           pw.Positioned(
@@ -308,11 +309,12 @@ class CmrPdfGenerator {
         final layoutField = layout.getField(field.casilla);
         if (layoutField == null) continue;
         final top = baseY + currentOffsetY;
-        final boxType = getBoxType(field.casilla);
-        final widget = _buildBoxWidget(
-          value: field.value,
-          field: layoutField,
-          boxType: boxType,
+        final maxChars = _maxCharsForTableCasilla(field.casilla);
+        final wrappedText = hardWrap(field.value, maxChars);
+        final widget = tableBox(
+          wrappedText,
+          layoutField,
+          height: totalRowHeight,
         );
         widgets.add(
           pw.Positioned(
@@ -379,11 +381,15 @@ class CmrPdfGenerator {
     );
   }
 
-  static pw.Widget tableBox(String text, CmrFieldLayout field) {
+  static pw.Widget tableBox(
+    String text,
+    CmrFieldLayout field, {
+    double? height,
+  }) {
     return pw.ClipRect(
       child: pw.SizedBox(
         width: field.width,
-        height: field.height,
+        height: height ?? field.height,
         child: pw.Text(
           text,
           style: pw.TextStyle(fontSize: 8),
@@ -425,9 +431,29 @@ class CmrPdfGenerator {
     if (field == null) {
       return const [];
     }
-    if (field.casilla == '13' ||
-        field.casilla == '26A' ||
-        field.casilla == '26B') {
+    if (field.casilla == '13') {
+      final wrapped = hardWrap(value, _maxCharsForTableCasilla('13'));
+      return [
+        pw.Positioned(
+          left: field.x,
+          top: field.y,
+          child: pw.ClipRect(
+            child: pw.SizedBox(
+              width: field.width,
+              height: field.height + 40,
+              child: pw.Text(
+                wrapped,
+                style: pw.TextStyle(fontSize: 8, lineSpacing: 1.2),
+                softWrap: true,
+                maxLines: null,
+                overflow: pw.TextOverflow.clip,
+              ),
+            ),
+          ),
+        ),
+      ];
+    }
+    if (field.casilla == '26A' || field.casilla == '26B') {
       return [
         pw.Positioned(
           left: field.x,
