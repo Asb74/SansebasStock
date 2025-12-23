@@ -349,6 +349,66 @@ class CmrPdfGenerator {
     return buffer.toString();
   }
 
+  static List<String> wrapByChars({
+    required String text,
+    required int maxCharsPerLine,
+    required int maxLines,
+  }) {
+    if (maxCharsPerLine <= 0 || maxLines <= 0) {
+      return maxLines > 0 ? [text] : const [];
+    }
+    final lines = <String>[];
+    var buffer = StringBuffer();
+    var count = 0;
+    for (final char in text.characters) {
+      buffer.write(char);
+      count++;
+      if (count >= maxCharsPerLine) {
+        lines.add(buffer.toString());
+        if (lines.length >= maxLines) {
+          return lines;
+        }
+        buffer = StringBuffer();
+        count = 0;
+      }
+    }
+    if (buffer.isNotEmpty && lines.length < maxLines) {
+      lines.add(buffer.toString());
+    }
+    return lines;
+  }
+
+  static pw.Widget manualWrapBox({
+    required List<String> lines,
+    required CmrFieldLayout field,
+    required double fontSize,
+    required double lineHeight,
+  }) {
+    final lineGap = max(0.0, lineHeight - fontSize);
+    final children = <pw.Widget>[];
+    for (var index = 0; index < lines.length; index++) {
+      children.add(
+        pw.Text(
+          lines[index],
+          style: pw.TextStyle(fontSize: fontSize),
+        ),
+      );
+      if (index < lines.length - 1 && lineGap > 0) {
+        children.add(pw.SizedBox(height: lineGap));
+      }
+    }
+    return pw.ClipRect(
+      child: pw.SizedBox(
+        width: field.width,
+        height: field.height,
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: children,
+        ),
+      ),
+    );
+  }
+
   static pw.Widget multilineBox(String text, CmrFieldLayout field) {
     final maxLines = (field.height / 9).floor();
     return pw.ClipRect(
@@ -405,6 +465,15 @@ class CmrPdfGenerator {
     return _tableMaxCharsByCasilla[casilla] ?? 9999;
   }
 
+  static int _estimateMaxChars(double width, double fontSize) {
+    const averageCharWidthFactor = 0.6;
+    final averageCharWidth = fontSize * averageCharWidthFactor;
+    if (averageCharWidth <= 0) {
+      return 0;
+    }
+    return max(1, (width / averageCharWidth).floor());
+  }
+
   static pw.Widget _buildBoxWidget({
     required String value,
     required CmrFieldLayout field,
@@ -432,21 +501,53 @@ class CmrPdfGenerator {
       return const [];
     }
     if (field.casilla == '13') {
+      const fontSize = 8.0;
+      const lineHeight = 9.0;
+      var maxCharsPerLine = _maxCharsForTableCasilla('13');
+      if (maxCharsPerLine == 9999) {
+        maxCharsPerLine = _estimateMaxChars(field.width, fontSize);
+      }
+      final maxLines = (field.height / lineHeight).floor();
+      final lines = wrapByChars(
+        text: value,
+        maxCharsPerLine: maxCharsPerLine,
+        maxLines: maxLines,
+      );
       return [
         pw.Positioned(
           left: field.x,
           top: field.y,
-          child: pw.ClipRect(
-            child: pw.ConstrainedBox(
-              constraints: pw.BoxConstraints(
-                maxWidth: field.width,
-                maxHeight: field.height + 40,
-              ),
-              child: pw.Paragraph(
-                text: value,
-                style: pw.TextStyle(fontSize: 8, lineSpacing: 1.2),
-              ),
-            ),
+          child: manualWrapBox(
+            lines: lines,
+            field: field,
+            fontSize: fontSize,
+            lineHeight: lineHeight,
+          ),
+        ),
+      ];
+    }
+    if (field.casilla == '27') {
+      const fontSize = 8.0;
+      const lineHeight = 9.0;
+      var maxCharsPerLine = _maxCharsForTableCasilla('27');
+      if (maxCharsPerLine == 9999) {
+        maxCharsPerLine = _estimateMaxChars(field.width, fontSize);
+      }
+      final maxLines = (field.height / lineHeight).floor();
+      final lines = wrapByChars(
+        text: value,
+        maxCharsPerLine: maxCharsPerLine,
+        maxLines: maxLines,
+      );
+      return [
+        pw.Positioned(
+          left: field.x,
+          top: field.y,
+          child: manualWrapBox(
+            lines: lines,
+            field: field,
+            fontSize: fontSize,
+            lineHeight: lineHeight,
           ),
         ),
       ];
