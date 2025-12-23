@@ -35,10 +35,9 @@ class CmrPdfGenerator {
     final almacenName = _valueForKey(almacenData, 'Almacen');
     final fechaSalida = _formatFecha(pedido.fechaSalida);
     final almacenLocation = _buildLocationLine(almacenData);
-    final merchandiseRows = await _buildMerchandiseRows(
-      firestore: store,
-      pedido: pedido,
-    );
+    final almacenPoblacion = _valueForKey(almacenData, 'Poblacion');
+    final merchandiseData = await _buildMerchandiseRows(pedido: pedido);
+    final tipoPalet = _resolveTipoPalet(pedido);
     final layout = await _loadLayout();
 
     final expedidorBg = await _loadBg('assets/cmr/cmr_expedidor.bmp');
@@ -56,9 +55,15 @@ class CmrPdfGenerator {
         almacen: almacenName,
         fechaSalida: fechaSalida,
         almacenLocation: almacenLocation,
+        almacenPoblacion: almacenPoblacion,
         transportista: pedido.transportista,
         matricula: pedido.matricula,
-        merchandiseRows: merchandiseRows,
+        termografos: pedido.termografos,
+        observaciones: pedido.observaciones,
+        paletRetEntr: pedido.paletRetEntr,
+        paletRetDev: pedido.paletRetDev,
+        tipoPalet: tipoPalet,
+        merchandiseData: merchandiseData,
         layout: layout,
       ),
     );
@@ -71,9 +76,15 @@ class CmrPdfGenerator {
         almacen: almacenName,
         fechaSalida: fechaSalida,
         almacenLocation: almacenLocation,
+        almacenPoblacion: almacenPoblacion,
         transportista: pedido.transportista,
         matricula: pedido.matricula,
-        merchandiseRows: merchandiseRows,
+        termografos: pedido.termografos,
+        observaciones: pedido.observaciones,
+        paletRetEntr: pedido.paletRetEntr,
+        paletRetDev: pedido.paletRetDev,
+        tipoPalet: tipoPalet,
+        merchandiseData: merchandiseData,
         layout: layout,
       ),
     );
@@ -86,9 +97,15 @@ class CmrPdfGenerator {
         almacen: almacenName,
         fechaSalida: fechaSalida,
         almacenLocation: almacenLocation,
+        almacenPoblacion: almacenPoblacion,
         transportista: pedido.transportista,
         matricula: pedido.matricula,
-        merchandiseRows: merchandiseRows,
+        termografos: pedido.termografos,
+        observaciones: pedido.observaciones,
+        paletRetEntr: pedido.paletRetEntr,
+        paletRetDev: pedido.paletRetDev,
+        tipoPalet: tipoPalet,
+        merchandiseData: merchandiseData,
         layout: layout,
       ),
     );
@@ -109,9 +126,15 @@ class CmrPdfGenerator {
     required String almacen,
     required String fechaSalida,
     required String almacenLocation,
+    required String almacenPoblacion,
     required String transportista,
     required String matricula,
-    required List<_CmrMerchandiseRow> merchandiseRows,
+    required String termografos,
+    required String observaciones,
+    required String paletRetEntr,
+    required String paletRetDev,
+    required String tipoPalet,
+    required _CmrMerchandiseData merchandiseData,
     required CmrLayoutMap layout,
   }) {
     const fontSize = 9.0;
@@ -152,12 +175,68 @@ class CmrPdfGenerator {
             ),
             ..._buildFieldWidgets(
               layout,
+              casilla: '5',
+              value: termografos,
+              fontSize: fontSize,
+              maxLines: 2,
+              overflow: pw.TextOverflow.clip,
+            ),
+            ..._buildFieldWidgets(
+              layout,
+              casilla: '13',
+              value: observaciones,
+              fontSize: fontSize,
+              maxLines: 3,
+              overflow: pw.TextOverflow.clip,
+            ),
+            ..._buildFieldWidgets(
+              layout,
               casilla: '17',
               value: '$transportista\n$matricula',
               fontSize: fontSize,
             ),
+            ..._buildFieldWidgets(
+              layout,
+              casilla: '22A',
+              value: almacenPoblacion,
+              fontSize: fontSize,
+              maxLines: 1,
+              overflow: pw.TextOverflow.clip,
+            ),
+            ..._buildFieldWidgets(
+              layout,
+              casilla: '22B',
+              value: fechaSalida,
+              fontSize: fontSize,
+              maxLines: 1,
+              overflow: pw.TextOverflow.clip,
+            ),
+            ..._buildFieldWidgets(
+              layout,
+              casilla: '26A',
+              value: paletRetEntr,
+              fontSize: fontSize,
+              maxLines: 1,
+              overflow: pw.TextOverflow.clip,
+            ),
+            ..._buildFieldWidgets(
+              layout,
+              casilla: '26B',
+              value: paletRetDev,
+              fontSize: fontSize,
+              maxLines: 1,
+              overflow: pw.TextOverflow.clip,
+            ),
+            ..._buildFieldWidgets(
+              layout,
+              casilla: '27',
+              value: tipoPalet,
+              fontSize: fontSize,
+              maxLines: 2,
+              overflow: pw.TextOverflow.clip,
+            ),
             ..._buildMerchandiseWidgets(
-              merchandiseRows,
+              merchandiseData,
               fontSize: merchFontSize,
               layout: layout,
             ),
@@ -168,27 +247,62 @@ class CmrPdfGenerator {
   }
 
   static List<pw.Widget> _buildMerchandiseWidgets(
-    List<_CmrMerchandiseRow> rows, {
+    _CmrMerchandiseData data, {
     required double fontSize,
     required CmrLayoutMap layout,
   }) {
     final widgets = <pw.Widget>[];
     final textStyle = pw.TextStyle(fontSize: fontSize);
+    final rows = data.rows;
+    final rowHeight = _resolveMerchandiseRowHeight(layout);
     for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
       final row = rows[rowIndex];
       final fields = [
         _MerchandiseField('6', row.marca),
         _MerchandiseField('7', row.totalCajas),
         _MerchandiseField('8', row.idConfeccion),
-        _MerchandiseField('9', row.grupoVarietal),
-        _MerchandiseField('10', row.totalNeto),
-        _MerchandiseField('11', row.totalPalets),
+        _MerchandiseField('9', row.cultivo),
+        _MerchandiseField('11', row.totalNeto),
+        _MerchandiseField('12', row.totalPalets),
       ];
 
       for (final field in fields) {
         final layoutField = layout.getField(field.casilla);
         if (layoutField == null) continue;
-        final top = layoutField.y + (rowIndex * layoutField.height);
+        final effectiveHeight =
+            rowHeight > 0 ? rowHeight : layoutField.height;
+        final top = layoutField.y + (rowIndex * effectiveHeight);
+        widgets.add(
+          pw.Positioned(
+            left: layoutField.x,
+            top: top,
+            child: pw.SizedBox(
+              width: layoutField.width,
+              height: layoutField.height,
+              child: pw.Text(
+                field.value,
+                style: textStyle,
+                maxLines: 1,
+                overflow: pw.TextOverflow.clip,
+              ),
+            ),
+          ),
+        );
+      }
+    }
+    if (rows.isNotEmpty) {
+      final totalRowIndex = rows.length;
+      final totalFields = [
+        _MerchandiseField('7', _formatNum(data.totalCajas)),
+        _MerchandiseField('11', _formatNum(data.totalNeto)),
+        _MerchandiseField('12', data.totalPalets.toString()),
+      ];
+      for (final field in totalFields) {
+        final layoutField = layout.getField(field.casilla);
+        if (layoutField == null) continue;
+        final effectiveHeight =
+            rowHeight > 0 ? rowHeight : layoutField.height;
+        final top = layoutField.y + (totalRowIndex * effectiveHeight);
         widgets.add(
           pw.Positioned(
             left: layoutField.x,
@@ -215,6 +329,8 @@ class CmrPdfGenerator {
     required String casilla,
     required String value,
     required double fontSize,
+    int? maxLines,
+    pw.TextOverflow? overflow,
   }) {
     final field = layout.getField(casilla);
     if (field == null) {
@@ -230,6 +346,8 @@ class CmrPdfGenerator {
           child: pw.Text(
             value,
             style: pw.TextStyle(fontSize: fontSize),
+            maxLines: maxLines,
+            overflow: overflow,
           ),
         ),
       ),
@@ -263,15 +381,14 @@ class CmrPdfGenerator {
     ];
   }
 
-  static Future<List<_CmrMerchandiseRow>> _buildMerchandiseRows({
-    required FirebaseFirestore firestore,
+  static Future<_CmrMerchandiseData> _buildMerchandiseRows({
     required CmrPedido pedido,
   }) async {
     final paletIds = parsePaletsFromLines(
       pedido.lineas.expand((linea) => linea.palets),
     );
     if (paletIds.isEmpty) {
-      return const [];
+      return const _CmrMerchandiseData.empty();
     }
 
     final grouped = <_MerchandiseKey, _MerchandiseGroup>{};
@@ -287,10 +404,8 @@ class CmrPdfGenerator {
       final marca = _stringFromKeys(data, const ['MARCA', 'Marca', 'marca']);
       final idConfeccion =
           _stringFromKeys(data, const ['IDCONFECCION', 'IdConfeccion']);
-      final variedad = _stringFromKeys(
-        data,
-        const ['VARIEDAD', 'Variedad', 'variedad'],
-      );
+      final cultivo =
+          _stringFromKeys(data, const ['CULTIVO', 'Cultivo', 'cultivo']);
       final cajas =
           _numFromKeys(data, const ['CAJAS', 'Cajas', 'cajas']) ?? 0;
       final neto =
@@ -299,14 +414,14 @@ class CmrPdfGenerator {
       final key = _MerchandiseKey(
         marca: marca,
         idConfeccion: idConfeccion,
-        variedad: variedad,
+        cultivo: cultivo,
       );
       final group = grouped.putIfAbsent(
         key,
         () => _MerchandiseGroup(
           marca: marca,
           idConfeccion: idConfeccion,
-          variedad: variedad,
+          cultivo: cultivo,
         ),
       );
       group.totalCajas += cajas;
@@ -315,74 +430,33 @@ class CmrPdfGenerator {
     }
 
     if (grouped.isEmpty) {
-      return const [];
+      return const _CmrMerchandiseData.empty();
     }
 
-    final variedadLookup = await _loadVariedadGroups(
-      firestore: firestore,
-      variedades: grouped.values
-          .map((group) => group.variedad)
-          .where((value) => value.isNotEmpty)
-          .toSet(),
+    num totalCajas = 0;
+    num totalNeto = 0;
+    var totalPalets = 0;
+
+    final rows = grouped.values.map((group) {
+      totalCajas += group.totalCajas;
+      totalNeto += group.totalNeto;
+      totalPalets += group.totalPalets;
+      return _CmrMerchandiseRow(
+        marca: group.marca,
+        idConfeccion: group.idConfeccion,
+        cultivo: group.cultivo,
+        totalCajas: _formatNum(group.totalCajas),
+        totalNeto: _formatNum(group.totalNeto),
+        totalPalets: group.totalPalets.toString(),
+      );
+    }).toList();
+
+    return _CmrMerchandiseData(
+      rows: rows,
+      totalCajas: totalCajas,
+      totalNeto: totalNeto,
+      totalPalets: totalPalets,
     );
-
-    return grouped.values
-        .map(
-          (group) => _CmrMerchandiseRow(
-            marca: group.marca,
-            idConfeccion: group.idConfeccion,
-            grupoVarietal: variedadLookup[group.variedad] ?? '',
-            totalCajas: _formatNum(group.totalCajas),
-            totalNeto: _formatNum(group.totalNeto),
-            totalPalets: group.totalPalets.toString(),
-          ),
-        )
-        .toList();
-  }
-
-  static Future<Map<String, String>> _loadVariedadGroups({
-    required FirebaseFirestore firestore,
-    required Set<String> variedades,
-  }) async {
-    final result = <String, String>{};
-    for (final variedad in variedades) {
-      final trimmed = variedad.trim();
-      if (trimmed.isEmpty) continue;
-      final data = await _findVariedadDoc(firestore, trimmed);
-      if (data == null) continue;
-      final grupo = _stringFromKeys(data, const ['grupo', 'Grupo']);
-      final subgrupo =
-          _stringFromKeys(data, const ['subgrupo', 'Subgrupo']);
-      final label = [grupo, subgrupo]
-          .where((value) => value.isNotEmpty)
-          .join(' ')
-          .trim();
-      result[trimmed] = label;
-    }
-    return result;
-  }
-
-  static Future<Map<String, dynamic>?> _findVariedadDoc(
-    FirebaseFirestore firestore,
-    String variedad,
-  ) async {
-    final query = await firestore
-        .collection('MVariedad')
-        .where('Variedad', isEqualTo: variedad)
-        .limit(1)
-        .get();
-    if (query.docs.isNotEmpty) {
-      return query.docs.first.data();
-    }
-    final fallback = await firestore
-        .collection('MVariedad')
-        .where('variedad', isEqualTo: variedad)
-        .limit(1)
-        .get();
-    if (fallback.docs.isNotEmpty) {
-      return fallback.docs.first.data();
-    }
-    return null;
   }
 
   static String _buildLocationLine(Map<String, dynamic> data) {
@@ -460,6 +534,32 @@ class CmrPdfGenerator {
     return '';
   }
 
+  static String _resolveTipoPalet(CmrPedido pedido) {
+    final tipoPalets = pedido.lineas
+        .map((linea) => linea.tipoPalet?.trim() ?? '')
+        .where((value) => value.isNotEmpty)
+        .toList();
+    if (tipoPalets.isEmpty) {
+      return '';
+    }
+    final unique = <String>{};
+    final ordered = <String>[];
+    for (final value in tipoPalets) {
+      if (unique.add(value)) {
+        ordered.add(value);
+      }
+    }
+    return ordered.join('\n');
+  }
+
+  static double _resolveMerchandiseRowHeight(CmrLayoutMap layout) {
+    final primary = layout.getField('6');
+    if (primary != null) return primary.height;
+    final fallback = layout.getField('7');
+    if (fallback != null) return fallback.height;
+    return layout.getField('8')?.height ?? 0;
+  }
+
   static Future<Map<String, dynamic>> _fetchAlmacen(
     FirebaseFirestore firestore,
   ) async {
@@ -475,11 +575,31 @@ class CmrPdfGenerator {
   }
 }
 
+class _CmrMerchandiseData {
+  const _CmrMerchandiseData({
+    required this.rows,
+    required this.totalCajas,
+    required this.totalNeto,
+    required this.totalPalets,
+  });
+
+  const _CmrMerchandiseData.empty()
+      : rows = const [],
+        totalCajas = 0,
+        totalNeto = 0,
+        totalPalets = 0;
+
+  final List<_CmrMerchandiseRow> rows;
+  final num totalCajas;
+  final num totalNeto;
+  final int totalPalets;
+}
+
 class _CmrMerchandiseRow {
   const _CmrMerchandiseRow({
     required this.marca,
     required this.idConfeccion,
-    required this.grupoVarietal,
+    required this.cultivo,
     required this.totalCajas,
     required this.totalNeto,
     required this.totalPalets,
@@ -487,7 +607,7 @@ class _CmrMerchandiseRow {
 
   final String marca;
   final String idConfeccion;
-  final String grupoVarietal;
+  final String cultivo;
   final String totalCajas;
   final String totalNeto;
   final String totalPalets;
@@ -504,35 +624,35 @@ class _MerchandiseKey {
   const _MerchandiseKey({
     required this.marca,
     required this.idConfeccion,
-    required this.variedad,
+    required this.cultivo,
   });
 
   final String marca;
   final String idConfeccion;
-  final String variedad;
+  final String cultivo;
 
   @override
   bool operator ==(Object other) {
     return other is _MerchandiseKey &&
         other.marca == marca &&
         other.idConfeccion == idConfeccion &&
-        other.variedad == variedad;
+        other.cultivo == cultivo;
   }
 
   @override
-  int get hashCode => Object.hash(marca, idConfeccion, variedad);
+  int get hashCode => Object.hash(marca, idConfeccion, cultivo);
 }
 
 class _MerchandiseGroup {
   _MerchandiseGroup({
     required this.marca,
     required this.idConfeccion,
-    required this.variedad,
+    required this.cultivo,
   });
 
   final String marca;
   final String idConfeccion;
-  final String variedad;
+  final String cultivo;
   num totalCajas = 0;
   num totalNeto = 0;
   int totalPalets = 0;
