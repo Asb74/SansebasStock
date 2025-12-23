@@ -7,10 +7,13 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import 'cmr_field_layout.dart';
 import 'cmr_models.dart';
 import 'cmr_utils.dart';
 
 class CmrPdfGenerator {
+  static Future<CmrLayoutMap>? _layoutCache;
+
   static Future<Uint8List> generate({
     required CmrPedido pedido,
     FirebaseFirestore? firestore,
@@ -36,6 +39,7 @@ class CmrPdfGenerator {
       firestore: store,
       pedido: pedido,
     );
+    final layout = await _loadLayout();
 
     final expedidorBg = await _loadBg('assets/cmr/cmr_expedidor.bmp');
     final destinatarioBg = await _loadBg('assets/cmr/cmr_destinatario.bmp');
@@ -55,6 +59,7 @@ class CmrPdfGenerator {
         transportista: pedido.transportista,
         matricula: pedido.matricula,
         merchandiseRows: merchandiseRows,
+        layout: layout,
       ),
     );
     doc.addPage(
@@ -69,6 +74,7 @@ class CmrPdfGenerator {
         transportista: pedido.transportista,
         matricula: pedido.matricula,
         merchandiseRows: merchandiseRows,
+        layout: layout,
       ),
     );
     doc.addPage(
@@ -83,6 +89,7 @@ class CmrPdfGenerator {
         transportista: pedido.transportista,
         matricula: pedido.matricula,
         merchandiseRows: merchandiseRows,
+        layout: layout,
       ),
     );
 
@@ -105,22 +112,10 @@ class CmrPdfGenerator {
     required String transportista,
     required String matricula,
     required List<_CmrMerchandiseRow> merchandiseRows,
+    required CmrLayoutMap layout,
   }) {
     const fontSize = 9.0;
-    const field1Left = 60.0;
-    const field1Top = 40.8;
-    const field2Left = 60.0;
-    const field2Top = 105.6;
-    const field3Left = 60.0;
-    const field3Top = 170.4;
-    const field4Left = 60.0;
-    const field4Top = 211.2;
-    const field17Left = 318.0;
-    const field17Top = 106.8;
     const merchFontSize = 8.0;
-    const merchBaseTop = 300.0;
-    const merchRowHeight = 14.0;
-    const merchColumnWidth = 70.0;
 
     return pw.Page(
       pageFormat: PdfPageFormat.a4,
@@ -131,52 +126,40 @@ class CmrPdfGenerator {
             pw.Positioned.fill(
               child: pw.Image(background, fit: pw.BoxFit.fill),
             ),
-            pw.Positioned(
-              left: field1Left,
-              top: field1Top,
-              child: pw.Text(
-                remitenteLines.join('\n'),
-                style: const pw.TextStyle(fontSize: fontSize),
-              ),
+            ..._buildFieldWidgets(
+              layout,
+              casilla: '1',
+              value: remitenteLines.join('\n'),
+              fontSize: fontSize,
             ),
-            pw.Positioned(
-              left: field2Left,
-              top: field2Top,
-              child: pw.Text(
-                destinatario,
-                style: const pw.TextStyle(fontSize: fontSize),
-              ),
+            ..._buildFieldWidgets(
+              layout,
+              casilla: '2',
+              value: destinatario,
+              fontSize: fontSize,
             ),
-            pw.Positioned(
-              left: field3Left,
-              top: field3Top,
-              child: pw.Text(
-                plataforma,
-                style: const pw.TextStyle(fontSize: fontSize),
-              ),
+            ..._buildFieldWidgets(
+              layout,
+              casilla: '3',
+              value: plataforma,
+              fontSize: fontSize,
             ),
-            pw.Positioned(
-              left: field4Left,
-              top: field4Top,
-              child: pw.Text(
-                '$almacen        $fechaSalida\n$almacenLocation',
-                style: const pw.TextStyle(fontSize: fontSize),
-              ),
+            ..._buildFieldWidgets(
+              layout,
+              casilla: '4',
+              value: '$almacen        $fechaSalida\n$almacenLocation',
+              fontSize: fontSize,
             ),
-            pw.Positioned(
-              left: field17Left,
-              top: field17Top,
-              child: pw.Text(
-                '$transportista\n$matricula',
-                style: const pw.TextStyle(fontSize: fontSize),
-              ),
+            ..._buildFieldWidgets(
+              layout,
+              casilla: '17',
+              value: '$transportista\n$matricula',
+              fontSize: fontSize,
             ),
             ..._buildMerchandiseWidgets(
               merchandiseRows,
-              baseTop: merchBaseTop,
-              rowHeight: merchRowHeight,
-              columnWidth: merchColumnWidth,
               fontSize: merchFontSize,
+              layout: layout,
             ),
           ],
         );
@@ -186,98 +169,76 @@ class CmrPdfGenerator {
 
   static List<pw.Widget> _buildMerchandiseWidgets(
     List<_CmrMerchandiseRow> rows, {
-    required double baseTop,
-    required double rowHeight,
-    required double columnWidth,
     required double fontSize,
+    required CmrLayoutMap layout,
   }) {
     final widgets = <pw.Widget>[];
     final textStyle = pw.TextStyle(fontSize: fontSize);
     for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
       final row = rows[rowIndex];
-      final top = baseTop + (rowIndex * rowHeight);
-      widgets.addAll([
-        pw.Positioned(
-          left: 60,
-          top: top,
-          child: pw.SizedBox(
-            width: columnWidth,
-            child: pw.Text(
-              row.marca,
-              style: textStyle,
-              maxLines: 1,
-              overflow: pw.TextOverflow.clip,
+      final fields = [
+        _MerchandiseField('6', row.marca),
+        _MerchandiseField('7', row.totalCajas),
+        _MerchandiseField('8', row.idConfeccion),
+        _MerchandiseField('9', row.grupoVarietal),
+        _MerchandiseField('10', row.totalNeto),
+        _MerchandiseField('11', row.totalPalets),
+      ];
+
+      for (final field in fields) {
+        final layoutField = layout.getField(field.casilla);
+        if (layoutField == null) continue;
+        final top = layoutField.y + (rowIndex * layoutField.height);
+        widgets.add(
+          pw.Positioned(
+            left: layoutField.x,
+            top: top,
+            child: pw.SizedBox(
+              width: layoutField.width,
+              height: layoutField.height,
+              child: pw.Text(
+                field.value,
+                style: textStyle,
+                maxLines: 1,
+                overflow: pw.TextOverflow.clip,
+              ),
             ),
           ),
-        ),
-        pw.Positioned(
-          left: 138,
-          top: top,
-          child: pw.SizedBox(
-            width: columnWidth,
-            child: pw.Text(
-              row.totalCajas,
-              style: textStyle,
-              maxLines: 1,
-              overflow: pw.TextOverflow.clip,
-            ),
-          ),
-        ),
-        pw.Positioned(
-          left: 215,
-          top: top,
-          child: pw.SizedBox(
-            width: columnWidth,
-            child: pw.Text(
-              row.idConfeccion,
-              style: textStyle,
-              maxLines: 1,
-              overflow: pw.TextOverflow.clip,
-            ),
-          ),
-        ),
-        pw.Positioned(
-          left: 284,
-          top: top,
-          child: pw.SizedBox(
-            width: columnWidth,
-            child: pw.Text(
-              row.grupoVarietal,
-              style: textStyle,
-              maxLines: 1,
-              overflow: pw.TextOverflow.clip,
-            ),
-          ),
-        ),
-        pw.Positioned(
-          left: 436,
-          top: top,
-          child: pw.SizedBox(
-            width: columnWidth,
-            child: pw.Text(
-              row.totalNeto,
-              style: textStyle,
-              maxLines: 1,
-              overflow: pw.TextOverflow.clip,
-            ),
-          ),
-        ),
-        pw.Positioned(
-          left: 506,
-          top: top,
-          child: pw.SizedBox(
-            width: columnWidth,
-            child: pw.Text(
-              row.totalPalets,
-              style: textStyle,
-              maxLines: 1,
-              overflow: pw.TextOverflow.clip,
-            ),
-          ),
-        ),
-      ]);
+        );
+      }
     }
     return widgets;
+  }
+
+  static List<pw.Widget> _buildFieldWidgets(
+    CmrLayoutMap layout, {
+    required String casilla,
+    required String value,
+    required double fontSize,
+  }) {
+    final field = layout.getField(casilla);
+    if (field == null) {
+      return const [];
+    }
+    return [
+      pw.Positioned(
+        left: field.x,
+        top: field.y,
+        child: pw.SizedBox(
+          width: field.width,
+          height: field.height,
+          child: pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: fontSize),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  static Future<CmrLayoutMap> _loadLayout() {
+    _layoutCache ??= CmrLayoutLoader.loadFromAssets();
+    return _layoutCache!;
   }
 
   static List<String> _buildRemitenteLines({
@@ -530,6 +491,13 @@ class _CmrMerchandiseRow {
   final String totalCajas;
   final String totalNeto;
   final String totalPalets;
+}
+
+class _MerchandiseField {
+  const _MerchandiseField(this.casilla, this.value);
+
+  final String casilla;
+  final String value;
 }
 
 class _MerchandiseKey {
