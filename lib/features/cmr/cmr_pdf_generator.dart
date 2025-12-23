@@ -243,7 +243,6 @@ class CmrPdfGenerator {
   }) {
     final widgets = <pw.Widget>[];
     final rows = data.rows;
-    final baseRowHeight = _resolveMerchandiseRowHeight(layout);
     const lineHeight = 9.0;
     var currentOffsetY = 0.0;
     for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
@@ -264,7 +263,7 @@ class CmrPdfGenerator {
             return wrapped.split('\n').length;
           })
           .reduce(max);
-      final rowHeight = max(baseRowHeight, (lineHeight * maxLinesInRow) + 4);
+      final rowHeight = (lineHeight * maxLinesInRow) + 4;
 
       for (final field in fields) {
         final layoutField = layout.getField(field.casilla);
@@ -299,8 +298,7 @@ class CmrPdfGenerator {
             return wrapped.split('\n').length;
           })
           .reduce(max);
-      final totalRowHeight =
-          max(baseRowHeight, (lineHeight * maxLinesInRow) + 4);
+      final totalRowHeight = (lineHeight * maxLinesInRow) + 4;
       for (final field in totalFields) {
         final layoutField = layout.getField(field.casilla);
         if (layoutField == null) continue;
@@ -415,7 +413,9 @@ class CmrPdfGenerator {
     if (field == null) {
       return const [];
     }
-    if (field.casilla == '13') {
+    if (field.casilla == '13' ||
+        field.casilla == '26A' ||
+        field.casilla == '26B') {
       return [
         pw.Positioned(
           left: field.x,
@@ -693,14 +693,6 @@ class CmrPdfGenerator {
       }
     }
     return ordered.join('\n');
-  }
-
-  static double _resolveMerchandiseRowHeight(CmrLayoutMap layout) {
-    final primary = layout.getField('6');
-    if (primary != null) return primary.height;
-    final fallback = layout.getField('7');
-    if (fallback != null) return fallback.height;
-    return layout.getField('8')?.height ?? 0;
   }
 
   static Future<Map<String, dynamic>> _fetchAlmacen(
