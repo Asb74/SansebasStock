@@ -242,6 +242,11 @@ class CmrPdfGenerator {
     required CmrLayoutMap layout,
   }) {
     final widgets = <pw.Widget>[];
+    final baseField = layout.getField('6');
+    if (baseField == null) {
+      return widgets;
+    }
+    final baseY = baseField.y;
     final rows = data.rows;
     const lineHeight = 9.0;
     var currentOffsetY = 0.0;
@@ -268,7 +273,7 @@ class CmrPdfGenerator {
       for (final field in fields) {
         final layoutField = layout.getField(field.casilla);
         if (layoutField == null) continue;
-        final top = layoutField.y + currentOffsetY;
+        final top = baseY + currentOffsetY;
         final boxType = getBoxType(field.casilla);
         final widget = _buildBoxWidget(
           value: field.value,
@@ -302,7 +307,7 @@ class CmrPdfGenerator {
       for (final field in totalFields) {
         final layoutField = layout.getField(field.casilla);
         if (layoutField == null) continue;
-        final top = layoutField.y + currentOffsetY;
+        final top = baseY + currentOffsetY;
         final boxType = getBoxType(field.casilla);
         final widget = _buildBoxWidget(
           value: field.value,
@@ -423,12 +428,12 @@ class CmrPdfGenerator {
           child: pw.ClipRect(
             child: pw.SizedBox(
               width: field.width,
-              height: field.height,
+              height: field.height + 40,
               child: pw.Text(
                 value,
                 style: pw.TextStyle(fontSize: 8, lineSpacing: 1.2),
                 softWrap: true,
-                maxLines: (field.height / 10).floor(),
+                maxLines: null,
                 overflow: pw.TextOverflow.clip,
               ),
             ),
