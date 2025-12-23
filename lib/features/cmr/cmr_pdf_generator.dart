@@ -215,12 +215,12 @@ class CmrPdfGenerator {
             ..._buildFieldWidgets(
               layout,
               casilla: '26A',
-              value: paletRetEntr,
+              value: 'Palets Retornables Entregados: $paletRetDev',
             ),
             ..._buildFieldWidgets(
               layout,
               casilla: '26B',
-              value: paletRetDev,
+              value: 'Palets Retornables Devueltos: $paletRetEntr',
             ),
             ..._buildFieldWidgets(
               layout,
@@ -244,6 +244,7 @@ class CmrPdfGenerator {
     final widgets = <pw.Widget>[];
     final rows = data.rows;
     final baseRowHeight = _resolveMerchandiseRowHeight(layout);
+    const lineHeight = 9.0;
     var currentOffsetY = 0.0;
     for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
       final row = rows[rowIndex];
@@ -256,14 +257,14 @@ class CmrPdfGenerator {
         _MerchandiseField('12', row.totalPalets),
       ];
 
-      var rowHeight = baseRowHeight;
-      for (final field in fields) {
-        final maxChars = _maxCharsForTableCasilla(field.casilla);
-        final wrapped = hardWrap(field.value, maxChars);
-        final lines = wrapped.split('\n').length;
-        final effectiveHeight = (9.0 * lines) + 4;
-        rowHeight = max(rowHeight, effectiveHeight);
-      }
+      final maxLinesInRow = fields
+          .map((field) {
+            final maxChars = _maxCharsForTableCasilla(field.casilla);
+            final wrapped = hardWrap(field.value, maxChars);
+            return wrapped.split('\n').length;
+          })
+          .reduce(max);
+      final rowHeight = max(baseRowHeight, (lineHeight * maxLinesInRow) + 4);
 
       for (final field in fields) {
         final layoutField = layout.getField(field.casilla);
@@ -291,14 +292,15 @@ class CmrPdfGenerator {
         _MerchandiseField('11', _formatNum(data.totalNeto)),
         _MerchandiseField('12', data.totalPalets.toString()),
       ];
-      var totalRowHeight = baseRowHeight;
-      for (final field in totalFields) {
-        final maxChars = _maxCharsForTableCasilla(field.casilla);
-        final wrapped = hardWrap(field.value, maxChars);
-        final lines = wrapped.split('\n').length;
-        final effectiveHeight = (9.0 * lines) + 4;
-        totalRowHeight = max(totalRowHeight, effectiveHeight);
-      }
+      final maxLinesInRow = totalFields
+          .map((field) {
+            final maxChars = _maxCharsForTableCasilla(field.casilla);
+            final wrapped = hardWrap(field.value, maxChars);
+            return wrapped.split('\n').length;
+          })
+          .reduce(max);
+      final totalRowHeight =
+          max(baseRowHeight, (lineHeight * maxLinesInRow) + 4);
       for (final field in totalFields) {
         final layoutField = layout.getField(field.casilla);
         if (layoutField == null) continue;
@@ -327,6 +329,11 @@ class CmrPdfGenerator {
     final buffer = StringBuffer();
     var count = 0;
     for (final char in text.characters) {
+      if (char == '\n') {
+        buffer.write(char);
+        count = 0;
+        continue;
+      }
       buffer.write(char);
       count++;
       if (count >= maxChars) {
