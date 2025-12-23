@@ -432,21 +432,19 @@ class CmrPdfGenerator {
       return const [];
     }
     if (field.casilla == '13') {
-      final wrapped = hardWrap(value, _maxCharsForTableCasilla('13'));
       return [
         pw.Positioned(
           left: field.x,
           top: field.y,
           child: pw.ClipRect(
-            child: pw.SizedBox(
-              width: field.width,
-              height: field.height + 40,
-              child: pw.Text(
-                wrapped,
+            child: pw.ConstrainedBox(
+              constraints: pw.BoxConstraints(
+                maxWidth: field.width,
+                maxHeight: field.height + 40,
+              ),
+              child: pw.Paragraph(
+                text: value,
                 style: pw.TextStyle(fontSize: 8, lineSpacing: 1.2),
-                softWrap: true,
-                maxLines: null,
-                overflow: pw.TextOverflow.clip,
               ),
             ),
           ),
