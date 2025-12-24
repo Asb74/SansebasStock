@@ -16,7 +16,7 @@ import 'cmr_utils.dart';
 enum CmrBoxType { table, multiline, longline }
 
 CmrBoxType getBoxType(String casilla) {
-  if (['5', '13'].contains(casilla)) return CmrBoxType.multiline;
+  if (['5'].contains(casilla)) return CmrBoxType.multiline;
   if (['27'].contains(casilla)) return CmrBoxType.longline;
   return CmrBoxType.table;
 }
@@ -449,6 +449,75 @@ class CmrPdfGenerator {
     ];
   }
 
+  static List<String> _splitByFixedChars({
+    required String text,
+    required int maxCharsPerLine,
+    required int maxLines,
+  }) {
+    if (maxCharsPerLine <= 0 || maxLines <= 0) {
+      return maxLines > 0 ? [text] : const [];
+    }
+    final lines = <String>[];
+    var buffer = StringBuffer();
+    var count = 0;
+    for (final char in text.characters) {
+      buffer.write(char);
+      count++;
+      if (count >= maxCharsPerLine) {
+        lines.add(buffer.toString());
+        if (lines.length >= maxLines) {
+          return lines;
+        }
+        buffer = StringBuffer();
+        count = 0;
+      }
+    }
+    if (buffer.isNotEmpty && lines.length < maxLines) {
+      lines.add(buffer.toString());
+    }
+    return lines;
+  }
+
+  static List<pw.Widget> _buildObservacionesField(
+    CmrFieldLayout field,
+    String value,
+  ) {
+    const fontSize = 8.0;
+    const lineHeight = 9.0;
+
+    final maxCharsPerLine =
+        max(1, (field.width / (fontSize * 0.6)).floor());
+    final maxLines = (field.height / lineHeight).floor();
+    final lines = _splitByFixedChars(
+      text: value,
+      maxCharsPerLine: maxCharsPerLine,
+      maxLines: maxLines,
+    );
+
+    return [
+      pw.Positioned(
+        left: field.x,
+        top: field.y,
+        child: pw.ClipRect(
+          child: pw.SizedBox(
+            width: field.width,
+            height: field.height,
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                for (final line in lines)
+                  pw.Text(
+                    line,
+                    style: pw.TextStyle(fontSize: fontSize),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ];
+  }
+
   static pw.Widget multilineBox(String text, CmrFieldLayout field) {
     final maxLines = (field.height / 9).floor();
     return pw.ClipRect(
@@ -540,7 +609,10 @@ class CmrPdfGenerator {
     if (field == null) {
       return const [];
     }
-    if (field.casilla == '13' || field.casilla == '27') {
+    if (field.casilla == '13') {
+      return _buildObservacionesField(field, value);
+    }
+    if (field.casilla == '27') {
       return _buildManualWrappedField(field, value);
     }
     if (field.casilla == '26A' || field.casilla == '26B') {
