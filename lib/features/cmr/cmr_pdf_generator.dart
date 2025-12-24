@@ -409,6 +409,46 @@ class CmrPdfGenerator {
     );
   }
 
+  static List<pw.Widget> _buildManualWrappedField(
+    CmrFieldLayout field,
+    String value,
+  ) {
+    const fontSize = 8.0;
+    const lineHeight = 9.0;
+
+    final maxCharsPerLine = _estimateMaxChars(field.width, fontSize);
+    final maxLines = (field.height / lineHeight).floor();
+
+    final lines = wrapByChars(
+      text: value,
+      maxCharsPerLine: maxCharsPerLine,
+      maxLines: maxLines,
+    );
+
+    return [
+      pw.Positioned(
+        left: field.x,
+        top: field.y,
+        child: pw.ClipRect(
+          child: pw.SizedBox(
+            width: field.width,
+            height: field.height,
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                for (final line in lines)
+                  pw.Text(
+                    line,
+                    style: pw.TextStyle(fontSize: fontSize),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ];
+  }
+
   static pw.Widget multilineBox(String text, CmrFieldLayout field) {
     final maxLines = (field.height / 9).floor();
     return pw.ClipRect(
@@ -500,57 +540,8 @@ class CmrPdfGenerator {
     if (field == null) {
       return const [];
     }
-    if (field.casilla == '13') {
-      const fontSize = 8.0;
-      const lineHeight = 9.0;
-      var maxCharsPerLine = _maxCharsForTableCasilla('13');
-      if (maxCharsPerLine == 9999) {
-        maxCharsPerLine = _estimateMaxChars(field.width, fontSize);
-      }
-      final maxLines = (field.height / lineHeight).floor();
-      final lines = wrapByChars(
-        text: value,
-        maxCharsPerLine: maxCharsPerLine,
-        maxLines: maxLines,
-      );
-      return [
-        pw.Positioned(
-          left: field.x,
-          top: field.y,
-          child: manualWrapBox(
-            lines: lines,
-            field: field,
-            fontSize: fontSize,
-            lineHeight: lineHeight,
-          ),
-        ),
-      ];
-    }
-    if (field.casilla == '27') {
-      const fontSize = 8.0;
-      const lineHeight = 9.0;
-      var maxCharsPerLine = _maxCharsForTableCasilla('27');
-      if (maxCharsPerLine == 9999) {
-        maxCharsPerLine = _estimateMaxChars(field.width, fontSize);
-      }
-      final maxLines = (field.height / lineHeight).floor();
-      final lines = wrapByChars(
-        text: value,
-        maxCharsPerLine: maxCharsPerLine,
-        maxLines: maxLines,
-      );
-      return [
-        pw.Positioned(
-          left: field.x,
-          top: field.y,
-          child: manualWrapBox(
-            lines: lines,
-            field: field,
-            fontSize: fontSize,
-            lineHeight: lineHeight,
-          ),
-        ),
-      ];
+    if (field.casilla == '13' || field.casilla == '27') {
+      return _buildManualWrappedField(field, value);
     }
     if (field.casilla == '26A' || field.casilla == '26B') {
       return [
@@ -574,10 +565,7 @@ class CmrPdfGenerator {
       ];
     }
     // 🔒 Casillas con render manual: NO deben pasar por el motor genérico
-    if (field.casilla == '13' ||
-        field.casilla == '26A' ||
-        field.casilla == '26B' ||
-        field.casilla == '27') {
+    if (field.casilla == '26A' || field.casilla == '26B') {
       return const [];
     }
     final boxType = getBoxType(field.casilla);
