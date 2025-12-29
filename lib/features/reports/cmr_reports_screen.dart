@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../cmr/cmr_models.dart';
-import '../cmr/cmr_pdf_generator.dart';
+import '../cmr/cmr_pdf_actions.dart';
 
 class CmrReportsScreen extends StatelessWidget {
   const CmrReportsScreen({super.key});
@@ -68,7 +68,7 @@ class CmrReportsScreen extends StatelessWidget {
                     ],
                   ),
                   trailing: FilledButton(
-                    onPressed: () => _printCmr(context, pedido),
+                    onPressed: () => _showCmrActions(context, pedido),
                     child: const Text('Imprimir CMR'),
                   ),
                 ),
@@ -87,19 +87,7 @@ class CmrReportsScreen extends StatelessWidget {
     return DateFormat('dd/MM/yyyy').format(fecha);
   }
 
-  Future<void> _printCmr(BuildContext context, CmrPedido pedido) async {
-    try {
-      final data = await CmrPdfGenerator.generate(
-        pedido: pedido,
-        firestore: FirebaseFirestore.instance,
-      );
-
-      await CmrPdfGenerator.printPdf(data);
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('No se pudo imprimir el CMR: $e')),
-      );
-    }
+  Future<void> _showCmrActions(BuildContext context, CmrPedido pedido) {
+    return showCmrPdfActions(context: context, pedido: pedido);
   }
 }
