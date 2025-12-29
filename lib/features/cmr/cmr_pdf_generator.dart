@@ -17,7 +17,6 @@ enum CmrBoxType { table, multiline, longline }
 
 CmrBoxType getBoxType(String casilla) {
   if (['5'].contains(casilla)) return CmrBoxType.multiline;
-  if (['27'].contains(casilla)) return CmrBoxType.longline;
   return CmrBoxType.table;
 }
 
@@ -349,32 +348,27 @@ class CmrPdfGenerator {
     return buffer.toString();
   }
 
-  static List<String> wrapByChars({
+  static List<String> splitByChars({
     required String text,
     required int maxCharsPerLine,
     required int maxLines,
   }) {
-    if (maxCharsPerLine <= 0 || maxLines <= 0) {
-      return maxLines > 0 ? [text] : const [];
-    }
     final lines = <String>[];
-    var buffer = StringBuffer();
-    var count = 0;
+    var buffer = '';
+
     for (final char in text.characters) {
-      buffer.write(char);
-      count++;
-      if (count >= maxCharsPerLine) {
-        lines.add(buffer.toString());
-        if (lines.length >= maxLines) {
-          return lines;
-        }
-        buffer = StringBuffer();
-        count = 0;
+      buffer += char;
+      if (buffer.length >= maxCharsPerLine) {
+        lines.add(buffer);
+        buffer = '';
+        if (lines.length >= maxLines) break;
       }
     }
+
     if (buffer.isNotEmpty && lines.length < maxLines) {
-      lines.add(buffer.toString());
+      lines.add(buffer);
     }
+
     return lines;
   }
 
@@ -416,10 +410,11 @@ class CmrPdfGenerator {
     const fontSize = 8.0;
     const lineHeight = 9.0;
 
-    final maxCharsPerLine = _estimateMaxChars(field.width, fontSize);
+    final maxCharsPerLine =
+        max(1, (field.width / (fontSize * 0.6)).floor());
     final maxLines = (field.height / lineHeight).floor();
 
-    final lines = wrapByChars(
+    final lines = splitByChars(
       text: value,
       maxCharsPerLine: maxCharsPerLine,
       maxLines: maxLines,
@@ -449,35 +444,6 @@ class CmrPdfGenerator {
     ];
   }
 
-  static List<String> _splitByFixedChars({
-    required String text,
-    required int maxCharsPerLine,
-    required int maxLines,
-  }) {
-    if (maxCharsPerLine <= 0 || maxLines <= 0) {
-      return maxLines > 0 ? [text] : const [];
-    }
-    final lines = <String>[];
-    var buffer = StringBuffer();
-    var count = 0;
-    for (final char in text.characters) {
-      buffer.write(char);
-      count++;
-      if (count >= maxCharsPerLine) {
-        lines.add(buffer.toString());
-        if (lines.length >= maxLines) {
-          return lines;
-        }
-        buffer = StringBuffer();
-        count = 0;
-      }
-    }
-    if (buffer.isNotEmpty && lines.length < maxLines) {
-      lines.add(buffer.toString());
-    }
-    return lines;
-  }
-
   static List<pw.Widget> _buildObservacionesField(
     CmrFieldLayout field,
     String value,
@@ -488,7 +454,7 @@ class CmrPdfGenerator {
     final maxCharsPerLine =
         max(1, (field.width / (fontSize * 0.6)).floor());
     final maxLines = (field.height / lineHeight).floor();
-    final lines = _splitByFixedChars(
+    final lines = splitByChars(
       text: value,
       maxCharsPerLine: maxCharsPerLine,
       maxLines: maxLines,
