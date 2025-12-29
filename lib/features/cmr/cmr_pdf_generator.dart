@@ -348,139 +348,46 @@ class CmrPdfGenerator {
     return buffer.toString();
   }
 
-  static List<String> splitByChars({
-    required String text,
-    required int maxCharsPerLine,
-    required int maxLines,
-  }) {
-    final lines = <String>[];
-    var buffer = '';
-
-    for (final char in text.characters) {
-      buffer += char;
-      if (buffer.length >= maxCharsPerLine) {
-        lines.add(buffer);
-        buffer = '';
-        if (lines.length >= maxLines) break;
-      }
-    }
-
-    if (buffer.isNotEmpty && lines.length < maxLines) {
-      lines.add(buffer);
-    }
-
-    return lines;
-  }
-
-  static pw.Widget manualWrapBox({
-    required List<String> lines,
+  static List<pw.Widget> _buildFixedWrappedText({
     required CmrFieldLayout field,
+    required String text,
     required double fontSize,
     required double lineHeight,
   }) {
-    final lineGap = max(0.0, lineHeight - fontSize);
-    final children = <pw.Widget>[];
-    for (var index = 0; index < lines.length; index++) {
-      children.add(
-        pw.Text(
-          lines[index],
-          style: pw.TextStyle(fontSize: fontSize),
-        ),
-      );
-      if (index < lines.length - 1 && lineGap > 0) {
-        children.add(pw.SizedBox(height: lineGap));
+    final maxCharsPerLine =
+        max(1, (field.width / (fontSize * 0.6)).floor());
+    final maxLines = (field.height / lineHeight).floor();
+
+    final lines = <String>[];
+    final buffer = StringBuffer();
+    for (final char in text.characters) {
+      if (char == '\n') {
+        if (lines.length >= maxLines) break;
+        lines.add(buffer.toString());
+        buffer.clear();
+        continue;
+      }
+      buffer.write(char);
+      if (buffer.length >= maxCharsPerLine) {
+        if (lines.length >= maxLines) break;
+        lines.add(buffer.toString());
+        buffer.clear();
       }
     }
-    return pw.ClipRect(
-      child: pw.SizedBox(
-        width: field.width,
-        height: field.height,
-        child: pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: children,
-        ),
-      ),
-    );
-  }
-
-  static List<pw.Widget> _buildManualWrappedField(
-    CmrFieldLayout field,
-    String value,
-  ) {
-    const fontSize = 8.0;
-    const lineHeight = 9.0;
-
-    final maxCharsPerLine =
-        max(1, (field.width / (fontSize * 0.6)).floor());
-    final maxLines = (field.height / lineHeight).floor();
-
-    final lines = splitByChars(
-      text: value,
-      maxCharsPerLine: maxCharsPerLine,
-      maxLines: maxLines,
-    );
+    if (buffer.isNotEmpty && lines.length < maxLines) {
+      lines.add(buffer.toString());
+    }
 
     return [
-      pw.Positioned(
-        left: field.x,
-        top: field.y,
-        child: pw.ClipRect(
-          child: pw.SizedBox(
-            width: field.width,
-            height: field.height,
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                for (final line in lines)
-                  pw.Text(
-                    line,
-                    style: pw.TextStyle(fontSize: fontSize),
-                  ),
-              ],
-            ),
+      for (var lineIndex = 0; lineIndex < lines.length; lineIndex++)
+        pw.Positioned(
+          left: field.x,
+          top: field.y + (lineIndex * lineHeight),
+          child: pw.Text(
+            lines[lineIndex],
+            style: pw.TextStyle(fontSize: fontSize),
           ),
         ),
-      ),
-    ];
-  }
-
-  static List<pw.Widget> _buildObservacionesField(
-    CmrFieldLayout field,
-    String value,
-  ) {
-    const fontSize = 8.0;
-    const lineHeight = 9.0;
-
-    final maxCharsPerLine =
-        max(1, (field.width / (fontSize * 0.6)).floor());
-    final maxLines = (field.height / lineHeight).floor();
-    final lines = splitByChars(
-      text: value,
-      maxCharsPerLine: maxCharsPerLine,
-      maxLines: maxLines,
-    );
-
-    return [
-      pw.Positioned(
-        left: field.x,
-        top: field.y,
-        child: pw.ClipRect(
-          child: pw.SizedBox(
-            width: field.width,
-            height: field.height,
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                for (final line in lines)
-                  pw.Text(
-                    line,
-                    style: pw.TextStyle(fontSize: fontSize),
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
     ];
   }
 
@@ -575,11 +482,13 @@ class CmrPdfGenerator {
     if (field == null) {
       return const [];
     }
-    if (field.casilla == '13') {
-      return _buildObservacionesField(field, value);
-    }
-    if (field.casilla == '27') {
-      return _buildManualWrappedField(field, value);
+    if (field.casilla == '13' || field.casilla == '27') {
+      return _buildFixedWrappedText(
+        field: field,
+        text: value,
+        fontSize: 8,
+        lineHeight: 9,
+      );
     }
     if (field.casilla == '26A' || field.casilla == '26B') {
       return [
@@ -601,10 +510,6 @@ class CmrPdfGenerator {
           ),
         ),
       ];
-    }
-    // 🔒 Casillas con render manual: NO deben pasar por el motor genérico
-    if (field.casilla == '26A' || field.casilla == '26B') {
-      return const [];
     }
     final boxType = getBoxType(field.casilla);
     return [
