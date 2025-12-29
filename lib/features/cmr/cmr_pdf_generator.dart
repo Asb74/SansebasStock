@@ -13,24 +13,8 @@ import 'cmr_field_layout.dart';
 import 'cmr_models.dart';
 import 'cmr_utils.dart';
 
-enum CmrBoxType { table, multiline, longline }
-
-CmrBoxType getBoxType(String casilla) {
-  if (['5'].contains(casilla)) return CmrBoxType.multiline;
-  return CmrBoxType.table;
-}
-
 class CmrPdfGenerator {
-  static Future<CmrLayoutMap>? _layoutCache;
-
-  static const Map<String, int> _tableMaxCharsByCasilla = {
-    '6': 16,
-    '7': 6,
-    '8': 14,
-    '9': 12,
-    '11': 8,
-    '12': 6,
-  };
+  static Future<CmrLayout>? _layoutCache;
 
   static Future<Uint8List> generate({
     required CmrPedido pedido,
@@ -49,15 +33,11 @@ class CmrPdfGenerator {
       pedido: pedido,
       isComercializador: isComercializador,
     );
-    final plataforma = _resolvePlataforma(pedido);
     final almacenName = _valueForKey(almacenData, 'Almacen');
     final fechaSalida = _formatFecha(pedido.fechaSalida);
     final almacenLocation = _buildLocationLine(almacenData);
     final almacenPoblacion =
         _stringFromKeys(almacenData, const ['Población', 'Poblacion']);
-    final merchandiseData =
-        await _buildMerchandiseRows(pedido: pedido, firestore: store);
-    final tipoPalet = _resolveTipoPalet(pedido);
     final layout = await _loadLayout();
 
     final expedidorBg = await _loadBg('assets/cmr/cmr_expedidor.bmp');
@@ -66,69 +46,82 @@ class CmrPdfGenerator {
         await _loadBg('assets/cmr/cmr_transportista.bmp');
 
     final doc = pw.Document();
-    doc.addPage(
-      _buildPage(
-        background: expedidorBg,
-        remitenteLines: remitenteLines,
-        destinatario: pedido.cliente,
-        plataforma: plataforma,
-        almacen: almacenName,
-        fechaSalida: fechaSalida,
-        almacenLocation: almacenLocation,
-        almacenPoblacion: almacenPoblacion,
-        transportista: pedido.transportista,
-        matricula: pedido.matricula,
-        termografos: pedido.termografos,
-        observaciones: pedido.observaciones,
-        paletRetEntr: pedido.paletRetEntr,
-        paletRetDev: pedido.paletRetDev,
-        tipoPalet: tipoPalet,
-        merchandiseData: merchandiseData,
-        layout: layout,
-      ),
-    );
-    doc.addPage(
-      _buildPage(
-        background: destinatarioBg,
-        remitenteLines: remitenteLines,
-        destinatario: pedido.cliente,
-        plataforma: plataforma,
-        almacen: almacenName,
-        fechaSalida: fechaSalida,
-        almacenLocation: almacenLocation,
-        almacenPoblacion: almacenPoblacion,
-        transportista: pedido.transportista,
-        matricula: pedido.matricula,
-        termografos: pedido.termografos,
-        observaciones: pedido.observaciones,
-        paletRetEntr: pedido.paletRetEntr,
-        paletRetDev: pedido.paletRetDev,
-        tipoPalet: tipoPalet,
-        merchandiseData: merchandiseData,
-        layout: layout,
-      ),
-    );
-    doc.addPage(
-      _buildPage(
-        background: transportistaBg,
-        remitenteLines: remitenteLines,
-        destinatario: pedido.cliente,
-        plataforma: plataforma,
-        almacen: almacenName,
-        fechaSalida: fechaSalida,
-        almacenLocation: almacenLocation,
-        almacenPoblacion: almacenPoblacion,
-        transportista: pedido.transportista,
-        matricula: pedido.matricula,
-        termografos: pedido.termografos,
-        observaciones: pedido.observaciones,
-        paletRetEntr: pedido.paletRetEntr,
-        paletRetDev: pedido.paletRetDev,
-        tipoPalet: tipoPalet,
-        merchandiseData: merchandiseData,
-        layout: layout,
-      ),
-    );
+    final plataformas = _groupLineasByPlataforma(pedido);
+    for (final entry in plataformas.entries) {
+      final lineas = entry.value;
+      final plataforma = entry.key.isNotEmpty
+          ? entry.key
+          : _fallbackPlataforma(pedido);
+      final merchandiseData = await _buildMerchandiseRows(
+        lineas: lineas,
+        firestore: store,
+      );
+      final tipoPalet = _resolveTipoPalet(lineas);
+
+      doc.addPage(
+        _buildPage(
+          background: expedidorBg,
+          remitenteLines: remitenteLines,
+          destinatario: pedido.cliente,
+          plataforma: plataforma,
+          almacen: almacenName,
+          fechaSalida: fechaSalida,
+          almacenLocation: almacenLocation,
+          almacenPoblacion: almacenPoblacion,
+          transportista: pedido.transportista,
+          matricula: pedido.matricula,
+          termografos: pedido.termografos,
+          observaciones: pedido.observaciones,
+          paletRetEntr: pedido.paletRetEntr,
+          paletRetDev: pedido.paletRetDev,
+          tipoPalet: tipoPalet,
+          merchandiseData: merchandiseData,
+          layout: layout,
+        ),
+      );
+      doc.addPage(
+        _buildPage(
+          background: destinatarioBg,
+          remitenteLines: remitenteLines,
+          destinatario: pedido.cliente,
+          plataforma: plataforma,
+          almacen: almacenName,
+          fechaSalida: fechaSalida,
+          almacenLocation: almacenLocation,
+          almacenPoblacion: almacenPoblacion,
+          transportista: pedido.transportista,
+          matricula: pedido.matricula,
+          termografos: pedido.termografos,
+          observaciones: pedido.observaciones,
+          paletRetEntr: pedido.paletRetEntr,
+          paletRetDev: pedido.paletRetDev,
+          tipoPalet: tipoPalet,
+          merchandiseData: merchandiseData,
+          layout: layout,
+        ),
+      );
+      doc.addPage(
+        _buildPage(
+          background: transportistaBg,
+          remitenteLines: remitenteLines,
+          destinatario: pedido.cliente,
+          plataforma: plataforma,
+          almacen: almacenName,
+          fechaSalida: fechaSalida,
+          almacenLocation: almacenLocation,
+          almacenPoblacion: almacenPoblacion,
+          transportista: pedido.transportista,
+          matricula: pedido.matricula,
+          termografos: pedido.termografos,
+          observaciones: pedido.observaciones,
+          paletRetEntr: pedido.paletRetEntr,
+          paletRetDev: pedido.paletRetDev,
+          tipoPalet: tipoPalet,
+          merchandiseData: merchandiseData,
+          layout: layout,
+        ),
+      );
+    }
 
     return doc.save();
   }
@@ -155,7 +148,7 @@ class CmrPdfGenerator {
     required String paletRetDev,
     required String tipoPalet,
     required _CmrMerchandiseData merchandiseData,
-    required CmrLayoutMap layout,
+    required CmrLayout layout,
   }) {
     return pw.Page(
       pageFormat: PdfPageFormat.a4,
@@ -166,62 +159,62 @@ class CmrPdfGenerator {
             pw.Positioned.fill(
               child: pw.Image(background, fit: pw.BoxFit.fill),
             ),
-            ..._buildFieldWidgets(
+            ..._renderField(
               layout,
               casilla: '1',
               value: remitenteLines.join('\n'),
             ),
-            ..._buildFieldWidgets(
+            ..._renderField(
               layout,
               casilla: '2',
               value: destinatario,
             ),
-            ..._buildFieldWidgets(
+            ..._renderField(
               layout,
               casilla: '3',
               value: plataforma,
             ),
-            ..._buildFieldWidgets(
+            ..._renderField(
               layout,
               casilla: '4',
               value: '$almacen        $fechaSalida\n$almacenLocation',
             ),
-            ..._buildFieldWidgets(
+            ..._renderField(
               layout,
               casilla: '5',
               value: termografos,
             ),
-            ..._buildFieldWidgets(
+            ..._renderField(
               layout,
               casilla: '13',
               value: observaciones,
             ),
-            ..._buildFieldWidgets(
+            ..._renderField(
               layout,
               casilla: '17',
               value: '$transportista\n$matricula',
             ),
-            ..._buildFieldWidgets(
+            ..._renderField(
               layout,
               casilla: '22A',
               value: almacenPoblacion,
             ),
-            ..._buildFieldWidgets(
+            ..._renderField(
               layout,
               casilla: '22B',
               value: fechaSalida,
             ),
-            ..._buildFieldWidgets(
+            ..._renderField(
               layout,
               casilla: '26A',
               value: 'Palets Retornables Entregados: $paletRetDev',
             ),
-            ..._buildFieldWidgets(
+            ..._renderField(
               layout,
               casilla: '26B',
               value: 'Palets Retornables Devueltos: $paletRetEntr',
             ),
-            ..._buildFieldWidgets(
+            ..._renderField(
               layout,
               casilla: '27',
               value: tipoPalet,
@@ -238,20 +231,19 @@ class CmrPdfGenerator {
 
   static List<pw.Widget> _buildMerchandiseWidgets(
     _CmrMerchandiseData data, {
-    required CmrLayoutMap layout,
+    required CmrLayout layout,
   }) {
     final widgets = <pw.Widget>[];
-    final baseField = layout.getField('6');
+    final fields = ['6', '7', '8', '9', '11', '12'];
+    final baseField = layout.field('6');
     if (baseField == null) {
       return widgets;
     }
-    final baseY = baseField.y;
-    final rows = data.rows;
-    const lineHeight = 9.0;
+    final rowHeight = _maxRowHeight(layout, fields);
     var currentOffsetY = 0.0;
-    for (var rowIndex = 0; rowIndex < rows.length; rowIndex++) {
-      final row = rows[rowIndex];
-      final fields = [
+
+    for (final row in data.rows) {
+      final rowFields = [
         _MerchandiseField('6', row.marca),
         _MerchandiseField('7', row.totalCajas),
         _MerchandiseField('8', row.idConfeccion),
@@ -259,104 +251,122 @@ class CmrPdfGenerator {
         _MerchandiseField('11', row.totalNeto),
         _MerchandiseField('12', row.totalPalets),
       ];
-
-      final maxLinesInRow = fields
-          .map((field) {
-            final maxChars = _maxCharsForTableCasilla(field.casilla);
-            final wrapped = hardWrap(field.value, maxChars);
-            return wrapped.split('\n').length;
-          })
-          .reduce(max);
-      final rowHeight = (lineHeight * maxLinesInRow) + 4;
-
-      for (final field in fields) {
-        final layoutField = layout.getField(field.casilla);
-        if (layoutField == null) continue;
-        final top = baseY + currentOffsetY;
-        final maxChars = _maxCharsForTableCasilla(field.casilla);
-        final wrappedText = hardWrap(field.value, maxChars);
-        final widget = tableBox(
-          wrappedText,
-          layoutField,
-          height: rowHeight,
-        );
-        widgets.add(
-          pw.Positioned(
-            left: layoutField.x,
-            top: top,
-            child: widget,
-          ),
-        );
-      }
+      widgets.addAll(
+        _buildMerchandiseRowWidgets(
+          layout: layout,
+          fields: rowFields,
+          offsetY: currentOffsetY,
+          rowHeight: rowHeight,
+        ),
+      );
       currentOffsetY += rowHeight;
     }
-    if (rows.isNotEmpty) {
+
+    if (data.rows.isNotEmpty) {
       final totalFields = [
         _MerchandiseField('7', _formatNum(data.totalCajas)),
         _MerchandiseField('11', _formatNum(data.totalNeto)),
         _MerchandiseField('12', data.totalPalets.toString()),
       ];
-      final maxLinesInRow = totalFields
-          .map((field) {
-            final maxChars = _maxCharsForTableCasilla(field.casilla);
-            final wrapped = hardWrap(field.value, maxChars);
-            return wrapped.split('\n').length;
-          })
-          .reduce(max);
-      final totalRowHeight = (lineHeight * maxLinesInRow) + 4;
-      for (final field in totalFields) {
-        final layoutField = layout.getField(field.casilla);
-        if (layoutField == null) continue;
-        final top = baseY + currentOffsetY;
-        final maxChars = _maxCharsForTableCasilla(field.casilla);
-        final wrappedText = hardWrap(field.value, maxChars);
-        final widget = tableBox(
-          wrappedText,
-          layoutField,
-          height: totalRowHeight,
-        );
-        widgets.add(
-          pw.Positioned(
-            left: layoutField.x,
-            top: top,
-            child: widget,
-          ),
-        );
-      }
-      currentOffsetY += totalRowHeight;
+      widgets.addAll(
+        _buildMerchandiseRowWidgets(
+          layout: layout,
+          fields: totalFields,
+          offsetY: currentOffsetY,
+          rowHeight: rowHeight,
+        ),
+      );
+    }
+
+    return widgets;
+  }
+
+  static List<pw.Widget> _buildMerchandiseRowWidgets({
+    required CmrLayout layout,
+    required List<_MerchandiseField> fields,
+    required double offsetY,
+    required double rowHeight,
+  }) {
+    final widgets = <pw.Widget>[];
+    for (final field in fields) {
+      final layoutField = layout.field(field.casilla);
+      if (layoutField == null) continue;
+      widgets.addAll(
+        _renderField(
+          layout,
+          casilla: field.casilla,
+          value: field.value,
+          y: layoutField.y + offsetY,
+          height: rowHeight,
+        ),
+      );
     }
     return widgets;
   }
 
-  static String hardWrap(String text, int maxChars) {
-    if (maxChars <= 0) return text;
-    final buffer = StringBuffer();
-    var count = 0;
-    for (final char in text.characters) {
-      if (char == '\n') {
-        buffer.write(char);
-        count = 0;
-        continue;
-      }
-      buffer.write(char);
-      count++;
-      if (count >= maxChars) {
-        buffer.write('\n');
-        count = 0;
-      }
+  static double _maxRowHeight(CmrLayout layout, List<String> casillas) {
+    var maxHeight = 0.0;
+    for (final casilla in casillas) {
+      final field = layout.field(casilla);
+      if (field == null) continue;
+      maxHeight = max(maxHeight, field.height);
     }
-    return buffer.toString();
+    return maxHeight;
   }
 
-  static List<pw.Widget> _buildFixedWrappedText({
-    required CmrFieldLayout field,
-    required String text,
-    required double fontSize,
-    required double lineHeight,
+  static List<pw.Widget> _renderField(
+    CmrLayout layout, {
+    required String casilla,
+    required String value,
+    double? x,
+    double? y,
+    double? width,
+    double? height,
   }) {
+    final field = layout.field(casilla);
+    if (field == null) {
+      return const [];
+    }
+
+    final effectiveField = field.copyWith(
+      x: x,
+      y: y,
+      width: width,
+      height: height,
+    );
+
+    if (effectiveField.multiline) {
+      return _renderMultilineText(effectiveField, value);
+    }
+
+    return [
+      pw.Positioned(
+        left: effectiveField.x,
+        top: effectiveField.y,
+        child: pw.ClipRect(
+          child: pw.SizedBox(
+            width: effectiveField.width,
+            height: effectiveField.height,
+            child: pw.Text(
+              value,
+              style: pw.TextStyle(fontSize: effectiveField.fontSize),
+              maxLines: 1,
+              overflow: pw.TextOverflow.clip,
+              softWrap: false,
+            ),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  static List<pw.Widget> _renderMultilineText(
+    CmrFieldLayout field,
+    String text,
+  ) {
     final maxCharsPerLine =
-        max(1, (field.width / (fontSize * 0.6)).floor());
-    final maxLines = (field.height / lineHeight).floor();
+        max(1, (field.width / (field.fontSize * 0.6)).floor());
+    final maxLines = max(1, (field.height / field.lineHeight).floor());
 
     final lines = <String>[];
     final buffer = StringBuffer();
@@ -382,152 +392,49 @@ class CmrPdfGenerator {
       for (var lineIndex = 0; lineIndex < lines.length; lineIndex++)
         pw.Positioned(
           left: field.x,
-          top: field.y + (lineIndex * lineHeight),
+          top: field.y + (lineIndex * field.lineHeight),
           child: pw.Text(
             lines[lineIndex],
-            style: pw.TextStyle(fontSize: fontSize),
+            style: pw.TextStyle(fontSize: field.fontSize),
           ),
         ),
     ];
   }
 
-  static pw.Widget multilineBox(String text, CmrFieldLayout field) {
-    final maxLines = (field.height / 9).floor();
-    return pw.ClipRect(
-      child: pw.SizedBox(
-        width: field.width,
-        height: field.height,
-        child: pw.Text(
-          text,
-          style: pw.TextStyle(fontSize: 8),
-          softWrap: true,
-          maxLines: maxLines,
-          overflow: pw.TextOverflow.clip,
-        ),
-      ),
-    );
-  }
-
-  static pw.Widget longLineBox(String text, CmrFieldLayout field) {
-    return pw.ClipRect(
-      child: pw.SizedBox(
-        width: field.width,
-        height: field.height,
-        child: pw.Text(
-          text,
-          style: pw.TextStyle(fontSize: 8),
-          maxLines: 1,
-          overflow: pw.TextOverflow.clip,
-        ),
-      ),
-    );
-  }
-
-  static pw.Widget tableBox(
-    String text,
-    CmrFieldLayout field, {
-    double? height,
-  }) {
-    return pw.ClipRect(
-      child: pw.SizedBox(
-        width: field.width,
-        height: height ?? field.height,
-        child: pw.Text(
-          text,
-          style: pw.TextStyle(fontSize: 8),
-          maxLines: null,
-          overflow: pw.TextOverflow.clip,
-          softWrap: true,
-        ),
-      ),
-    );
-  }
-
-  static int _maxCharsForTableCasilla(String casilla) {
-    return _tableMaxCharsByCasilla[casilla] ?? 9999;
-  }
-
-  static int _estimateMaxChars(double width, double fontSize) {
-    const averageCharWidthFactor = 0.6;
-    final averageCharWidth = fontSize * averageCharWidthFactor;
-    if (averageCharWidth <= 0) {
-      return 0;
-    }
-    return max(1, (width / averageCharWidth).floor());
-  }
-
-  static pw.Widget _buildBoxWidget({
-    required String value,
-    required CmrFieldLayout field,
-    required CmrBoxType boxType,
-  }) {
-    switch (boxType) {
-      case CmrBoxType.multiline:
-        return multilineBox(value, field);
-      case CmrBoxType.longline:
-        return longLineBox(value, field);
-      case CmrBoxType.table:
-        final maxChars = _maxCharsForTableCasilla(field.casilla);
-        final wrapped = hardWrap(value, maxChars);
-        return tableBox(wrapped, field);
-    }
-  }
-
-  static List<pw.Widget> _buildFieldWidgets(
-    CmrLayoutMap layout, {
-    required String casilla,
-    required String value,
-  }) {
-    final field = layout.getField(casilla);
-    if (field == null) {
-      return const [];
-    }
-    if (field.casilla == '13' || field.casilla == '27') {
-      return _buildFixedWrappedText(
-        field: field,
-        text: value,
-        fontSize: 8,
-        lineHeight: 9,
-      );
-    }
-    if (field.casilla == '26A' || field.casilla == '26B') {
-      return [
-        pw.Positioned(
-          left: field.x,
-          top: field.y,
-          child: pw.ClipRect(
-            child: pw.SizedBox(
-              width: field.width,
-              height: field.height + 40,
-              child: pw.Text(
-                value,
-                style: pw.TextStyle(fontSize: 8, lineSpacing: 1.2),
-                softWrap: true,
-                maxLines: null,
-                overflow: pw.TextOverflow.clip,
-              ),
-            ),
-          ),
-        ),
-      ];
-    }
-    final boxType = getBoxType(field.casilla);
-    return [
-      pw.Positioned(
-        left: field.x,
-        top: field.y,
-        child: _buildBoxWidget(
-          value: value,
-          field: field,
-          boxType: boxType,
-        ),
-      ),
-    ];
-  }
-
-  static Future<CmrLayoutMap> _loadLayout() {
+  static Future<CmrLayout> _loadLayout() {
     _layoutCache ??= CmrLayoutLoader.loadFromAssets();
     return _layoutCache!;
+  }
+
+  static Map<String, List<CmrPedidoLine>> _groupLineasByPlataforma(
+    CmrPedido pedido,
+  ) {
+    final grouped = <String, List<CmrPedidoLine>>{};
+    for (final linea in pedido.lineas) {
+      final plataforma = linea.plataforma?.trim() ?? '';
+      grouped.putIfAbsent(plataforma, () => []).add(linea);
+    }
+
+    if (grouped.isEmpty) {
+      final fallback = _fallbackPlataforma(pedido);
+      grouped[fallback] = [];
+    }
+
+    return grouped;
+  }
+
+  static String _fallbackPlataforma(CmrPedido pedido) {
+    final raw = pedido.raw['Plataforma']?.toString().trim() ?? '';
+    if (raw.isNotEmpty) {
+      return raw;
+    }
+    for (final line in pedido.lineas) {
+      final plataforma = line.plataforma?.trim() ?? '';
+      if (plataforma.isNotEmpty) {
+        return plataforma;
+      }
+    }
+    return '';
   }
 
   static List<String> _buildRemitenteLines({
@@ -553,11 +460,11 @@ class CmrPdfGenerator {
   }
 
   static Future<_CmrMerchandiseData> _buildMerchandiseRows({
-    required CmrPedido pedido,
+    required List<CmrPedidoLine> lineas,
     required FirebaseFirestore firestore,
   }) async {
     final paletIds = parsePaletsFromLines(
-      pedido.lineas.expand((linea) => linea.palets),
+      lineas.expand((linea) => linea.palets),
     );
     if (paletIds.isEmpty) {
       return const _CmrMerchandiseData.empty();
@@ -590,8 +497,7 @@ class CmrPdfGenerator {
           _stringFromKeys(data, const ['CULTIVO', 'Cultivo', 'cultivo']);
       final cajas =
           _numFromKeys(data, const ['CAJAS', 'Cajas', 'cajas']) ?? 0;
-      final neto =
-          _numFromKeys(data, const ['NETO', 'Neto', 'neto']) ?? 0;
+      final neto = _numFromKeys(data, const ['NETO', 'Neto', 'neto']) ?? 0;
 
       final key = _MerchandiseKey(
         marca: marca,
@@ -646,6 +552,24 @@ class CmrPdfGenerator {
       totalNeto: totalNeto,
       totalPalets: totalPalets,
     );
+  }
+
+  static String _resolveTipoPalet(List<CmrPedidoLine> lineas) {
+    final tipoPalets = lineas
+        .map((linea) => linea.tipoPalet?.trim() ?? '')
+        .where((value) => value.isNotEmpty)
+        .toList();
+    if (tipoPalets.isEmpty) {
+      return '';
+    }
+    final unique = <String>{};
+    final ordered = <String>[];
+    for (final value in tipoPalets) {
+      if (unique.add(value)) {
+        ordered.add(value);
+      }
+    }
+    return ordered.join('\n');
   }
 
   static String _buildLocationLine(Map<String, dynamic> data) {
@@ -723,38 +647,6 @@ class CmrPdfGenerator {
   static String _formatFecha(DateTime? fecha) {
     final date = fecha ?? DateTime.now();
     return DateFormat('dd/MM/yyyy').format(date);
-  }
-
-  static String _resolvePlataforma(CmrPedido pedido) {
-    final raw = pedido.raw['Plataforma']?.toString().trim() ?? '';
-    if (raw.isNotEmpty) {
-      return raw;
-    }
-    for (final line in pedido.lineas) {
-      final plataforma = line.plataforma?.trim() ?? '';
-      if (plataforma.isNotEmpty) {
-        return plataforma;
-      }
-    }
-    return '';
-  }
-
-  static String _resolveTipoPalet(CmrPedido pedido) {
-    final tipoPalets = pedido.lineas
-        .map((linea) => linea.tipoPalet?.trim() ?? '')
-        .where((value) => value.isNotEmpty)
-        .toList();
-    if (tipoPalets.isEmpty) {
-      return '';
-    }
-    final unique = <String>{};
-    final ordered = <String>[];
-    for (final value in tipoPalets) {
-      if (unique.add(value)) {
-        ordered.add(value);
-      }
-    }
-    return ordered.join('\n');
   }
 
   static Future<Map<String, dynamic>> _fetchAlmacen(
