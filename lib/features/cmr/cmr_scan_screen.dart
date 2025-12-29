@@ -7,7 +7,7 @@ import 'package:sansebas_stock/services/stock_service.dart';
 import '../ops/ops_providers.dart';
 import '../ops/qr_scan_screen.dart';
 import 'cmr_models.dart';
-import 'cmr_pdf_generator.dart';
+import 'cmr_pdf_actions.dart';
 import 'cmr_utils.dart';
 
 class CmrScanScreen extends ConsumerStatefulWidget {
@@ -265,7 +265,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       }
 
       if (!mounted) return;
-      await _previewCmrPdf();
+      await showCmrPdfActions(context: context, pedido: widget.pedido);
       if (!mounted) return;
       Navigator.of(context).pop(
         CmrScanResult(scanned: _scanned, invalid: _invalid),
@@ -293,15 +293,6 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       debugPrint('No se pudo cargar el nombre de usuario: $e');
       return null;
     }
-  }
-
-  Future<void> _previewCmrPdf() async {
-    final data = await CmrPdfGenerator.generate(
-      pedido: widget.pedido,
-      firestore: FirebaseFirestore.instance,
-    );
-
-    await CmrPdfGenerator.printPdf(data);
   }
 
   Future<bool?> _showFinalDialog(List<String> pendientes) {
