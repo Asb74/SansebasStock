@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'cmr_models.dart';
@@ -34,7 +35,8 @@ Future<CmrPdfPayload> buildCmrPdfPayload(CmrPedido pedido) async {
   final data = await generarCmrPdf(pedido);
   final timestamp = DateTime.now().millisecondsSinceEpoch;
   final filename = 'CMR_${pedido.idPedidoLora}_$timestamp.pdf';
-  final file = File('${Directory.systemTemp.path}/$filename');
+  final directory = await getTemporaryDirectory();
+  final file = File('${directory.path}/$filename');
   await file.writeAsBytes(data);
   return CmrPdfPayload(data: data, file: file, filename: filename);
 }
