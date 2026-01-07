@@ -1,8 +1,9 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'cmr_models.dart';
 import 'cmr_pdf_generator.dart';
@@ -15,6 +16,27 @@ Future<Uint8List> generarCmrPdf(CmrPedido pedido) {
     pedido: pedido,
     firestore: FirebaseFirestore.instance,
   );
+}
+
+class CmrPdfPayload {
+  const CmrPdfPayload({
+    required this.data,
+    required this.file,
+    required this.filename,
+  });
+
+  final Uint8List data;
+  final File file;
+  final String filename;
+}
+
+Future<CmrPdfPayload> buildCmrPdfPayload(CmrPedido pedido) async {
+  final data = await generarCmrPdf(pedido);
+  final timestamp = DateTime.now().millisecondsSinceEpoch;
+  final filename = 'CMR_${pedido.idPedidoLora}_$timestamp.pdf';
+  final file = File('${Directory.systemTemp.path}/$filename');
+  await file.writeAsBytes(data);
+  return CmrPdfPayload(data: data, file: file, filename: filename);
 }
 
 Future<void> showCmrPdfActions({
@@ -52,7 +74,7 @@ Future<void> showCmrPdfActions({
   if (action == null) return;
 
   try {
-    final data = await generarCmrPdf(pedido);
+    final payload = await buildCmrPdfPayload(pedido);
     if (!context.mounted) return;
 
     switch (action) {
@@ -60,19 +82,20 @@ Future<void> showCmrPdfActions({
         await Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => CmrPdfPreviewScreen(
-              data: data,
+              data: payload.data,
               title: 'CMR ${pedido.idPedidoLora}',
             ),
           ),
         );
         break;
       case CmrPdfAction.print:
-        await CmrPdfGenerator.printPdf(data);
+        await CmrPdfGenerator.printPdf(payload.data);
         break;
       case CmrPdfAction.share:
-        await Printing.sharePdf(
-          bytes: data,
-          filename: 'CMR_${pedido.idPedidoLora}.pdf',
+        await Share.shareXFiles(
+          [XFile(payload.file.path, mimeType: 'application/pdf')],
+          subject: 'CMR ${pedido.idPedidoLora}',
+          text: 'CMR ${pedido.idPedidoLora}',
         );
         break;
     }

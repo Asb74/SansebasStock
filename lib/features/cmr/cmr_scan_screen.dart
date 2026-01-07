@@ -211,6 +211,10 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     final pedidoRef = widget.pedido.ref;
     final user = FirebaseAuth.instance.currentUser;
     final userName = await _loadUserName(user);
+    final pendientesSet = pendientes
+        .map(normalizarPalet)
+        .where((value) => value.isNotEmpty)
+        .toSet();
 
     try {
       await db.runTransaction((tx) async {
@@ -230,6 +234,46 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
           'expedidoPor': user?.uid,
           'expedidoPorEmail': user?.email,
         });
+
+        final lineasKey = data.containsKey('Lineas')
+            ? 'Lineas'
+            : data.containsKey('lineas')
+                ? 'lineas'
+                : null;
+        if (lineasKey != null && pendientesSet.isNotEmpty) {
+          final rawLineas = data[lineasKey];
+          if (rawLineas is Iterable) {
+            final updatedLineas = <dynamic>[];
+            for (final item in rawLineas) {
+              if (item is! Map) {
+                updatedLineas.add(item);
+                continue;
+              }
+              final lineData = Map<String, dynamic>.from(item);
+              final paletRaw = item['Palet']?.toString() ?? '';
+              if (paletRaw.trim().isEmpty) {
+                updatedLineas.add(lineData);
+                continue;
+              }
+              final palets = paletRaw
+                  .split('|')
+                  .map((value) => value.trim())
+                  .where((value) => value.isNotEmpty)
+                  .where(
+                    (value) =>
+                        !pendientesSet.contains(normalizarPalet(value)),
+                  )
+                  .toList();
+              if (palets.isEmpty) {
+                continue;
+              }
+              lineData['Palet'] = palets.join('|');
+              updatedLineas.add(lineData);
+            }
+
+            tx.update(pedidoRef, {lineasKey: updatedLineas});
+          }
+        }
 
         for (final palet in pendientes) {
           final stockDocId = '1$palet';
@@ -265,7 +309,12 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       }
 
       if (!mounted) return;
-      await showCmrPdfActions(context: context, pedido: widget.pedido);
+      final updatedSnapshot = await pedidoRef.get();
+      final pedidoActualizado = updatedSnapshot.exists
+          ? CmrPedido.fromSnapshot(updatedSnapshot)
+          : widget.pedido;
+      if (!mounted) return;
+      await showCmrPdfActions(context: context, pedido: pedidoActualizado);
       if (!mounted) return;
       Navigator.of(context).pop(
         CmrScanResult(scanned: _scanned, invalid: _invalid),
