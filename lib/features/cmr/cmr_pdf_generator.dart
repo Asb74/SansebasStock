@@ -15,7 +15,8 @@ import 'cmr_utils.dart';
 
 class CmrPdfGenerator {
   static Future<CmrLayout>? _layoutCache;
-  static final PdfFont _defaultFont = PdfFont.helvetica();
+  static final PdfDocument _fontDocument = PdfDocument();
+  static final PdfFont _defaultFont = PdfFont.helvetica(_fontDocument);
 
   static Future<Uint8List> generate({
     required CmrPedido pedido,
