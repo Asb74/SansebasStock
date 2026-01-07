@@ -23,6 +23,8 @@ class CmrPdfPreviewScreen extends StatelessWidget {
         allowSharing: false,
         canChangePageFormat: false,
         canChangeOrientation: false,
+        useActions: false,
+        maxPageWidth: double.infinity,
       ),
     );
   }
