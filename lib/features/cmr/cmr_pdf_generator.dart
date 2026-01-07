@@ -1,7 +1,6 @@
 import 'dart:math';
 import 'dart:typed_data';
 
-import 'package:characters/characters.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -15,8 +14,6 @@ import 'cmr_utils.dart';
 
 class CmrPdfGenerator {
   static Future<CmrLayout>? _layoutCache;
-  static final PdfDocument _fontDocument = PdfDocument();
-  static final PdfFont _defaultFont = PdfFont.helvetica(_fontDocument);
 
   static Future<Uint8List> generate({
     required CmrPedido pedido,
@@ -62,24 +59,34 @@ class CmrPdfGenerator {
         firestore: store,
       );
       final tipoPalet = _resolveTipoPalet(lineas);
-      final cmrValues = buildCmrValues(
-        pedido: pedido,
-        paletsExpedidos: paletsExpedidos,
-        remitente: remitenteLines.join('\n'),
-        destinatario: pedido.cliente,
-        plataforma: plataforma,
-        almacen: almacenName,
-        fechaSalida: fechaSalida,
-        almacenLocation: almacenLocation,
-        almacenPoblacion: almacenPoblacion,
-        transportista: pedido.transportista,
-        matricula: pedido.matricula,
-        termografos: pedido.termografos,
-        observaciones: pedido.observaciones,
-        paletRetEntr: pedido.paletRetEntr,
-        paletRetDev: pedido.paletRetDev,
-        tipoPalet: tipoPalet,
-      );
+      final cmrValues = buildCmrFieldValues(pedido)
+        ..addAll({
+          '1': remitenteLines.join('\n'),
+          '2': pedido.cliente,
+          '3': plataforma,
+          '4': [
+            [
+              almacenName,
+              fechaSalida,
+            ].where((value) => value.trim().isNotEmpty).join('        '),
+            almacenLocation,
+          ].where((value) => value.trim().isNotEmpty).join('\n'),
+          '5': pedido.termografos,
+          '12':
+              paletsExpedidos.isNotEmpty ? paletsExpedidos.length.toString() : '',
+          '13': pedido.observaciones,
+          '17': [
+            pedido.transportista,
+            pedido.matricula,
+          ].where((value) => value.trim().isNotEmpty).join('\n'),
+          '22A': almacenPoblacion,
+          '22B': fechaSalida,
+          '26A':
+              'Palets Retornables Entregados: ${pedido.paletRetDev.trim()}',
+          '26B':
+              'Palets Retornables Devueltos: ${pedido.paletRetEntr.trim()}',
+          '27': tipoPalet,
+        });
 
       doc.addPage(
         _buildPage(
@@ -247,15 +254,9 @@ class CmrPdfGenerator {
       height: height,
     );
 
-    if (effectiveField.multiline) {
-      return _renderMultilineText(effectiveField, value);
-    }
-
-    final truncated = _truncateToWidth(
-      value,
-      field: effectiveField,
-      font: _defaultFont,
-    );
+    final maxLines = effectiveField.multiline
+        ? max(1, (effectiveField.height / effectiveField.lineHeight).floor())
+        : 1;
 
     return [
       pw.Positioned(
@@ -266,11 +267,11 @@ class CmrPdfGenerator {
             width: effectiveField.width,
             height: effectiveField.height,
             child: pw.Text(
-              truncated,
+              value,
               style: pw.TextStyle(fontSize: effectiveField.fontSize),
-              maxLines: 1,
+              maxLines: maxLines,
               overflow: pw.TextOverflow.clip,
-              softWrap: false,
+              softWrap: effectiveField.multiline,
             ),
           ),
         ),
@@ -288,205 +289,15 @@ class CmrPdfGenerator {
       if (value.trim().isEmpty) {
         continue;
       }
-      if (field.casilla == '13' || field.casilla == '27') {
-        widgets.addAll(_renderFixedCharMultiline(field, value));
-      } else {
-        widgets.addAll(
-          _renderField(
-            layout,
-            casilla: field.casilla,
-            value: value,
-          ),
-        );
-      }
+      widgets.addAll(
+        _renderField(
+          layout,
+          casilla: field.casilla,
+          value: value,
+        ),
+      );
     }
     return widgets;
-  }
-
-  static List<pw.Widget> _renderMultilineText(
-    CmrFieldLayout field,
-    String text,
-  ) {
-    final maxLines = max(1, (field.height / field.lineHeight).floor());
-    final lines = _splitTextToLines(
-      text,
-      field: field,
-      font: _defaultFont,
-      maxLines: maxLines,
-    );
-
-    return [
-      for (var lineIndex = 0; lineIndex < lines.length; lineIndex++)
-        pw.Positioned(
-          left: field.x,
-          top: field.y + (lineIndex * field.lineHeight),
-          child: pw.SizedBox(
-            width: field.width,
-            height: field.lineHeight,
-            child: pw.Text(
-              lines[lineIndex],
-              style: pw.TextStyle(fontSize: field.fontSize),
-            ),
-          ),
-        ),
-    ];
-  }
-
-  static List<String> _splitTextToLines(
-    String text, {
-    required CmrFieldLayout field,
-    required PdfFont font,
-    required int maxLines,
-  }) {
-    if (text.isEmpty) {
-      return const [''];
-    }
-
-    final lines = <String>[];
-    final buffer = StringBuffer();
-    for (final char in text.characters) {
-      if (char == '\n') {
-        lines.add(buffer.toString());
-        buffer.clear();
-        if (lines.length >= maxLines) {
-          return lines;
-        }
-        continue;
-      }
-
-      final candidate = '${buffer.toString()}$char';
-      if (_measureTextWidth(candidate, font, field.fontSize) <= field.width ||
-          buffer.isEmpty) {
-        buffer.write(char);
-      } else {
-        lines.add(buffer.toString());
-        buffer.clear();
-        buffer.write(char);
-        if (lines.length >= maxLines) {
-          return lines;
-        }
-      }
-    }
-
-    if (buffer.isNotEmpty && lines.length < maxLines) {
-      lines.add(buffer.toString());
-    }
-
-    return lines;
-  }
-
-  static List<pw.Widget> _renderFixedCharMultiline(
-    CmrFieldLayout field,
-    String text,
-  ) {
-    final maxLines = max(1, (field.height / field.lineHeight).floor());
-    final maxChars = _maxCharsForWidth(field);
-    final lines = _splitByCharCount(
-      text,
-      maxChars: maxChars,
-      maxLines: maxLines,
-    );
-
-    return [
-      for (var lineIndex = 0; lineIndex < lines.length; lineIndex++)
-        pw.Positioned(
-          left: field.x,
-          top: field.y + (lineIndex * field.lineHeight),
-          child: pw.SizedBox(
-            width: field.width,
-            height: field.lineHeight,
-            child: pw.Text(
-              lines[lineIndex],
-              style: pw.TextStyle(fontSize: field.fontSize),
-            ),
-          ),
-        ),
-    ];
-  }
-
-  static int _maxCharsForWidth(CmrFieldLayout field) {
-    final sampleWidth = _measureTextWidth('M', _defaultFont, field.fontSize);
-    if (sampleWidth <= 0) {
-      return 1;
-    }
-    return max(1, (field.width / sampleWidth).floor());
-  }
-
-  static List<String> _splitByCharCount(
-    String text, {
-    required int maxChars,
-    required int maxLines,
-  }) {
-    if (text.isEmpty) {
-      return const [];
-    }
-
-    final lines = <String>[];
-    final buffer = StringBuffer();
-    var count = 0;
-    for (final char in text.characters) {
-      if (char == '\n') {
-        lines.add(buffer.toString());
-        buffer.clear();
-        count = 0;
-        if (lines.length >= maxLines) {
-          return lines;
-        }
-        continue;
-      }
-
-      if (count >= maxChars) {
-        lines.add(buffer.toString());
-        buffer.clear();
-        count = 0;
-        if (lines.length >= maxLines) {
-          return lines;
-        }
-      }
-
-      buffer.write(char);
-      count += 1;
-    }
-
-    if (buffer.isNotEmpty && lines.length < maxLines) {
-      lines.add(buffer.toString());
-    }
-
-    return lines;
-  }
-
-  static String _truncateToWidth(
-    String text, {
-    required CmrFieldLayout field,
-    required PdfFont font,
-  }) {
-    if (text.isEmpty) {
-      return text;
-    }
-    if (_measureTextWidth(text, font, field.fontSize) <= field.width) {
-      return text;
-    }
-
-    final buffer = StringBuffer();
-    for (final char in text.characters) {
-      final candidate = '${buffer.toString()}$char';
-      if (_measureTextWidth(candidate, font, field.fontSize) <= field.width ||
-          buffer.isEmpty) {
-        buffer.write(char);
-      } else {
-        break;
-      }
-    }
-    return buffer.toString();
-  }
-
-  static double _measureTextWidth(
-    String text,
-    PdfFont font,
-    double fontSize,
-  ) {
-    final metrics = font.stringMetrics(text);
-    return metrics.width * fontSize;
   }
 
   static Future<CmrLayout> _loadLayout() {
@@ -737,61 +548,20 @@ class CmrPdfGenerator {
     return DateFormat('dd/MM/yyyy').format(date);
   }
 
-  static Map<String, String> buildCmrValues({
-    required CmrPedido pedido,
-    required List<String> paletsExpedidos,
-    String? remitente,
-    String? destinatario,
-    String? plataforma,
-    String? almacen,
-    String? fechaSalida,
-    String? almacenLocation,
-    String? almacenPoblacion,
-    String? transportista,
-    String? matricula,
-    String? termografos,
-    String? observaciones,
-    String? paletRetEntr,
-    String? paletRetDev,
-    String? tipoPalet,
-  }) {
-    final resolvedFechaSalida = fechaSalida ?? _formatFecha(pedido.fechaSalida);
-    final remitenteText = remitente ?? pedido.remitente;
-    final destinatarioText = destinatario ?? pedido.cliente;
-    final plataformaText = plataforma ?? _fallbackPlataforma(pedido);
-    final almacenText = almacen ?? '';
-    final almacenLocText = almacenLocation ?? '';
-    final almacenLine = [
-      almacenText,
-      resolvedFechaSalida,
-    ].where((value) => value.trim().isNotEmpty).join('        ');
-    final casilla4 = [
-      almacenLine,
-      almacenLocText,
-    ].where((value) => value.trim().isNotEmpty).join('\n');
-    final transportistaText = transportista ?? pedido.transportista;
-    final matriculaText = matricula ?? pedido.matricula;
-    final transportistaLine = [
-      transportistaText,
-      matriculaText,
-    ].where((value) => value.trim().isNotEmpty).join('\n');
-
+  static Map<String, String> buildCmrFieldValues(CmrPedido pedido) {
     return {
-      '1': remitenteText,
-      '2': destinatarioText,
-      '3': plataformaText,
-      '4': casilla4,
-      '5': termografos ?? pedido.termografos,
-      '12': paletsExpedidos.isNotEmpty ? paletsExpedidos.length.toString() : '',
-      '13': observaciones ?? pedido.observaciones,
-      '17': transportistaLine,
-      '22A': almacenPoblacion ?? '',
-      '22B': resolvedFechaSalida,
-      '26A':
-          'Palets Retornables Entregados: ${paletRetDev ?? pedido.paletRetDev}',
-      '26B':
-          'Palets Retornables Devueltos: ${paletRetEntr ?? pedido.paletRetEntr}',
-      '27': tipoPalet ?? _resolveTipoPalet(pedido.lineas),
+      '1': pedido.remitente,
+      '2': pedido.cliente,
+      '3': _fallbackPlataforma(pedido),
+      '5': pedido.termografos,
+      '13': pedido.observaciones,
+      '17': [
+        pedido.transportista,
+        pedido.matricula,
+      ].where((value) => value.trim().isNotEmpty).join('\n'),
+      '26A': 'Palets Retornables Entregados: ${pedido.paletRetDev.trim()}',
+      '26B': 'Palets Retornables Devueltos: ${pedido.paletRetEntr.trim()}',
+      '27': _resolveTipoPalet(pedido.lineas),
     };
   }
 

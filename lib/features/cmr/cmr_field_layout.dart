@@ -69,29 +69,55 @@ class CmrLayoutLoader {
       final line = lines[i].trim();
       if (line.isEmpty) continue;
       final parts = _splitCsvLine(line);
-      final casilla = _valueForColumn(parts, columnIndex, 'casilla');
+      final casilla = _valueForColumns(
+        parts,
+        columnIndex,
+        const ['casilla', 'campo'],
+      );
       if (casilla.isEmpty) continue;
 
-      final x = _parseDouble(_valueForColumn(parts, columnIndex, 'x_pt'));
-      final y = _parseDouble(_valueForColumn(parts, columnIndex, 'y_pt'));
-      final width =
-          _parseDouble(_valueForColumn(parts, columnIndex, 'width_pt'));
-      final height =
-          _parseDouble(_valueForColumn(parts, columnIndex, 'height_pt'));
+      final x = _parseDouble(
+        _valueForColumns(parts, columnIndex, const ['x_pt', 'x_puntos']),
+      );
+      final y = _parseDouble(
+        _valueForColumns(parts, columnIndex, const ['y_pt', 'y_puntos']),
+      );
+      final width = _parseDouble(
+        _valueForColumns(
+          parts,
+          columnIndex,
+          const ['width_pt', 'cajaancho_pt', 'cajaanchopt'],
+        ),
+      );
+      final height = _parseDouble(
+        _valueForColumns(
+          parts,
+          columnIndex,
+          const ['height_pt', 'cajaalto_pt', 'cajaaltopt'],
+        ),
+      );
       if (x == null || y == null || width == null || height == null) {
         continue;
       }
 
       final fontSize = _parseDouble(
-            _valueForColumn(parts, columnIndex, 'fontsize'),
+            _valueForColumns(
+              parts,
+              columnIndex,
+              const ['fontsize', 'font_size', 'tamfuente', 'tamañofuente'],
+            ),
           ) ??
           _defaultFontSize;
       final lineHeight = _parseDouble(
-            _valueForColumn(parts, columnIndex, 'lineheight'),
+            _valueForColumns(
+              parts,
+              columnIndex,
+              const ['lineheight', 'interlinea'],
+            ),
           ) ??
           _defaultLineHeight;
       final multiline =
-          _parseBool(_valueForColumn(parts, columnIndex, 'multiline'));
+          _parseBool(_valueForColumns(parts, columnIndex, const ['multiline']));
 
       fields[casilla] = CmrFieldLayout(
         casilla: casilla,
@@ -139,6 +165,20 @@ class CmrLayoutLoader {
     final colIndex = index[normalized];
     if (colIndex == null || colIndex >= parts.length) return '';
     return parts[colIndex];
+  }
+
+  static String _valueForColumns(
+    List<String> parts,
+    Map<String, int> index,
+    List<String> columns,
+  ) {
+    for (final column in columns) {
+      final value = _valueForColumn(parts, index, column);
+      if (value.isNotEmpty) {
+        return value;
+      }
+    }
+    return '';
   }
 
   static double? _parseDouble(String raw) {
