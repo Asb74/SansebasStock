@@ -15,6 +15,7 @@ import 'cmr_utils.dart';
 
 class CmrPdfGenerator {
   static Future<CmrLayout>? _layoutCache;
+  static final PdfFont _defaultFont = PdfFont.helvetica();
 
   static Future<Uint8List> generate({
     required CmrPedido pedido,
@@ -339,6 +340,12 @@ class CmrPdfGenerator {
       return _renderMultilineText(effectiveField, value);
     }
 
+    final truncated = _truncateToWidth(
+      value,
+      field: effectiveField,
+      font: _defaultFont,
+    );
+
     return [
       pw.Positioned(
         left: effectiveField.x,
@@ -348,7 +355,7 @@ class CmrPdfGenerator {
             width: effectiveField.width,
             height: effectiveField.height,
             child: pw.Text(
-              value,
+              truncated,
               style: pw.TextStyle(fontSize: effectiveField.fontSize),
               maxLines: 1,
               overflow: pw.TextOverflow.clip,
@@ -364,41 +371,106 @@ class CmrPdfGenerator {
     CmrFieldLayout field,
     String text,
   ) {
-    final maxCharsPerLine =
-        max(1, (field.width / (field.fontSize * 0.6)).floor());
     final maxLines = max(1, (field.height / field.lineHeight).floor());
-
-    final lines = <String>[];
-    final buffer = StringBuffer();
-    for (final char in text.characters) {
-      if (char == '\n') {
-        if (lines.length >= maxLines) break;
-        lines.add(buffer.toString());
-        buffer.clear();
-        continue;
-      }
-      buffer.write(char);
-      if (buffer.length >= maxCharsPerLine) {
-        if (lines.length >= maxLines) break;
-        lines.add(buffer.toString());
-        buffer.clear();
-      }
-    }
-    if (buffer.isNotEmpty && lines.length < maxLines) {
-      lines.add(buffer.toString());
-    }
+    final lines = _splitTextToLines(
+      text,
+      field: field,
+      font: _defaultFont,
+      maxLines: maxLines,
+    );
 
     return [
       for (var lineIndex = 0; lineIndex < lines.length; lineIndex++)
         pw.Positioned(
           left: field.x,
           top: field.y + (lineIndex * field.lineHeight),
-          child: pw.Text(
-            lines[lineIndex],
-            style: pw.TextStyle(fontSize: field.fontSize),
+          child: pw.SizedBox(
+            width: field.width,
+            height: field.lineHeight,
+            child: pw.Text(
+              lines[lineIndex],
+              style: pw.TextStyle(fontSize: field.fontSize),
+            ),
           ),
         ),
     ];
+  }
+
+  static List<String> _splitTextToLines(
+    String text, {
+    required CmrFieldLayout field,
+    required PdfFont font,
+    required int maxLines,
+  }) {
+    if (text.isEmpty) {
+      return const [''];
+    }
+
+    final lines = <String>[];
+    final buffer = StringBuffer();
+    for (final char in text.characters) {
+      if (char == '\n') {
+        lines.add(buffer.toString());
+        buffer.clear();
+        if (lines.length >= maxLines) {
+          return lines;
+        }
+        continue;
+      }
+
+      final candidate = '${buffer.toString()}$char';
+      if (_measureTextWidth(candidate, font, field.fontSize) <= field.width ||
+          buffer.isEmpty) {
+        buffer.write(char);
+      } else {
+        lines.add(buffer.toString());
+        buffer.clear();
+        buffer.write(char);
+        if (lines.length >= maxLines) {
+          return lines;
+        }
+      }
+    }
+
+    if (buffer.isNotEmpty && lines.length < maxLines) {
+      lines.add(buffer.toString());
+    }
+
+    return lines;
+  }
+
+  static String _truncateToWidth(
+    String text, {
+    required CmrFieldLayout field,
+    required PdfFont font,
+  }) {
+    if (text.isEmpty) {
+      return text;
+    }
+    if (_measureTextWidth(text, font, field.fontSize) <= field.width) {
+      return text;
+    }
+
+    final buffer = StringBuffer();
+    for (final char in text.characters) {
+      final candidate = '${buffer.toString()}$char';
+      if (_measureTextWidth(candidate, font, field.fontSize) <= field.width ||
+          buffer.isEmpty) {
+        buffer.write(char);
+      } else {
+        break;
+      }
+    }
+    return buffer.toString();
+  }
+
+  static double _measureTextWidth(
+    String text,
+    PdfFont font,
+    double fontSize,
+  ) {
+    final metrics = font.stringMetrics(text);
+    return metrics.width * fontSize;
   }
 
   static Future<CmrLayout> _loadLayout() {
