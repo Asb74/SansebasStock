@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'cmr_models.dart';
@@ -11,6 +10,12 @@ import 'cmr_pdf_generator.dart';
 import 'cmr_pdf_preview_screen.dart';
 
 enum CmrPdfAction { view, print, share }
+
+String sanitizeFilename(String input) {
+  return input
+      .replaceAll(RegExp(r'[\/\\]'), '_')
+      .replaceAll(RegExp(r'\s+'), '_');
+}
 
 Future<Uint8List> generarCmrPdf(CmrPedido pedido) {
   return CmrPdfGenerator.generate(
@@ -34,8 +39,9 @@ class CmrPdfPayload {
 Future<CmrPdfPayload> buildCmrPdfPayload(CmrPedido pedido) async {
   final data = await generarCmrPdf(pedido);
   final timestamp = DateTime.now().millisecondsSinceEpoch;
-  final filename = 'CMR_${pedido.idPedidoLora}_$timestamp.pdf';
-  final directory = await getTemporaryDirectory();
+  final safeId = sanitizeFilename(pedido.idPedidoLora);
+  final filename = 'CMR_${safeId}_$timestamp.pdf';
+  final directory = Directory.systemTemp;
   final file = File('${directory.path}/$filename');
   await file.writeAsBytes(data);
   return CmrPdfPayload(data: data, file: file, filename: filename);
