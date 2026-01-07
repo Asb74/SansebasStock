@@ -54,29 +54,37 @@ class CmrPdfGenerator {
       final plataforma = entry.key.isNotEmpty
           ? entry.key
           : _fallbackPlataforma(pedido);
+      final paletsExpedidos = parsePaletsFromLines(
+        lineas.expand((linea) => linea.palets),
+      );
       final merchandiseData = await _buildMerchandiseRows(
         lineas: lineas,
         firestore: store,
       );
       final tipoPalet = _resolveTipoPalet(lineas);
+      final cmrValues = buildCmrValues(
+        pedido: pedido,
+        paletsExpedidos: paletsExpedidos,
+        remitente: remitenteLines.join('\n'),
+        destinatario: pedido.cliente,
+        plataforma: plataforma,
+        almacen: almacenName,
+        fechaSalida: fechaSalida,
+        almacenLocation: almacenLocation,
+        almacenPoblacion: almacenPoblacion,
+        transportista: pedido.transportista,
+        matricula: pedido.matricula,
+        termografos: pedido.termografos,
+        observaciones: pedido.observaciones,
+        paletRetEntr: pedido.paletRetEntr,
+        paletRetDev: pedido.paletRetDev,
+        tipoPalet: tipoPalet,
+      );
 
       doc.addPage(
         _buildPage(
           background: expedidorBg,
-          remitenteLines: remitenteLines,
-          destinatario: pedido.cliente,
-          plataforma: plataforma,
-          almacen: almacenName,
-          fechaSalida: fechaSalida,
-          almacenLocation: almacenLocation,
-          almacenPoblacion: almacenPoblacion,
-          transportista: pedido.transportista,
-          matricula: pedido.matricula,
-          termografos: pedido.termografos,
-          observaciones: pedido.observaciones,
-          paletRetEntr: pedido.paletRetEntr,
-          paletRetDev: pedido.paletRetDev,
-          tipoPalet: tipoPalet,
+          cmrValues: cmrValues,
           merchandiseData: merchandiseData,
           layout: layout,
         ),
@@ -84,20 +92,7 @@ class CmrPdfGenerator {
       doc.addPage(
         _buildPage(
           background: destinatarioBg,
-          remitenteLines: remitenteLines,
-          destinatario: pedido.cliente,
-          plataforma: plataforma,
-          almacen: almacenName,
-          fechaSalida: fechaSalida,
-          almacenLocation: almacenLocation,
-          almacenPoblacion: almacenPoblacion,
-          transportista: pedido.transportista,
-          matricula: pedido.matricula,
-          termografos: pedido.termografos,
-          observaciones: pedido.observaciones,
-          paletRetEntr: pedido.paletRetEntr,
-          paletRetDev: pedido.paletRetDev,
-          tipoPalet: tipoPalet,
+          cmrValues: cmrValues,
           merchandiseData: merchandiseData,
           layout: layout,
         ),
@@ -105,20 +100,7 @@ class CmrPdfGenerator {
       doc.addPage(
         _buildPage(
           background: transportistaBg,
-          remitenteLines: remitenteLines,
-          destinatario: pedido.cliente,
-          plataforma: plataforma,
-          almacen: almacenName,
-          fechaSalida: fechaSalida,
-          almacenLocation: almacenLocation,
-          almacenPoblacion: almacenPoblacion,
-          transportista: pedido.transportista,
-          matricula: pedido.matricula,
-          termografos: pedido.termografos,
-          observaciones: pedido.observaciones,
-          paletRetEntr: pedido.paletRetEntr,
-          paletRetDev: pedido.paletRetDev,
-          tipoPalet: tipoPalet,
+          cmrValues: cmrValues,
           merchandiseData: merchandiseData,
           layout: layout,
         ),
@@ -135,20 +117,7 @@ class CmrPdfGenerator {
 
   static pw.Page _buildPage({
     required pw.MemoryImage background,
-    required List<String> remitenteLines,
-    required String destinatario,
-    required String plataforma,
-    required String almacen,
-    required String fechaSalida,
-    required String almacenLocation,
-    required String almacenPoblacion,
-    required String transportista,
-    required String matricula,
-    required String termografos,
-    required String observaciones,
-    required String paletRetEntr,
-    required String paletRetDev,
-    required String tipoPalet,
+    required Map<String, String> cmrValues,
     required _CmrMerchandiseData merchandiseData,
     required CmrLayout layout,
   }) {
@@ -161,66 +130,7 @@ class CmrPdfGenerator {
             pw.Positioned.fill(
               child: pw.Image(background, fit: pw.BoxFit.fill),
             ),
-            ..._renderField(
-              layout,
-              casilla: '1',
-              value: remitenteLines.join('\n'),
-            ),
-            ..._renderField(
-              layout,
-              casilla: '2',
-              value: destinatario,
-            ),
-            ..._renderField(
-              layout,
-              casilla: '3',
-              value: plataforma,
-            ),
-            ..._renderField(
-              layout,
-              casilla: '4',
-              value: '$almacen        $fechaSalida\n$almacenLocation',
-            ),
-            ..._renderField(
-              layout,
-              casilla: '5',
-              value: termografos,
-            ),
-            ..._renderField(
-              layout,
-              casilla: '13',
-              value: observaciones,
-            ),
-            ..._renderField(
-              layout,
-              casilla: '17',
-              value: '$transportista\n$matricula',
-            ),
-            ..._renderField(
-              layout,
-              casilla: '22A',
-              value: almacenPoblacion,
-            ),
-            ..._renderField(
-              layout,
-              casilla: '22B',
-              value: fechaSalida,
-            ),
-            ..._renderField(
-              layout,
-              casilla: '26A',
-              value: 'Palets Retornables Entregados: $paletRetDev',
-            ),
-            ..._renderField(
-              layout,
-              casilla: '26B',
-              value: 'Palets Retornables Devueltos: $paletRetEntr',
-            ),
-            ..._renderField(
-              layout,
-              casilla: '27',
-              value: tipoPalet,
-            ),
+            ..._buildCmrValueWidgets(cmrValues, layout),
             ..._buildMerchandiseWidgets(
               merchandiseData,
               layout: layout,
@@ -368,6 +278,31 @@ class CmrPdfGenerator {
     ];
   }
 
+  static List<pw.Widget> _buildCmrValueWidgets(
+    Map<String, String> values,
+    CmrLayout layout,
+  ) {
+    final widgets = <pw.Widget>[];
+    for (final field in layout.fields) {
+      final value = values[field.casilla] ?? '';
+      if (value.trim().isEmpty) {
+        continue;
+      }
+      if (field.casilla == '13' || field.casilla == '27') {
+        widgets.addAll(_renderFixedCharMultiline(field, value));
+      } else {
+        widgets.addAll(
+          _renderField(
+            layout,
+            casilla: field.casilla,
+            value: value,
+          ),
+        );
+      }
+    }
+    return widgets;
+  }
+
   static List<pw.Widget> _renderMultilineText(
     CmrFieldLayout field,
     String text,
@@ -431,6 +366,86 @@ class CmrPdfGenerator {
           return lines;
         }
       }
+    }
+
+    if (buffer.isNotEmpty && lines.length < maxLines) {
+      lines.add(buffer.toString());
+    }
+
+    return lines;
+  }
+
+  static List<pw.Widget> _renderFixedCharMultiline(
+    CmrFieldLayout field,
+    String text,
+  ) {
+    final maxLines = max(1, (field.height / field.lineHeight).floor());
+    final maxChars = _maxCharsForWidth(field);
+    final lines = _splitByCharCount(
+      text,
+      maxChars: maxChars,
+      maxLines: maxLines,
+    );
+
+    return [
+      for (var lineIndex = 0; lineIndex < lines.length; lineIndex++)
+        pw.Positioned(
+          left: field.x,
+          top: field.y + (lineIndex * field.lineHeight),
+          child: pw.SizedBox(
+            width: field.width,
+            height: field.lineHeight,
+            child: pw.Text(
+              lines[lineIndex],
+              style: pw.TextStyle(fontSize: field.fontSize),
+            ),
+          ),
+        ),
+    ];
+  }
+
+  static int _maxCharsForWidth(CmrFieldLayout field) {
+    final sampleWidth = _measureTextWidth('M', _defaultFont, field.fontSize);
+    if (sampleWidth <= 0) {
+      return 1;
+    }
+    return max(1, (field.width / sampleWidth).floor());
+  }
+
+  static List<String> _splitByCharCount(
+    String text, {
+    required int maxChars,
+    required int maxLines,
+  }) {
+    if (text.isEmpty) {
+      return const [];
+    }
+
+    final lines = <String>[];
+    final buffer = StringBuffer();
+    var count = 0;
+    for (final char in text.characters) {
+      if (char == '\n') {
+        lines.add(buffer.toString());
+        buffer.clear();
+        count = 0;
+        if (lines.length >= maxLines) {
+          return lines;
+        }
+        continue;
+      }
+
+      if (count >= maxChars) {
+        lines.add(buffer.toString());
+        buffer.clear();
+        count = 0;
+        if (lines.length >= maxLines) {
+          return lines;
+        }
+      }
+
+      buffer.write(char);
+      count += 1;
     }
 
     if (buffer.isNotEmpty && lines.length < maxLines) {
@@ -720,6 +735,64 @@ class CmrPdfGenerator {
   static String _formatFecha(DateTime? fecha) {
     final date = fecha ?? DateTime.now();
     return DateFormat('dd/MM/yyyy').format(date);
+  }
+
+  static Map<String, String> buildCmrValues({
+    required CmrPedido pedido,
+    required List<String> paletsExpedidos,
+    String? remitente,
+    String? destinatario,
+    String? plataforma,
+    String? almacen,
+    String? fechaSalida,
+    String? almacenLocation,
+    String? almacenPoblacion,
+    String? transportista,
+    String? matricula,
+    String? termografos,
+    String? observaciones,
+    String? paletRetEntr,
+    String? paletRetDev,
+    String? tipoPalet,
+  }) {
+    final resolvedFechaSalida = fechaSalida ?? _formatFecha(pedido.fechaSalida);
+    final remitenteText = remitente ?? pedido.remitente;
+    final destinatarioText = destinatario ?? pedido.cliente;
+    final plataformaText = plataforma ?? _fallbackPlataforma(pedido);
+    final almacenText = almacen ?? '';
+    final almacenLocText = almacenLocation ?? '';
+    final almacenLine = [
+      almacenText,
+      resolvedFechaSalida,
+    ].where((value) => value.trim().isNotEmpty).join('        ');
+    final casilla4 = [
+      almacenLine,
+      almacenLocText,
+    ].where((value) => value.trim().isNotEmpty).join('\n');
+    final transportistaText = transportista ?? pedido.transportista;
+    final matriculaText = matricula ?? pedido.matricula;
+    final transportistaLine = [
+      transportistaText,
+      matriculaText,
+    ].where((value) => value.trim().isNotEmpty).join('\n');
+
+    return {
+      '1': remitenteText,
+      '2': destinatarioText,
+      '3': plataformaText,
+      '4': casilla4,
+      '5': termografos ?? pedido.termografos,
+      '12': paletsExpedidos.isNotEmpty ? paletsExpedidos.length.toString() : '',
+      '13': observaciones ?? pedido.observaciones,
+      '17': transportistaLine,
+      '22A': almacenPoblacion ?? '',
+      '22B': resolvedFechaSalida,
+      '26A':
+          'Palets Retornables Entregados: ${paletRetDev ?? pedido.paletRetDev}',
+      '26B':
+          'Palets Retornables Devueltos: ${paletRetEntr ?? pedido.paletRetEntr}',
+      '27': tipoPalet ?? _resolveTipoPalet(pedido.lineas),
+    };
   }
 
   static Future<Map<String, dynamic>> _fetchAlmacen(

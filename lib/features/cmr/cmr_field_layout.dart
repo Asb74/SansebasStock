@@ -46,6 +46,8 @@ class CmrLayout {
   final Map<String, CmrFieldLayout> _fields;
 
   CmrFieldLayout? field(String casilla) => _fields[casilla];
+
+  Iterable<CmrFieldLayout> get fields => _fields.values;
 }
 
 class CmrLayoutLoader {
