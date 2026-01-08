@@ -132,16 +132,22 @@ class CmrPdfGenerator {
       pageFormat: PdfPageFormat.a4,
       margin: pw.EdgeInsets.zero,
       build: (context) {
+        final backgroundWidgets = <pw.Widget>[
+          pw.Positioned.fill(
+            child: pw.Image(background, fit: pw.BoxFit.fill),
+          ),
+        ];
+        final foregroundWidgets = <pw.Widget>[
+          ..._buildCmrValueWidgets(cmrValues, layout),
+          ..._buildMerchandiseWidgets(
+            merchandiseData,
+            layout: layout,
+          ),
+        ];
         return pw.Stack(
           children: [
-            pw.Positioned.fill(
-              child: pw.Image(background, fit: pw.BoxFit.fill),
-            ),
-            ..._buildCmrValueWidgets(cmrValues, layout),
-            ..._buildMerchandiseWidgets(
-              merchandiseData,
-              layout: layout,
-            ),
+            ...backgroundWidgets,
+            ...foregroundWidgets,
           ],
         );
       },
