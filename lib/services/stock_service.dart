@@ -3,6 +3,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sansebas_stock/features/qr/qr_parser.dart';
 
+import '../models/camera_model.dart';
+import '../models/stock_location.dart';
+import 'palet_location_service.dart';
+
 enum StockProcessAction { creadoOcupado, liberado, reubicado }
 
 class StockProcessResult {
@@ -48,31 +52,14 @@ class StockProcessException implements Exception {
   String toString() => 'StockProcessException($code, $message)';
 }
 
-class StockLocation {
-  const StockLocation({
-    required this.camara,
-    required this.estanteria,
-    required this.nivel,
-    this.posicion,
-  });
-
-  final String camara;
-  final String estanteria;
-  final int nivel;
-  final int? posicion;
-
-  Map<String, dynamic> toMap() => {
-        'CAMARA': camara,
-        'ESTANTERIA': estanteria,
-        'NIVEL': nivel,
-        if (posicion != null) 'POSICION': posicion,
-      };
-}
-
 class StockService {
-  StockService(this._db);
+  StockService(
+    this._db, {
+    PaletLocationService? locationService,
+  }) : _locationService = locationService ?? PaletLocationService();
 
   final FirebaseFirestore _db;
+  final PaletLocationService _locationService;
 
   Future<void> movePalet({
     required String stockDocId,
@@ -144,6 +131,7 @@ class StockService {
     StockLocation? ubicacion,
   }) async {
     try {
+      final StockLocation? resolvedUbicacion = await _resolveUbicacion(ubicacion);
       final String docId = '${qr.linea}${qr.p}';
       final DocumentReference<Map<String, dynamic>> ref =
           _db.collection('Stock').doc(docId);
@@ -152,16 +140,17 @@ class StockService {
       final DocumentSnapshot<Map<String, dynamic>> snapshot = await ref.get();
 
       if (!snapshot.exists) {
-        if (ubicacion == null) {
+        if (resolvedUbicacion == null) {
           throw const StockProcessException(
             StockProcessException.requiresLocationCode,
             'Escanea primero el QR de la cámara para ubicar el palet.',
           );
         }
 
-        final int posicion = ubicacion.posicion ?? await _siguientePosicion(ubicacion);
+        final int posicion =
+            resolvedUbicacion.posicion ?? await _siguientePosicion(resolvedUbicacion);
         final Map<String, dynamic> data = _buildBaseData(qr)
-          ..addAll(ubicacion.toMap())
+          ..addAll(resolvedUbicacion.toMap())
           ..['POSICION'] = posicion
           ..['HUECO'] = 'Ocupado';
 
@@ -177,7 +166,7 @@ class StockService {
           action: StockProcessAction.creadoOcupado,
           id: docId,
           posicion: posicion,
-          ubicacion: ubicacion,
+          ubicacion: resolvedUbicacion,
         );
       }
 
@@ -201,16 +190,17 @@ class StockService {
         );
       }
 
-      if (ubicacion == null) {
+      if (resolvedUbicacion == null) {
         throw const StockProcessException(
           StockProcessException.requiresLocationCode,
           'El palet está Libre. Escanea el QR de ubicación para reubicarlo.',
         );
       }
 
-      final int posicion = ubicacion.posicion ?? await _siguientePosicion(ubicacion);
+      final int posicion =
+          resolvedUbicacion.posicion ?? await _siguientePosicion(resolvedUbicacion);
       final Map<String, dynamic> data = _buildBaseData(qr)
-        ..addAll(ubicacion.toMap())
+        ..addAll(resolvedUbicacion.toMap())
         ..['POSICION'] = posicion
         ..['HUECO'] = 'Ocupado';
 
@@ -226,7 +216,7 @@ class StockService {
         action: StockProcessAction.reubicado,
         id: docId,
         posicion: posicion,
-        ubicacion: ubicacion,
+        ubicacion: resolvedUbicacion,
       );
     } on FirebaseException catch (e, st) {
       debugPrint('Firestore error [${e.code}]: ${e.message}');
@@ -282,6 +272,31 @@ class StockService {
       debugPrint('Error inesperado al liberar palet: $e');
       debugPrintStack(label: 'Stack', stackTrace: st);
     }
+  }
+
+  Future<StockLocation?> _resolveUbicacion(StockLocation? ubicacion) async {
+    if (ubicacion == null) {
+      return null;
+    }
+
+    final camera = await _fetchCamera(ubicacion.camara);
+    final esExpedicion = camera?.tipo == CameraTipo.expedicion;
+
+    return _locationService.resolveQrLocation(
+      ubicacionQr: ubicacion,
+      esExpedicion: esExpedicion,
+      camera: camera,
+      firestore: _db,
+    );
+  }
+
+  Future<CameraModel?> _fetchCamera(String camara) async {
+    final normalized = camara.trim().padLeft(2, '0');
+    final doc = await _db.collection('Storage').doc(normalized).get();
+    if (!doc.exists) {
+      return null;
+    }
+    return CameraModel.fromDoc(doc);
   }
 
   Future<int> _siguientePosicion(StockLocation ubicacion) async {
