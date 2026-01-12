@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/camera_model.dart';
 import '../models/palet.dart';
+import '../models/stock_location.dart';
 import '../models/storage_row_config.dart';
 
 class PaletLocationDescriptor {
@@ -91,6 +92,49 @@ class PaletLocationService {
       cameras: cameras,
       currentStockByCameraAndRow: currentStockByCameraAndRow,
       firestore: firestore,
+    );
+  }
+
+  Future<StockLocation?> resolveQrLocation({
+    required StockLocation? ubicacionQr,
+    required bool esExpedicion,
+    required CameraModel? camera,
+    required FirebaseFirestore firestore,
+  }) async {
+    if (esExpedicion && ubicacionQr != null) {
+      return ubicacionQr;
+    }
+
+    if (ubicacionQr == null || ubicacionQr.posicion != null) {
+      return ubicacionQr;
+    }
+
+    if (camera == null) {
+      return ubicacionQr;
+    }
+
+    final fila = _parseFila(ubicacionQr.estanteria);
+    if (fila == null) {
+      return ubicacionQr;
+    }
+
+    final slot = await findNextFreeSlotFresh(
+      camara: camera.displayNumero,
+      fila: fila,
+      niveles: camera.niveles,
+      posicionesMax: camera.posicionesMax,
+      firestore: firestore,
+    );
+
+    if (slot == null) {
+      return ubicacionQr;
+    }
+
+    return StockLocation(
+      camara: camera.displayNumero,
+      estanteria: fila.toString().padLeft(2, '0'),
+      nivel: slot.nivel,
+      posicion: slot.posicion,
     );
   }
 
@@ -319,6 +363,12 @@ class PaletLocationService {
     final numero = camera.numero.trim();
     final paddedNumero = numero.padLeft(2, '0');
     return {camera.id.trim(), numero, paddedNumero, camera.displayNumero};
+  }
+
+  int? _parseFila(String estanteria) {
+    final digits = RegExp(r'\d+').firstMatch(estanteria.trim())?.group(0);
+    if (digits == null) return null;
+    return int.tryParse(digits);
   }
 
   Future<NextSlotResult?> findNextFreeSlotFresh({

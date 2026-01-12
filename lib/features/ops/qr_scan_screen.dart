@@ -12,6 +12,7 @@ import 'package:sansebas_stock/features/ops/ops_providers.dart';
 import 'package:sansebas_stock/features/qr/qr_parser.dart' as qr;
 import 'package:sansebas_stock/models/camera_model.dart';
 import 'package:sansebas_stock/models/palet.dart';
+import 'package:sansebas_stock/models/stock_location.dart';
 import 'package:sansebas_stock/providers/camera_providers.dart';
 import 'package:sansebas_stock/providers/palets_providers.dart';
 import 'package:sansebas_stock/services/palet_location_service.dart';
@@ -303,10 +304,6 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
       }
     }
 
-    if (requiresLocation && ubicacion != null) {
-      ubicacion = await _resolveSlotForLocation(ubicacion) ?? ubicacion;
-    }
-
     try {
       final result = await stockService.procesarPalet(
         qr: parsed,
@@ -428,70 +425,6 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
       nivel: autoLocation.nivel,
       posicion: autoLocation.posicion,
     );
-  }
-
-  Future<StockLocation?> _resolveSlotForLocation(StockLocation base) async {
-    if (base.posicion != null) {
-      return base;
-    }
-
-    final cameras = ref.read(camerasStreamProvider).value;
-    final stockByRow = ref.read(paletsByCameraAndRowProvider).value;
-    if (cameras == null || stockByRow == null) {
-      return base;
-    }
-
-    final camera = _findCamera(base.camara, cameras);
-    if (camera == null) {
-      return base;
-    }
-
-    final fila = _parseFila(base.estanteria);
-    if (fila == null) {
-      return base;
-    }
-
-    final slot = await _locationService.findNextFreeSlotFresh(
-      camara: camera.displayNumero,
-      fila: fila,
-      niveles: camera.niveles,
-      posicionesMax: camera.posicionesMax,
-      firestore: FirebaseFirestore.instance,
-    );
-
-    if (slot == null) {
-      return base;
-    }
-
-    return StockLocation(
-      camara: camera.displayNumero,
-      estanteria: fila.toString().padLeft(2, '0'),
-      nivel: slot.nivel,
-      posicion: slot.posicion,
-    );
-  }
-
-  CameraModel? _findCamera(String camara, List<CameraModel> cameras) {
-    final normalized = camara.trim();
-    final padded = normalized.padLeft(2, '0');
-
-    for (final camera in cameras) {
-      final keys = {
-        camera.id.trim(),
-        camera.numero.trim(),
-        camera.displayNumero,
-      };
-      if (keys.contains(normalized) || keys.contains(padded)) {
-        return camera;
-      }
-    }
-    return null;
-  }
-
-  int? _parseFila(String estanteria) {
-    final digits = RegExp(r'\d+').firstMatch(estanteria.trim())?.group(0);
-    if (digits == null) return null;
-    return int.tryParse(digits);
   }
 
   Future<bool?> _showAutoLocationDialog(
