@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -35,10 +37,12 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
   bool _showOverlay = false;
   bool _scanInProgress = false;
   _ScanOverlayData? _overlayData;
-  final Set<String> _scanned = <String>{};
   final Set<String> _invalid = <String>{};
   late final Set<String> _expectedPalets;
   late final Map<String, int?> _lineaByPalet;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _pedidoSubscription;
+  Set<String> _firestorePalets = <String>{};
+  String _pedidoEstado = '';
 
   @override
   void initState() {
@@ -48,13 +52,43 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       for (final entry in widget.lineaByPalet.entries)
         normalizarPalet(entry.key): entry.value,
     };
-    _scanned.addAll(widget.initialScanned.map(normalizarPalet));
     _invalid.addAll(widget.initialInvalid.map(normalizarPalet));
+    _pedidoSubscription = widget.pedido.ref
+        .snapshots()
+        .listen(_handlePedidoSnapshot);
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _startScan();
       }
+    });
+  }
+
+  @override
+  void dispose() {
+    _pedidoSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _handlePedidoSnapshot(
+    DocumentSnapshot<Map<String, dynamic>> snapshot,
+  ) {
+    if (!mounted) return;
+    if (!snapshot.exists) {
+      setState(() {
+        _pedidoEstado = '';
+        _firestorePalets = <String>{};
+      });
+      return;
+    }
+
+    final data = snapshot.data() ?? <String, dynamic>{};
+    final estado = data['Estado']?.toString() ?? '';
+    final palets = _extractPaletsFromData(data).toSet();
+
+    setState(() {
+      _pedidoEstado = estado;
+      _firestorePalets = palets;
     });
   }
 
@@ -107,21 +141,15 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         return;
       }
 
-      if (_scanned.contains(paletId)) {
-        await _showOverlayResult(
-          paletId: paletId,
-          message: 'Palet ya escaneado',
-          status: _OverlayStatus.alreadyScanned,
-        );
-        return;
-      }
-
+      final pedidoSnapshot = await widget.pedido.ref.get();
+      final pedidoExiste = pedidoSnapshot.exists;
       final pertenece = await paletPerteneceAPedido(
         firestore: FirebaseFirestore.instance,
         pedidoRef: widget.pedido.ref,
         paletId: paletId,
       );
-      if (!pertenece) {
+      if (!pertenece &&
+          !(!pedidoExiste && _expectedPalets.contains(paletId))) {
         _invalid.add(paletId);
         await _showOverlayResult(
           paletId: paletId,
@@ -131,12 +159,31 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         return;
       }
 
-      final stockService = ref.read(stockServiceProvider);
-      await stockService.liberarPaletParaCmr(
-        palletId: paletId,
-        pedidoId: widget.pedido.idPedidoLora,
-      );
-      _scanned.add(paletId);
+      final scanResult = await _upsertPaletInPedido(paletId);
+      if (scanResult == _ScanTransactionResult.expedido) {
+        await _showOverlayResult(
+          paletId: paletId,
+          message: 'Pedido ya expedido',
+          status: _OverlayStatus.invalid,
+        );
+        return;
+      }
+      if (scanResult == _ScanTransactionResult.duplicate) {
+        await _showOverlayResult(
+          paletId: paletId,
+          message: 'Palet ya escaneado',
+          status: _OverlayStatus.alreadyScanned,
+        );
+        return;
+      }
+
+      if (scanResult == _ScanTransactionResult.added) {
+        final stockService = ref.read(stockServiceProvider);
+        await stockService.liberarPaletParaCmr(
+          palletId: paletId,
+          pedidoId: widget.pedido.idPedidoLora,
+        );
+      }
 
       await _showOverlayResult(
         paletId: paletId,
@@ -173,6 +220,61 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     }
   }
 
+  List<String> _extractPaletsFromData(Map<String, dynamic> data) {
+    final raw = data['palets'] ?? data['Palets'];
+    if (raw is! Iterable) {
+      return const [];
+    }
+    return raw
+        .map((value) => normalizarPalet(value?.toString() ?? ''))
+        .where((value) => value.isNotEmpty)
+        .toList();
+  }
+
+  Future<Set<String>> _fetchPaletsFromFirestore() async {
+    final snapshot = await widget.pedido.ref.get();
+    if (!snapshot.exists) {
+      return <String>{};
+    }
+    final data = snapshot.data() ?? <String, dynamic>{};
+    return _extractPaletsFromData(data).toSet();
+  }
+
+  Future<_ScanTransactionResult> _upsertPaletInPedido(String paletId) async {
+    final db = FirebaseFirestore.instance;
+    final pedidoRef = widget.pedido.ref;
+    return db.runTransaction((tx) async {
+      final pedidoSnap = await tx.get(pedidoRef);
+      if (!pedidoSnap.exists) {
+        final base = Map<String, dynamic>.from(widget.pedido.raw);
+        base['Estado'] = 'En_Curso';
+        base['palets'] = [paletId];
+        base['createdAt'] = FieldValue.serverTimestamp();
+        base['updatedAt'] = FieldValue.serverTimestamp();
+        tx.set(pedidoRef, base);
+        return _ScanTransactionResult.added;
+      }
+
+      final data = pedidoSnap.data() ?? <String, dynamic>{};
+      final estado = data['Estado']?.toString() ?? '';
+      if (estado == 'Expedido') {
+        return _ScanTransactionResult.expedido;
+      }
+
+      final palets = _extractPaletsFromData(data);
+      if (palets.contains(paletId)) {
+        return _ScanTransactionResult.duplicate;
+      }
+
+      tx.update(pedidoRef, {
+        'Estado': estado == 'Pendiente' ? 'En_Curso' : estado,
+        'palets': FieldValue.arrayUnion([paletId]),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      return _ScanTransactionResult.added;
+    });
+  }
+
   Future<void> _showOverlayResult({
     required String paletId,
     required String message,
@@ -196,7 +298,8 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
   }
 
   Future<void> _finalizarCmr() async {
-    final pendientes = _expectedPalets.difference(_scanned).toList()..sort();
+    final scannedPalets = await _fetchPaletsFromFirestore();
+    final pendientes = _expectedPalets.difference(scannedPalets).toList()..sort();
 
     final confirm = await _showFinalDialog(pendientes);
     if (confirm != true) {
@@ -317,7 +420,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       await showCmrPdfActions(context: context, pedido: pedidoActualizado);
       if (!mounted) return;
       Navigator.of(context).pop(
-        CmrScanResult(scanned: _scanned, invalid: _invalid),
+        CmrScanResult(scanned: scannedPalets, invalid: _invalid),
       );
     } catch (e) {
       if (!mounted) return;
@@ -362,7 +465,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text('Esperados: ${_expectedPalets.length}'),
-                Text('Escaneados: ${_scanned.length}'),
+                Text('Escaneados: ${_firestorePalets.length}'),
                 Text('No escaneados: ${pendientes.length}'),
                 const SizedBox(height: 12),
                 if (pendientes.isNotEmpty)
@@ -395,6 +498,8 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scannedCount = _firestorePalets.length;
+    final isExpedido = _pedidoEstado == 'Expedido';
     return Scaffold(
       appBar: AppBar(
         title: const Text('Escaneo CMR'),
@@ -423,7 +528,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
                       const Icon(Icons.qr_code_scanner),
                       const SizedBox(width: 8),
                       Text(
-                        'Escaneados: ${_scanned.length}/${_expectedPalets.length}',
+                        'Escaneados: $scannedCount/${_expectedPalets.length}',
                         style: Theme.of(context).textTheme.bodyLarge,
                       ),
                     ],
@@ -471,7 +576,9 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _scanInProgress || _busy || _showOverlay ? null : _startScan,
+        onPressed: _scanInProgress || _busy || _showOverlay || isExpedido
+            ? null
+            : _startScan,
         icon: const Icon(Icons.qr_code_scanner),
         label: const Text('Escanear palet'),
       ),
@@ -539,6 +646,8 @@ class _ScanOverlay extends StatelessWidget {
 }
 
 enum _OverlayStatus { valid, invalid, alreadyScanned }
+
+enum _ScanTransactionResult { added, duplicate, expedido }
 
 extension on _OverlayStatus {
   Color get color {
