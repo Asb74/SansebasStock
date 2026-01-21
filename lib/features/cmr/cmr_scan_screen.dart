@@ -306,10 +306,16 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       return;
     }
 
-    await _confirmExpedicion(pendientes);
+    await _confirmExpedicion(
+      pendientes: pendientes,
+      scannedPalets: scannedPalets,
+    );
   }
 
-  Future<void> _confirmExpedicion(List<String> pendientes) async {
+  Future<void> _confirmExpedicion({
+    required List<String> pendientes,
+    required Set<String> scannedPalets,
+  }) async {
     final db = FirebaseFirestore.instance;
     final pedidoRef = widget.pedido.ref;
     final user = FirebaseAuth.instance.currentUser;
