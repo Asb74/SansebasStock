@@ -109,8 +109,12 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
                 final pedidos = docs
                     .map(CmrPedido.fromSnapshot)
                     .where((pedido) {
-                      if (!_onlyPedidosP) return true;
-                      return pedido.idPedidoLora.toUpperCase().startsWith('P');
+                      if (_onlyPedidosP &&
+                          !pedido.idPedidoLora.toUpperCase().startsWith('P')) {
+                        return false;
+                      }
+                      final estado = _normalizeEstado(pedido.estado);
+                      return estado == 'Pendiente' || estado == 'En_Curso';
                     })
                     .toList();
 
@@ -190,15 +194,18 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
     );
   }
 
-  String _normalizeEstado(String estado) {
-    final normalized = estado.trim();
+  String _normalizeEstado(String? estado) {
+    final normalized = estado?.trim() ?? '';
+    if (normalized.isEmpty) {
+      return 'Pendiente';
+    }
     switch (normalized) {
       case 'Pendiente':
       case 'En_Curso':
       case 'Expedido':
         return normalized;
       default:
-        return 'Pendiente';
+        return normalized;
     }
   }
 
