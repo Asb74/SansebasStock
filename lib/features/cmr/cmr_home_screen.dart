@@ -25,9 +25,8 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
   Stream<QuerySnapshot<Map<String, dynamic>>> _buildPedidosStream(
     bool soloPedidosP,
   ) {
-    Query<Map<String, dynamic>> query = FirebaseFirestore.instance
-        .collection('Pedidos')
-        .where('Estado', isEqualTo: 'Pendiente');
+    Query<Map<String, dynamic>> query =
+        FirebaseFirestore.instance.collection('Pedidos');
 
     if (soloPedidosP) {
       query = query
@@ -40,6 +39,7 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
         title: const Text('CMR'),
@@ -52,12 +52,12 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
             subtitle: const Text('Filtra IdPedidoLora que empieza por P'),
             onChanged: (value) {
               setState(() {
-            _onlyPedidosP = value;
-            _loggedPedidosError = false;
-            _pedidosStream = _buildPedidosStream(_onlyPedidosP);
-          });
-        },
-      ),
+                _onlyPedidosP = value;
+                _loggedPedidosError = false;
+                _pedidosStream = _buildPedidosStream(_onlyPedidosP);
+              });
+            },
+          ),
           Expanded(
             child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
               stream: _pedidosStream,
@@ -116,7 +116,7 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
 
                 if (pedidos.isEmpty) {
                   return const Center(
-                    child: Text('No hay pedidos pendientes.'),
+                    child: Text('No hay pedidos.'),
                   );
                 }
 
@@ -126,19 +126,55 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
                   separatorBuilder: (_, __) => const SizedBox(height: 12),
                   itemBuilder: (context, index) {
                     final pedido = pedidos[index];
+                    final estado = _normalizeEstado(pedido.estado);
+                    final isEnCurso = estado == 'En_Curso';
+                    final isExpedido = estado == 'Expedido';
+                    final badge = _buildEstadoBadge(estado, theme);
+                    final Color? cardColor = isEnCurso
+                        ? theme.colorScheme.primaryContainer.withOpacity(0.35)
+                        : isExpedido
+                            ? theme.colorScheme.surfaceVariant.withOpacity(0.4)
+                            : null;
+                    final TextStyle? mutedStyle = isExpedido
+                        ? theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.onSurface.withOpacity(0.6),
+                          )
+                        : null;
                     return Card(
+                      color: cardColor,
                       child: ListTile(
-                        title: Text(pedido.idPedidoLora),
+                        title: Text(
+                          pedido.idPedidoLora,
+                          style: isExpedido
+                              ? theme.textTheme.titleMedium?.copyWith(
+                                  color:
+                                      theme.colorScheme.onSurface.withOpacity(
+                                    0.7,
+                                  ),
+                                )
+                              : null,
+                        ),
                         subtitle: Text(
                           pedido.cliente.isNotEmpty
                               ? pedido.cliente
                               : 'Cliente sin nombre',
+                          style: mutedStyle,
                         ),
-                        trailing: const Icon(Icons.chevron_right),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (badge != null) ...[
+                              badge,
+                              const SizedBox(width: 8),
+                            ],
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
                         onTap: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) => CmrDetailScreen(pedidoRef: pedido.ref),
+                              builder: (_) =>
+                                  CmrDetailScreen(pedidoRef: pedido.ref),
                             ),
                           );
                         },
@@ -152,5 +188,46 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
         ],
       ),
     );
+  }
+
+  String _normalizeEstado(String estado) {
+    final normalized = estado.trim();
+    switch (normalized) {
+      case 'Pendiente':
+      case 'En_Curso':
+      case 'Expedido':
+        return normalized;
+      default:
+        return 'Pendiente';
+    }
+  }
+
+  Widget? _buildEstadoBadge(String estado, ThemeData theme) {
+    switch (estado) {
+      case 'En_Curso':
+        return Chip(
+          label: const Text('EN CURSO'),
+          labelStyle: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSecondaryContainer,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.3,
+          ),
+          backgroundColor: theme.colorScheme.secondaryContainer,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        );
+      case 'Expedido':
+        return Chip(
+          label: const Text('EXPEDIDO'),
+          labelStyle: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.3,
+          ),
+          backgroundColor: theme.colorScheme.surfaceVariant,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        );
+      default:
+        return null;
+    }
   }
 }
