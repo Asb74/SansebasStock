@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'cmr_detail_screen.dart';
 import 'cmr_models.dart';
+import 'cmr_scan_screen.dart';
 
 class CmrHomeScreen extends StatefulWidget {
   const CmrHomeScreen({super.key});
@@ -43,6 +44,23 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('CMR'),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const CmrScanScreen(
+                pedido: null,
+                expectedPalets: <String>[],
+                lineaByPalet: <String, int?>{},
+                initialScanned: <String>{},
+                initialInvalid: <String>{},
+              ),
+            ),
+          );
+        },
+        icon: const Icon(Icons.qr_code_scanner),
+        label: const Text('Iniciar CMR'),
       ),
       body: Column(
         children: [
