@@ -15,9 +15,6 @@ class CmrDetailScreen extends StatefulWidget {
 }
 
 class _CmrDetailScreenState extends State<CmrDetailScreen> {
-  Set<String> _scanned = <String>{};
-  Set<String> _invalid = <String>{};
-
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
@@ -35,10 +32,14 @@ class _CmrDetailScreenState extends State<CmrDetailScreen> {
           );
         }
 
-        final pedido = CmrPedido.fromSnapshot(snapshot.data!);
+        final pedidoSnapshot = snapshot.data!;
+        final pedido = CmrPedido.fromSnapshot(pedidoSnapshot);
+        final firestorePalets = _extractPaletsFromData(
+          pedidoSnapshot.data() ?? <String, dynamic>{},
+        ).toSet();
         final expected = _buildExpectedPalets(pedido);
         final expectedSet = expected.keys.toSet();
-        final scanned = _scanned.where(expectedSet.contains).toSet();
+        final scanned = firestorePalets.where(expectedSet.contains).toSet();
         final total = expectedSet.length;
         final scannedCount = scanned.length;
 
@@ -57,23 +58,17 @@ class _CmrDetailScreenState extends State<CmrDetailScreen> {
                 onPressed: pedido.estado == 'Expedido'
                     ? null
                     : () async {
-                        final result = await Navigator.of(context).push<CmrScanResult>(
+                        await Navigator.of(context).push<CmrScanResult>(
                           MaterialPageRoute(
                             builder: (_) => CmrScanScreen(
                               pedido: pedido,
                               expectedPalets: expectedSet.toList(),
                               lineaByPalet: expected,
-                              initialScanned: _scanned,
-                              initialInvalid: _invalid,
+                              initialScanned: const <String>{},
+                              initialInvalid: const <String>{},
                             ),
                           ),
                         );
-                        if (result != null) {
-                          setState(() {
-                            _scanned = result.scanned;
-                            _invalid = result.invalid;
-                          });
-                        }
                       },
                 icon: const Icon(Icons.qr_code_scanner),
                 label: const Text('Iniciar escaneo'),
@@ -92,12 +87,23 @@ class _CmrDetailScreenState extends State<CmrDetailScreen> {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 8),
-              ..._buildPaletList(expectedSet, scanned, _invalid),
+              ..._buildPaletList(expectedSet, scanned),
             ],
           ),
         );
       },
     );
+  }
+
+  List<String> _extractPaletsFromData(Map<String, dynamic> data) {
+    final raw = data['palets'] ?? data['Palets'];
+    if (raw is! Iterable) {
+      return const [];
+    }
+    return raw
+        .map((value) => normalizarPalet(value?.toString() ?? ''))
+        .where((value) => value.isNotEmpty)
+        .toList();
   }
 
   Map<String, int?> _buildExpectedPalets(CmrPedido pedido) {
@@ -135,7 +141,6 @@ class _CmrDetailScreenState extends State<CmrDetailScreen> {
   List<Widget> _buildPaletList(
     Set<String> expected,
     Set<String> scanned,
-    Set<String> invalid,
   ) {
     final items = expected.toList()..sort();
     return items.map((palet) {
@@ -151,19 +156,7 @@ class _CmrDetailScreenState extends State<CmrDetailScreen> {
           subtitle: isScanned ? const Text('Escaneado') : const Text('Pendiente'),
         ),
       );
-    }).toList()
-      ..addAll(
-        invalid.map((palet) {
-          return Card(
-            color: Colors.red.withOpacity(0.05),
-            child: ListTile(
-              leading: const Icon(Icons.error, color: Colors.redAccent),
-              title: Text(palet),
-              subtitle: const Text('No pertenece al pedido'),
-            ),
-          );
-        }),
-      );
+    }).toList();
   }
 }
 
