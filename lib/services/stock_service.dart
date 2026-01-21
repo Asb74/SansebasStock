@@ -236,10 +236,11 @@ class StockService {
 
   Future<void> liberarPaletParaCmr({
     required String palletId,
-    required String pedidoId,
+    String? pedidoId,
   }) async {
     final stockDocId = '1$palletId';
     final ref = _db.collection('Stock').doc(stockDocId);
+    final normalizedPedidoId = pedidoId?.trim() ?? '';
 
     try {
       final snapshot = await ref.get();
@@ -255,8 +256,8 @@ class StockService {
         'HUECO': 'Libre',
         'updatedAt': FieldValue.serverTimestamp(),
       };
-      if (pedidoId.trim().isNotEmpty) {
-        updateData['PEDIDO'] = pedidoId.trim();
+      if (normalizedPedidoId.isNotEmpty) {
+        updateData['PEDIDO'] = normalizedPedidoId;
       }
 
       await ref.set(updateData, SetOptions(merge: true));
