@@ -456,8 +456,15 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         return _ScanTransactionResult.duplicate;
       }
 
+      final estadoActual = data['Estado']?.toString() ?? '';
+      final nuevoEstado =
+          estadoActual == 'Pendiente'
+              ? 'En_Curso'
+              : estadoActual == 'En_Curso_Manual'
+                  ? 'En_Curso_Manual'
+                  : estadoActual;
       tx.update(pedidoRef, {
-        'Estado': estado == 'Pendiente' ? 'En_Curso' : estado,
+        'Estado': nuevoEstado,
         'palets': FieldValue.arrayUnion([paletId]),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -654,7 +661,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
 
     final pedidoRef =
         FirebaseFirestore.instance.collection('Pedidos').doc(pedidoId);
-    _pedidoId = pedidoId;
+    _pedidoId = _normalizePedidoId(pedidoId);
     _pedidoRef = pedidoRef;
     _pedidoSubscription?.cancel();
     _pedidoSubscription = pedidoRef.snapshots().listen(_handlePedidoSnapshot);
