@@ -176,11 +176,8 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
 
       var pedidoRef = _pedidoRef;
       final manualInit = pedidoRef == null
-          ? await _initManualPedidoFromPalet(paletId: paletId, raw: raw)
+          ? await _initManualPedidoFromPalet(paletId: paletId)
           : _ManualInitResult.none;
-      if (manualInit == _ManualInitResult.blocked) {
-        return;
-      }
       final manualCreated = manualInit == _ManualInitResult.created;
       pedidoRef = _pedidoRef;
       if (pedidoRef == null && !manualCreated) {
@@ -195,7 +192,10 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         }
       }
 
-      final isManual = manualCreated || _pedidoEstado == 'En_Curso_Manual';
+      final isManual =
+          manualCreated ||
+          manualInit == _ManualInitResult.loaded ||
+          _pedidoEstado == 'En_Curso_Manual';
       if (isManual && !_expectedPalets.contains(paletId)) {
         setState(() {
           _expectedPalets.add(paletId);
@@ -371,8 +371,8 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       return '';
     }
     if (RegExp(r'^\d{11}$').hasMatch(normalized) &&
-        normalized.startsWith('12')) {
-      return normalized.substring(2);
+        normalized.startsWith('1')) {
+      return normalized.substring(1);
     }
     return normalized;
   }
@@ -693,7 +693,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     return '';
   }
 
-  Future<bool> _pedidoExisteYRedirigirSiEsNecesario(String pedidoId) async {
+  Future<bool> _pedidoExists(String pedidoId) async {
     final normalizedPedidoId = _normalizePedidoId(pedidoId);
     if (normalizedPedidoId.isEmpty) {
       return false;
@@ -703,36 +703,17 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         .collection('Pedidos')
         .doc(normalizedPedidoId)
         .get();
-    if (!snapshot.exists) {
-      return false;
-    }
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Este palet pertenece a un pedido ya existente. Accede desde la lista de pedidos.',
-          ),
-        ),
-      );
-      Navigator.of(context).pop();
-    }
-    return true;
+    return snapshot.exists;
   }
 
   Future<_ManualInitResult> _initManualPedidoFromPalet({
     required String paletId,
-    required String raw,
   }) async {
     if (_pedidoRef != null || _pedidoEstado == 'En_Curso_Manual') {
       return _ManualInitResult.none;
     }
 
     final db = FirebaseFirestore.instance;
-    final pedidoFromQr = _normalizePedidoId(_parsePedidoIdFromQr(raw));
-    if (await _pedidoExisteYRedirigirSiEsNecesario(pedidoFromQr)) {
-      return _ManualInitResult.blocked;
-    }
     final stockSnapshot = await db
         .collection('Stock')
         .doc('1$paletId')
@@ -740,32 +721,62 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     final pedidoFromStockRaw =
         stockSnapshot.data()?['PEDIDO']?.toString() ?? '';
     final pedidoFromStock = _normalizePedidoId(pedidoFromStockRaw);
-    if (await _pedidoExisteYRedirigirSiEsNecesario(pedidoFromStock)) {
-      return _ManualInitResult.blocked;
-    }
 
-    final pedidoId = _normalizePedidoId(pedidoFromQr);
-    DocumentReference<Map<String, dynamic>> pedidoRef;
-    if (pedidoId.isNotEmpty) {
-      final candidateRef = db.collection('Pedidos').doc(pedidoId);
-      pedidoRef = candidateRef;
-      _pedidoId = pedidoId;
-    } else if (pedidoFromStock.isNotEmpty) {
-      final candidateRef = db.collection('Pedidos').doc(pedidoFromStock);
-      pedidoRef = candidateRef;
+    if (pedidoFromStock.isNotEmpty && pedidoFromStock != 'S_P') {
+      final pedidoExists = await _pedidoExists(pedidoFromStock);
+      final pedidoRef =
+          FirebaseFirestore.instance.collection('Pedidos').doc(pedidoFromStock);
+      if (!pedidoExists) {
+        return _createManualPedido(
+          db: db,
+          paletId: paletId,
+          pedidoId: pedidoFromStock,
+        );
+      }
+      final pedidoSnapshot = await pedidoRef.get();
+      if (!pedidoSnapshot.exists) {
+        return _createManualPedido(
+          db: db,
+          paletId: paletId,
+          pedidoId: pedidoFromStock,
+        );
+      }
+      _pedidoRef = pedidoRef;
       _pedidoId = pedidoFromStock;
-    } else {
-      pedidoRef = db.collection('Pedidos').doc();
+      _pedido = CmrPedido.fromSnapshot(pedidoSnapshot);
+      _pedidoEstado = pedidoSnapshot.data()?['Estado']?.toString() ?? '';
+      _pedidoSubscription?.cancel();
+      _pedidoSubscription = pedidoRef.snapshots().listen(_handlePedidoSnapshot);
+      if (mounted) {
+        setState(() {});
+      }
+      return _ManualInitResult.loaded;
     }
 
-    final base = Map<String, dynamic>.from(_pedido?.raw ?? <String, dynamic>{});
-    if (_pedidoId.isNotEmpty) {
-      base['IdPedidoLora'] = _pedidoId;
-    }
-    base['Estado'] = 'En_Curso_Manual';
-    base['palets'] = [paletId];
-    base['createdAt'] = FieldValue.serverTimestamp();
-    base['updatedAt'] = FieldValue.serverTimestamp();
+    return _createManualPedido(
+      db: db,
+      paletId: paletId,
+      pedidoId: '',
+    );
+  }
+
+  Future<_ManualInitResult> _createManualPedido({
+    required FirebaseFirestore db,
+    required String paletId,
+    required String pedidoId,
+  }) async {
+    final pedidoRef = pedidoId.isNotEmpty
+        ? db.collection('Pedidos').doc(pedidoId)
+        : db.collection('Pedidos').doc();
+    _pedidoId = pedidoId;
+
+    final base = <String, dynamic>{
+      if (_pedidoId.isNotEmpty) 'IdPedidoLora': _pedidoId,
+      'Estado': 'En_Curso_Manual',
+      'palets': [paletId],
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
 
     await pedidoRef.set(base, SetOptions(merge: true));
 
@@ -1000,7 +1011,7 @@ class _ScanOverlay extends StatelessWidget {
 
 enum _OverlayStatus { valid, invalid, alreadyScanned }
 
-enum _ManualInitResult { created, blocked, none }
+enum _ManualInitResult { created, loaded, none }
 
 enum _ScanTransactionResult { added, duplicate, expedido }
 
