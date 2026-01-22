@@ -176,7 +176,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
 
       var pedidoRef = _pedidoRef;
       final manualInit = pedidoRef == null
-          ? await _initManualPedidoFromPalet(paletId: paletId)
+          ? await _initManualPedidoFromPalet(paletId: paletId, raw: raw)
           : _ManualInitResult.none;
       final manualCreated = manualInit == _ManualInitResult.created;
       pedidoRef = _pedidoRef;
@@ -695,12 +695,37 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
 
   Future<_ManualInitResult> _initManualPedidoFromPalet({
     required String paletId,
+    required String raw,
   }) async {
     if (_pedidoRef != null || _pedidoEstado == 'En_Curso_Manual') {
       return _ManualInitResult.none;
     }
 
     final db = FirebaseFirestore.instance;
+    final pedidoFromQr = _normalizePedidoId(_parsePedidoIdFromQr(raw));
+    if (pedidoFromQr.isNotEmpty) {
+      final pedidoRef = db.collection('Pedidos').doc(pedidoFromQr);
+      final pedidoSnapshot = await pedidoRef.get();
+      if (!pedidoSnapshot.exists) {
+        return _createManualPedido(
+          db: db,
+          paletId: paletId,
+          pedidoId: pedidoFromQr,
+        );
+      }
+
+      _pedidoRef = pedidoRef;
+      _pedidoId = pedidoFromQr;
+      _pedido = CmrPedido.fromSnapshot(pedidoSnapshot);
+      _pedidoEstado = pedidoSnapshot.data()?['Estado']?.toString() ?? '';
+      _pedidoSubscription?.cancel();
+      _pedidoSubscription = pedidoRef.snapshots().listen(_handlePedidoSnapshot);
+      if (mounted) {
+        setState(() {});
+      }
+      return _ManualInitResult.loaded;
+    }
+
     final stockSnapshot = await db
         .collection('Stock')
         .doc('1$paletId')
@@ -747,10 +772,10 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     final pedidoRef = pedidoId.isNotEmpty
         ? db.collection('Pedidos').doc(pedidoId)
         : db.collection('Pedidos').doc();
-    _pedidoId = pedidoId;
+    _pedidoId = pedidoId.isNotEmpty ? pedidoId : pedidoRef.id;
 
     final base = <String, dynamic>{
-      if (_pedidoId.isNotEmpty) 'IdPedidoLora': _pedidoId,
+      'IdPedidoLora': _pedidoId,
       'Estado': 'En_Curso_Manual',
       'palets': [paletId],
       'createdAt': FieldValue.serverTimestamp(),
