@@ -605,12 +605,34 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     required String paletId,
     required String raw,
   }) async {
-    if (_pedidoRef != null) {
+    if (_pedidoRef != null || _pedidoEstado == 'En_Curso_Manual') {
       return false;
     }
 
-    final pedidoId = _parsePedidoIdFromQr(raw);
     final db = FirebaseFirestore.instance;
+    final stockSnapshot =
+        await db.collection('Stock').doc('1$paletId').get();
+    final pedidoFromStock =
+        stockSnapshot.data()?['PEDIDO']?.toString().trim() ?? '';
+    if (pedidoFromStock.isNotEmpty) {
+      final pedidoSnapshot =
+          await db.collection('Pedidos').doc(pedidoFromStock).get();
+      if (pedidoSnapshot.exists) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Este palet pertenece a un pedido existente. Accede desde la lista de pedidos.',
+              ),
+            ),
+          );
+          Navigator.of(context).pop();
+        }
+        return false;
+      }
+    }
+
+    final pedidoId = _parsePedidoIdFromQr(raw);
     DocumentReference<Map<String, dynamic>> pedidoRef;
     if (pedidoId.isNotEmpty) {
       final candidateRef = db.collection('Pedidos').doc(pedidoId);
