@@ -39,6 +39,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
   bool _scanInProgress = false;
   _ScanOverlayData? _overlayData;
   final Set<String> _invalid = <String>{};
+  final Set<String> _processingPalets = <String>{};
   Set<String> _expectedPalets = <String>{};
   Map<String, int?> _lineaByPalet = <String, int?>{};
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _pedidoSubscription;
@@ -147,12 +148,14 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
   Future<void> _handle(String raw) async {
     if (_busy) return;
 
+    var processedPaletId = '';
     setState(() {
       _busy = true;
     });
 
     try {
       final paletId = _normalizePaletId(parsePaletFromQr(raw));
+      processedPaletId = paletId;
       if (paletId.isEmpty) {
         await _showOverlayResult(
           paletId: '—',
@@ -161,6 +164,15 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         );
         return;
       }
+      if (_processingPalets.contains(paletId)) {
+        await _showOverlayResult(
+          paletId: paletId,
+          message: 'Palet ya escaneado',
+          status: _OverlayStatus.alreadyScanned,
+        );
+        return;
+      }
+      _processingPalets.add(paletId);
 
       var pedidoRef = _pedidoRef;
       final manualInit = pedidoRef == null
@@ -292,6 +304,9 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         status: _OverlayStatus.invalid,
       );
     } finally {
+      if (processedPaletId.isNotEmpty) {
+        _processingPalets.remove(processedPaletId);
+      }
       if (mounted) {
         setState(() {
           _busy = false;
@@ -416,7 +431,13 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
                 'IdPedidoLora': _pedidoId,
               },
         );
-        base['Estado'] = 'En_Curso';
+        final baseEstado = base['Estado']?.toString() ?? '';
+        if (baseEstado == 'En_Curso_Manual' ||
+            _pedidoEstado == 'En_Curso_Manual') {
+          base['Estado'] = 'En_Curso_Manual';
+        } else {
+          base['Estado'] = 'En_Curso';
+        }
         base['palets'] = [paletId];
         base['createdAt'] = FieldValue.serverTimestamp();
         base['updatedAt'] = FieldValue.serverTimestamp();
@@ -626,7 +647,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
   Future<DocumentReference<Map<String, dynamic>>?> _resolvePedidoRefFromQr(
     String raw,
   ) async {
-    final pedidoId = _parsePedidoIdFromQr(raw);
+    final pedidoId = _normalizePedidoId(_parsePedidoIdFromQr(raw));
     if (pedidoId.isEmpty) {
       return null;
     }
@@ -665,6 +686,33 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     return '';
   }
 
+  Future<bool> _pedidoExisteYRedirigirSiEsNecesario(String pedidoId) async {
+    final normalizedPedidoId = _normalizePedidoId(pedidoId);
+    if (normalizedPedidoId.isEmpty) {
+      return false;
+    }
+
+    final snapshot = await FirebaseFirestore.instance
+        .collection('Pedidos')
+        .doc(normalizedPedidoId)
+        .get();
+    if (!snapshot.exists) {
+      return false;
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Este palet pertenece a un pedido ya existente. Accede desde la lista de pedidos.',
+          ),
+        ),
+      );
+      Navigator.of(context).pop();
+    }
+    return true;
+  }
+
   Future<_ManualInitResult> _initManualPedidoFromPalet({
     required String paletId,
     required String raw,
@@ -674,6 +722,10 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     }
 
     final db = FirebaseFirestore.instance;
+    final pedidoFromQr = _normalizePedidoId(_parsePedidoIdFromQr(raw));
+    if (await _pedidoExisteYRedirigirSiEsNecesario(pedidoFromQr)) {
+      return _ManualInitResult.blocked;
+    }
     final stockSnapshot = await db
         .collection('Stock')
         .doc('1$paletId')
@@ -681,50 +733,18 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     final pedidoFromStockRaw =
         stockSnapshot.data()?['PEDIDO']?.toString() ?? '';
     final pedidoFromStock = _normalizePedidoId(pedidoFromStockRaw);
-    if (pedidoFromStock.isNotEmpty) {
-      final pedidoSnapshot =
-          await db.collection('Pedidos').doc(pedidoFromStock).get();
-      if (pedidoSnapshot.exists) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Este palet pertenece a un pedido ya existente. Accede desde la lista de pedidos.',
-              ),
-            ),
-          );
-          Navigator.of(context).pop();
-        }
-        return _ManualInitResult.blocked;
-      }
+    if (await _pedidoExisteYRedirigirSiEsNecesario(pedidoFromStock)) {
+      return _ManualInitResult.blocked;
     }
 
-    final pedidoId = _parsePedidoIdFromQr(raw);
+    final pedidoId = _normalizePedidoId(pedidoFromQr);
     DocumentReference<Map<String, dynamic>> pedidoRef;
     if (pedidoId.isNotEmpty) {
       final candidateRef = db.collection('Pedidos').doc(pedidoId);
-      final snapshot = await candidateRef.get();
-      if (snapshot.exists) {
-        return _ManualInitResult.none;
-      }
       pedidoRef = candidateRef;
       _pedidoId = pedidoId;
     } else if (pedidoFromStock.isNotEmpty) {
       final candidateRef = db.collection('Pedidos').doc(pedidoFromStock);
-      final snapshot = await candidateRef.get();
-      if (snapshot.exists) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Este palet pertenece a un pedido ya existente. Accede desde la lista de pedidos.',
-              ),
-            ),
-          );
-          Navigator.of(context).pop();
-        }
-        return _ManualInitResult.blocked;
-      }
       pedidoRef = candidateRef;
       _pedidoId = pedidoFromStock;
     } else {
