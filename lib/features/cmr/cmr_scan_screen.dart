@@ -693,19 +693,6 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     return '';
   }
 
-  Future<bool> _pedidoExists(String pedidoId) async {
-    final normalizedPedidoId = _normalizePedidoId(pedidoId);
-    if (normalizedPedidoId.isEmpty) {
-      return false;
-    }
-
-    final snapshot = await FirebaseFirestore.instance
-        .collection('Pedidos')
-        .doc(normalizedPedidoId)
-        .get();
-    return snapshot.exists;
-  }
-
   Future<_ManualInitResult> _initManualPedidoFromPalet({
     required String paletId,
   }) async {
@@ -722,42 +709,34 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         stockSnapshot.data()?['PEDIDO']?.toString() ?? '';
     final pedidoFromStock = _normalizePedidoId(pedidoFromStockRaw);
 
-    if (pedidoFromStock.isNotEmpty && pedidoFromStock != 'S_P') {
-      final pedidoExists = await _pedidoExists(pedidoFromStock);
-      final pedidoRef =
-          FirebaseFirestore.instance.collection('Pedidos').doc(pedidoFromStock);
-      if (!pedidoExists) {
-        return _createManualPedido(
-          db: db,
-          paletId: paletId,
-          pedidoId: pedidoFromStock,
-        );
-      }
-      final pedidoSnapshot = await pedidoRef.get();
-      if (!pedidoSnapshot.exists) {
-        return _createManualPedido(
-          db: db,
-          paletId: paletId,
-          pedidoId: pedidoFromStock,
-        );
-      }
-      _pedidoRef = pedidoRef;
-      _pedidoId = pedidoFromStock;
-      _pedido = CmrPedido.fromSnapshot(pedidoSnapshot);
-      _pedidoEstado = pedidoSnapshot.data()?['Estado']?.toString() ?? '';
-      _pedidoSubscription?.cancel();
-      _pedidoSubscription = pedidoRef.snapshots().listen(_handlePedidoSnapshot);
-      if (mounted) {
-        setState(() {});
-      }
-      return _ManualInitResult.loaded;
+    if (pedidoFromStock.isEmpty || pedidoFromStock == 'S_P') {
+      return _createManualPedido(
+        db: db,
+        paletId: paletId,
+        pedidoId: '',
+      );
     }
 
-    return _createManualPedido(
-      db: db,
-      paletId: paletId,
-      pedidoId: '',
-    );
+    final pedidoRef = db.collection('Pedidos').doc(pedidoFromStock);
+    final pedidoSnapshot = await pedidoRef.get();
+    if (!pedidoSnapshot.exists) {
+      return _createManualPedido(
+        db: db,
+        paletId: paletId,
+        pedidoId: pedidoFromStock,
+      );
+    }
+
+    _pedidoRef = pedidoRef;
+    _pedidoId = pedidoFromStock;
+    _pedido = CmrPedido.fromSnapshot(pedidoSnapshot);
+    _pedidoEstado = pedidoSnapshot.data()?['Estado']?.toString() ?? '';
+    _pedidoSubscription?.cancel();
+    _pedidoSubscription = pedidoRef.snapshots().listen(_handlePedidoSnapshot);
+    if (mounted) {
+      setState(() {});
+    }
+    return _ManualInitResult.loaded;
   }
 
   Future<_ManualInitResult> _createManualPedido({
