@@ -51,12 +51,12 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
   @override
   void initState() {
     super.initState();
-    _expectedPalets = widget.expectedPalets.map(normalizarPalet).toSet();
+    _expectedPalets = widget.expectedPalets.map(_normalizePaletId).toSet();
     _lineaByPalet = {
       for (final entry in widget.lineaByPalet.entries)
-        normalizarPalet(entry.key): entry.value,
+        _normalizePaletId(entry.key): entry.value,
     };
-    _invalid.addAll(widget.initialInvalid.map(normalizarPalet));
+    _invalid.addAll(widget.initialInvalid.map(_normalizePaletId));
     _pedido = widget.pedido;
     _pedidoRef = widget.pedido?.ref;
     _pedidoId = widget.pedido?.idPedidoLora ?? '';
@@ -152,7 +152,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     });
 
     try {
-      final paletId = parsePaletFromQr(raw);
+      final paletId = _normalizePaletId(parsePaletFromQr(raw));
       if (paletId.isEmpty) {
         await _showOverlayResult(
           paletId: '—',
@@ -163,9 +163,13 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       }
 
       var pedidoRef = _pedidoRef;
-      final manualCreated = pedidoRef == null
+      final manualInit = pedidoRef == null
           ? await _initManualPedidoFromPalet(paletId: paletId, raw: raw)
-          : false;
+          : _ManualInitResult.none;
+      if (manualInit == _ManualInitResult.blocked) {
+        return;
+      }
+      final manualCreated = manualInit == _ManualInitResult.created;
       pedidoRef = _pedidoRef;
       if (pedidoRef == null && !manualCreated) {
         pedidoRef = await _resolvePedidoRefFromQr(raw);
@@ -216,6 +220,19 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         }
       }
 
+      final alreadyScanned = await _isPaletAlreadyScanned(
+        pedidoRef: pedidoRef,
+        paletId: paletId,
+      );
+      if (alreadyScanned) {
+        await _showOverlayResult(
+          paletId: paletId,
+          message: 'Palet ya escaneado',
+          status: _OverlayStatus.alreadyScanned,
+        );
+        return;
+      }
+
       final scanResult = await _upsertPaletInPedido(
         pedidoRef: pedidoRef,
         paletId: paletId,
@@ -254,21 +271,21 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         status: _OverlayStatus.valid,
       );
     } on FormatException catch (e) {
-      final paletId = parsePaletFromQr(raw);
+      final paletId = _normalizePaletId(parsePaletFromQr(raw));
       await _showOverlayResult(
         paletId: paletId.isEmpty ? '—' : paletId,
         message: e.message,
         status: _OverlayStatus.invalid,
       );
     } on StockProcessException catch (e) {
-      final paletId = parsePaletFromQr(raw);
+      final paletId = _normalizePaletId(parsePaletFromQr(raw));
       await _showOverlayResult(
         paletId: paletId.isEmpty ? '—' : paletId,
         message: e.message,
         status: _OverlayStatus.invalid,
       );
     } on FirebaseException {
-      final paletId = parsePaletFromQr(raw);
+      final paletId = _normalizePaletId(parsePaletFromQr(raw));
       await _showOverlayResult(
         paletId: paletId.isEmpty ? '—' : paletId,
         message: 'No se pudo actualizar el palet',
@@ -289,7 +306,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       return const [];
     }
     return raw
-        .map((value) => normalizarPalet(value?.toString() ?? ''))
+        .map((value) => _normalizePaletId(value?.toString() ?? ''))
         .where((value) => value.isNotEmpty)
         .toList();
   }
@@ -314,7 +331,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       }
       final palets = paletRaw
           .split('|')
-          .map(normalizarPalet)
+          .map(_normalizePaletId)
           .where((value) => value.isNotEmpty);
       for (final palet in palets) {
         map.putIfAbsent(palet, () => lineNumber);
@@ -333,6 +350,28 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     return int.tryParse(value?.toString() ?? '');
   }
 
+  String _normalizePaletId(String raw) {
+    final normalized = normalizarPalet(raw).trim();
+    if (normalized.isEmpty) {
+      return '';
+    }
+    if (RegExp(r'^\d{11}$').hasMatch(normalized) &&
+        normalized.startsWith('12')) {
+      return normalized.substring(2);
+    }
+    return normalized;
+  }
+
+  String _normalizePedidoId(String? raw) {
+    final value = raw?.trim() ?? '';
+    if (value.isEmpty) {
+      return '';
+    }
+    final whitespaceNormalized = value.replaceAll(RegExp(r'\s+'), '_');
+    final slashNormalized = whitespaceNormalized.replaceAll('/', '_');
+    return slashNormalized.replaceAll(RegExp(r'_+'), '_');
+  }
+
   Future<Set<String>> _fetchPaletsFromFirestore() async {
     final pedidoRef = _pedidoRef;
     if (pedidoRef == null) {
@@ -345,6 +384,22 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     }
     final data = snapshot.data() ?? <String, dynamic>{};
     return _extractPaletsFromData(data).toSet();
+  }
+
+  Future<bool> _isPaletAlreadyScanned({
+    required DocumentReference<Map<String, dynamic>> pedidoRef,
+    required String paletId,
+  }) async {
+    if (_firestorePalets.contains(paletId)) {
+      return true;
+    }
+    final snapshot = await pedidoRef.get();
+    if (!snapshot.exists) {
+      return false;
+    }
+    final data = snapshot.data() ?? <String, dynamic>{};
+    final palets = _extractPaletsFromData(data);
+    return palets.contains(paletId);
   }
 
   Future<_ScanTransactionResult> _upsertPaletInPedido({
@@ -450,7 +505,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     final user = FirebaseAuth.instance.currentUser;
     final userName = await _loadUserName(user);
     final pendientesSet = pendientes
-        .map(normalizarPalet)
+        .map(_normalizePaletId)
         .where((value) => value.isNotEmpty)
         .toSet();
 
@@ -499,7 +554,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
                   .where((value) => value.isNotEmpty)
                   .where(
                     (value) =>
-                        !pendientesSet.contains(normalizarPalet(value)),
+                        !pendientesSet.contains(_normalizePaletId(value)),
                   )
                   .toList();
               if (palets.isEmpty) {
@@ -591,7 +646,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       caseSensitive: false,
     ).firstMatch(raw);
     if (match != null) {
-      return match.group(1)?.trim() ?? '';
+      return _normalizePedidoId(match.group(1));
     }
 
     try {
@@ -602,7 +657,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
             key == 'PEDIDOLORA' ||
             key == 'IDPEDIDO' ||
             key == 'PEDIDO') {
-          return entry.value.trim();
+          return _normalizePedidoId(entry.value);
         }
       }
     } catch (_) {}
@@ -610,19 +665,22 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     return '';
   }
 
-  Future<bool> _initManualPedidoFromPalet({
+  Future<_ManualInitResult> _initManualPedidoFromPalet({
     required String paletId,
     required String raw,
   }) async {
     if (_pedidoRef != null || _pedidoEstado == 'En_Curso_Manual') {
-      return false;
+      return _ManualInitResult.none;
     }
 
     final db = FirebaseFirestore.instance;
-    final stockSnapshot =
-        await db.collection('Stock').doc('1$paletId').get();
-    final pedidoFromStock =
-        stockSnapshot.data()?['PEDIDO']?.toString().trim() ?? '';
+    final stockSnapshot = await db
+        .collection('Stock')
+        .doc('1$paletId')
+        .get();
+    final pedidoFromStockRaw =
+        stockSnapshot.data()?['PEDIDO']?.toString() ?? '';
+    final pedidoFromStock = _normalizePedidoId(pedidoFromStockRaw);
     if (pedidoFromStock.isNotEmpty) {
       final pedidoSnapshot =
           await db.collection('Pedidos').doc(pedidoFromStock).get();
@@ -631,13 +689,13 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text(
-                'Este palet pertenece a un pedido existente. Accede desde la lista de pedidos.',
+                'Este palet pertenece a un pedido ya existente. Accede desde la lista de pedidos.',
               ),
             ),
           );
           Navigator.of(context).pop();
         }
-        return false;
+        return _ManualInitResult.blocked;
       }
     }
 
@@ -647,10 +705,28 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       final candidateRef = db.collection('Pedidos').doc(pedidoId);
       final snapshot = await candidateRef.get();
       if (snapshot.exists) {
-        return false;
+        return _ManualInitResult.none;
       }
       pedidoRef = candidateRef;
       _pedidoId = pedidoId;
+    } else if (pedidoFromStock.isNotEmpty) {
+      final candidateRef = db.collection('Pedidos').doc(pedidoFromStock);
+      final snapshot = await candidateRef.get();
+      if (snapshot.exists) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Este palet pertenece a un pedido ya existente. Accede desde la lista de pedidos.',
+              ),
+            ),
+          );
+          Navigator.of(context).pop();
+        }
+        return _ManualInitResult.blocked;
+      }
+      pedidoRef = candidateRef;
+      _pedidoId = pedidoFromStock;
     } else {
       pedidoRef = db.collection('Pedidos').doc();
     }
@@ -677,7 +753,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       });
     }
 
-    return true;
+    return _ManualInitResult.created;
   }
 
   Future<String?> _loadUserName(User? user) async {
@@ -896,6 +972,8 @@ class _ScanOverlay extends StatelessWidget {
 }
 
 enum _OverlayStatus { valid, invalid, alreadyScanned }
+
+enum _ManualInitResult { created, blocked, none }
 
 enum _ScanTransactionResult { added, duplicate, expedido }
 
