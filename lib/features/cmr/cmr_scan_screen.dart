@@ -163,7 +163,11 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       }
 
       var pedidoRef = _pedidoRef;
-      if (pedidoRef == null) {
+      final manualCreated = pedidoRef == null
+          ? await _initManualPedidoFromPalet(paletId: paletId, raw: raw)
+          : false;
+      pedidoRef = _pedidoRef;
+      if (pedidoRef == null && !manualCreated) {
         pedidoRef = await _resolvePedidoRefFromQr(raw);
         if (pedidoRef == null) {
           await _showOverlayResult(
@@ -175,7 +179,14 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         }
       }
 
-      final shouldValidate = _expectedPalets.isNotEmpty;
+      final isManual = manualCreated || _pedidoEstado == 'En_Curso_Manual';
+      if (isManual && !_expectedPalets.contains(paletId)) {
+        setState(() {
+          _expectedPalets.add(paletId);
+        });
+      }
+
+      final shouldValidate = _expectedPalets.isNotEmpty && !isManual;
       if (shouldValidate) {
         final pedidoSnapshot = await pedidoRef.get();
         final pedidoExiste = pedidoSnapshot.exists;
@@ -588,6 +599,54 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     } catch (_) {}
 
     return '';
+  }
+
+  Future<bool> _initManualPedidoFromPalet({
+    required String paletId,
+    required String raw,
+  }) async {
+    if (_pedidoRef != null) {
+      return false;
+    }
+
+    final pedidoId = _parsePedidoIdFromQr(raw);
+    final db = FirebaseFirestore.instance;
+    DocumentReference<Map<String, dynamic>> pedidoRef;
+    if (pedidoId.isNotEmpty) {
+      final candidateRef = db.collection('Pedidos').doc(pedidoId);
+      final snapshot = await candidateRef.get();
+      if (snapshot.exists) {
+        return false;
+      }
+      pedidoRef = candidateRef;
+      _pedidoId = pedidoId;
+    } else {
+      pedidoRef = db.collection('Pedidos').doc();
+    }
+
+    final base = Map<String, dynamic>.from(_pedido?.raw ?? <String, dynamic>{});
+    if (_pedidoId.isNotEmpty) {
+      base['IdPedidoLora'] = _pedidoId;
+    }
+    base['Estado'] = 'En_Curso_Manual';
+    base['palets'] = [paletId];
+    base['createdAt'] = FieldValue.serverTimestamp();
+    base['updatedAt'] = FieldValue.serverTimestamp();
+
+    await pedidoRef.set(base, SetOptions(merge: true));
+
+    _pedidoRef = pedidoRef;
+    _pedidoSubscription?.cancel();
+    _pedidoSubscription = pedidoRef.snapshots().listen(_handlePedidoSnapshot);
+
+    if (mounted) {
+      setState(() {
+        _pedidoEstado = 'En_Curso_Manual';
+        _expectedPalets = {paletId};
+      });
+    }
+
+    return true;
   }
 
   Future<String?> _loadUserName(User? user) async {
