@@ -186,6 +186,15 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         });
       }
 
+      if (pedidoRef == null) {
+        await _showOverlayResult(
+          paletId: paletId,
+          message: 'No se pudo obtener el pedido para validar el palet',
+          status: _OverlayStatus.invalid,
+        );
+        return;
+      }
+
       final shouldValidate = _expectedPalets.isNotEmpty && !isManual;
       if (shouldValidate) {
         final pedidoSnapshot = await pedidoRef.get();
