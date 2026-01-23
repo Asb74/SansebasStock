@@ -193,15 +193,16 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       }
 
       final pedidoRef = manualInit.ref;
-      final isManual = manualInit.estado == 'En_Curso_Manual';
+      final estadoNormalizado = manualInit.estado;
+      final isManual = estadoNormalizado == 'En_Curso_Manual';
       if (isManual && !_expectedPalets.contains(paletId)) {
         setState(() {
           _expectedPalets.add(paletId);
         });
       }
 
-      if (manualInit.estado == 'En_Curso') {
-        final pertenece = await paletPerteneceAPedido(
+      if (estadoNormalizado == 'En_Curso') {
+        final pertenece = await paletPerteneceALineasPedido(
           firestore: FirebaseFirestore.instance,
           pedidoRef: pedidoRef,
           paletId: paletId,
@@ -279,9 +280,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
 
       if (scanResult == _ScanTransactionResult.added) {
         final stockService = ref.read(stockServiceProvider);
-        final pedidoId = _pedidoId.isNotEmpty
-            ? _pedidoId
-            : _pedido?.idPedidoLora ?? '';
+        final pedidoId = pedidoRef.id;
         await stockService.liberarPaletParaCmr(
           palletId: paletId,
           pedidoId: pedidoId,
@@ -435,7 +434,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     }
 
     final pedidoDocId = _normalizePedidoId(pedidoDisplay);
-    if (pedidoDocId.isEmpty || !_isPedidoSeleccionable(pedidoDocId)) {
+    if (pedidoDocId.isEmpty) {
       await _showOverlayResult(
         paletId: paletId,
         message: 'Palet no seleccionable para CMR (sin pedido válido)',
@@ -782,9 +781,12 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       pedidoDisplay: pedido.displayId,
       snapshot: pedidoSnapshot,
     );
+    final estadoNormalizado = _normalizePedidoEstado(
+      pedidoSnapshot.data()?['Estado']?.toString(),
+    );
     return _PedidoLoadResult(
       ref: pedidoRef,
-      estado: pedidoSnapshot.data()?['Estado']?.toString() ?? '',
+      estado: estadoNormalizado,
       created: false,
     );
   }
@@ -808,9 +810,11 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
 
     await pedidoRef.set(base, SetOptions(merge: true));
 
-    _pedidoRef = pedidoRef;
-    _pedidoSubscription?.cancel();
-    _pedidoSubscription = pedidoRef.snapshots().listen(_handlePedidoSnapshot);
+    _switchPedidoContext(
+      pedidoRef: pedidoRef,
+      pedidoDisplay: pedidoDisplay,
+      snapshot: null,
+    );
 
     if (mounted) {
       setState(() {
@@ -822,6 +826,20 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     }
 
     return;
+  }
+
+  String _normalizePedidoEstado(String? estadoRaw) {
+    final estado = estadoRaw?.trim() ?? '';
+    if (estado == 'Expedido') {
+      return 'Expedido';
+    }
+    if (estado == 'En_Curso_Manual') {
+      return 'En_Curso_Manual';
+    }
+    if (estado == 'Pendiente' || estado == 'En_Curso' || estado.isEmpty) {
+      return 'En_Curso';
+    }
+    return 'En_Curso';
   }
 
   Future<String?> _loadUserName(User? user) async {
