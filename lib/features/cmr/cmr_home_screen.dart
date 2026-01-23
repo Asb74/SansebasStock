@@ -31,7 +31,7 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
 
     query = query.where(
       'Estado',
-      whereIn: ['En_Curso', 'En_Curso_Manual'],
+      whereIn: ['Pendiente', 'En_Curso', 'En_Curso_Manual'],
     );
 
     if (soloPedidosP) {
@@ -137,7 +137,7 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
                         return false;
                       }
                       final estado = _normalizeEstado(pedido.estado);
-                      return estado == 'En_Curso';
+                      return estado == 'Pendiente' || estado == 'En_Curso';
                     })
                     .toList();
 
