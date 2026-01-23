@@ -61,6 +61,18 @@ Future<bool> paletPerteneceAPedido({
   required DocumentReference<Map<String, dynamic>> pedidoRef,
   required String paletId,
 }) async {
+  return paletPerteneceALineasPedido(
+    firestore: firestore,
+    pedidoRef: pedidoRef,
+    paletId: paletId,
+  );
+}
+
+Future<bool> paletPerteneceALineasPedido({
+  required FirebaseFirestore firestore,
+  required DocumentReference<Map<String, dynamic>> pedidoRef,
+  required String paletId,
+}) async {
   final snapshot = await pedidoRef.get();
   if (!snapshot.exists) {
     return false;
