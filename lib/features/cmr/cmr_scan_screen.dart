@@ -176,8 +176,11 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
 
       var pedidoRef = _pedidoRef;
       final manualInit = pedidoRef == null
-          ? await _initManualPedidoFromPalet(paletId: paletId, raw: raw)
+          ? await _initManualPedidoFromPalet(paletId: paletId)
           : _ManualInitResult.none;
+      if (manualInit == _ManualInitResult.invalid) {
+        return;
+      }
       final manualCreated = manualInit == _ManualInitResult.created;
       pedidoRef = _pedidoRef;
       if (pedidoRef == null && !manualCreated) {
@@ -385,6 +388,19 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     final whitespaceNormalized = value.replaceAll(RegExp(r'\s+'), '_');
     final slashNormalized = whitespaceNormalized.replaceAll('/', '_');
     return slashNormalized.replaceAll(RegExp(r'_+'), '_');
+  }
+
+  bool _isPedidoSeleccionable(String pedidoDisplay) {
+    final normalized = pedidoDisplay.trim();
+    if (normalized.isEmpty) {
+      return false;
+    }
+    final upper = normalized.toUpperCase();
+    if (upper == 'S/P' || upper == 'S_P' || upper == 'SP') {
+      return false;
+    }
+    const prefixes = <String>['PC', 'PK', 'PM', 'PN', 'PS'];
+    return prefixes.any((prefix) => upper.startsWith(prefix));
   }
 
   Future<Set<String>> _fetchPaletsFromFirestore() async {
@@ -695,65 +711,42 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
 
   Future<_ManualInitResult> _initManualPedidoFromPalet({
     required String paletId,
-    required String raw,
   }) async {
     if (_pedidoRef != null || _pedidoEstado == 'En_Curso_Manual') {
       return _ManualInitResult.none;
     }
 
     final db = FirebaseFirestore.instance;
-    final pedidoFromQr = _normalizePedidoId(_parsePedidoIdFromQr(raw));
-    if (pedidoFromQr.isNotEmpty) {
-      final pedidoRef = db.collection('Pedidos').doc(pedidoFromQr);
-      final pedidoSnapshot = await pedidoRef.get();
-      if (!pedidoSnapshot.exists) {
-        return _createManualPedido(
-          db: db,
-          paletId: paletId,
-          pedidoId: pedidoFromQr,
-        );
-      }
-
-      _pedidoRef = pedidoRef;
-      _pedidoId = pedidoFromQr;
-      _pedido = CmrPedido.fromSnapshot(pedidoSnapshot);
-      _pedidoEstado = pedidoSnapshot.data()?['Estado']?.toString() ?? '';
-      _pedidoSubscription?.cancel();
-      _pedidoSubscription = pedidoRef.snapshots().listen(_handlePedidoSnapshot);
-      if (mounted) {
-        setState(() {});
-      }
-      return _ManualInitResult.loaded;
-    }
-
     final stockSnapshot = await db
         .collection('Stock')
         .doc('1$paletId')
         .get();
     final pedidoFromStockRaw =
         stockSnapshot.data()?['PEDIDO']?.toString() ?? '';
-    final pedidoFromStock = _normalizePedidoId(pedidoFromStockRaw);
-
-    if (pedidoFromStock.isEmpty || pedidoFromStock == 'S_P') {
-      return _createManualPedido(
-        db: db,
+    final pedidoDisplay = pedidoFromStockRaw.trim();
+    if (!_isPedidoSeleccionable(pedidoDisplay)) {
+      await _showOverlayResult(
         paletId: paletId,
-        pedidoId: '',
+        message: 'Palet no seleccionable para CMR (sin pedido válido)',
+        status: _OverlayStatus.invalid,
       );
+      return _ManualInitResult.invalid;
     }
 
-    final pedidoRef = db.collection('Pedidos').doc(pedidoFromStock);
+    final pedidoDocId = _normalizePedidoId(pedidoDisplay);
+    final pedidoRef = db.collection('Pedidos').doc(pedidoDocId);
     final pedidoSnapshot = await pedidoRef.get();
     if (!pedidoSnapshot.exists) {
       return _createManualPedido(
         db: db,
         paletId: paletId,
-        pedidoId: pedidoFromStock,
+        pedidoDocId: pedidoDocId,
+        pedidoDisplay: pedidoDisplay,
       );
     }
 
     _pedidoRef = pedidoRef;
-    _pedidoId = pedidoFromStock;
+    _pedidoId = pedidoDisplay;
     _pedido = CmrPedido.fromSnapshot(pedidoSnapshot);
     _pedidoEstado = pedidoSnapshot.data()?['Estado']?.toString() ?? '';
     _pedidoSubscription?.cancel();
@@ -767,15 +760,14 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
   Future<_ManualInitResult> _createManualPedido({
     required FirebaseFirestore db,
     required String paletId,
-    required String pedidoId,
+    required String pedidoDocId,
+    required String pedidoDisplay,
   }) async {
-    final pedidoRef = pedidoId.isNotEmpty
-        ? db.collection('Pedidos').doc(pedidoId)
-        : db.collection('Pedidos').doc();
-    _pedidoId = pedidoId.isNotEmpty ? pedidoId : pedidoRef.id;
+    final pedidoRef = db.collection('Pedidos').doc(pedidoDocId);
+    _pedidoId = pedidoDisplay;
 
     final base = <String, dynamic>{
-      'IdPedidoLora': _pedidoId,
+      'IdPedidoLora': pedidoDisplay,
       'Estado': 'En_Curso_Manual',
       'palets': [paletId],
       'createdAt': FieldValue.serverTimestamp(),
@@ -1015,7 +1007,7 @@ class _ScanOverlay extends StatelessWidget {
 
 enum _OverlayStatus { valid, invalid, alreadyScanned }
 
-enum _ManualInitResult { created, loaded, none }
+enum _ManualInitResult { created, loaded, invalid, none }
 
 enum _ScanTransactionResult { added, duplicate, expedido }
 

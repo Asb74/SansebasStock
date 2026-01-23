@@ -29,6 +29,11 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
     Query<Map<String, dynamic>> query =
         FirebaseFirestore.instance.collection('Pedidos');
 
+    query = query.where(
+      'Estado',
+      whereIn: ['En_Curso', 'En_Curso_Manual'],
+    );
+
     if (soloPedidosP) {
       query = query
           .where('IdPedidoLora', isGreaterThanOrEqualTo: 'P')
@@ -132,7 +137,7 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
                         return false;
                       }
                       final estado = _normalizeEstado(pedido.estado);
-                      return estado == 'Pendiente' || estado == 'En_Curso';
+                      return estado == 'En_Curso';
                     })
                     .toList();
 
@@ -218,6 +223,8 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
       return 'Pendiente';
     }
     switch (normalized) {
+      case 'En_Curso_Manual':
+        return 'En_Curso';
       case 'Pendiente':
       case 'En_Curso':
       case 'Expedido':
