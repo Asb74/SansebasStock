@@ -40,7 +40,7 @@ class _CmrHomeScreenState extends State<CmrHomeScreen> {
           .where('IdPedidoLora', isLessThan: 'Q');
     }
 
-    return query.snapshots();
+    return query.orderBy('updatedAt', descending: true).snapshots();
   }
 
   @override

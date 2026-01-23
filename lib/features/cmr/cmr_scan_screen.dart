@@ -179,6 +179,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
           ? await _initManualPedidoFromPalet(paletId: paletId)
           : _ManualInitResult.none;
       if (manualInit == _ManualInitResult.invalid) {
+        _processingPalets.remove(paletId);
         return;
       }
       final manualCreated = manualInit == _ManualInitResult.created;
@@ -195,10 +196,13 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         }
       }
 
+      final treatManualAsEnCurso =
+          manualInit == _ManualInitResult.loaded &&
+          _pedidoEstado == 'En_Curso_Manual';
       final isManual =
           manualCreated ||
-          manualInit == _ManualInitResult.loaded ||
-          _pedidoEstado == 'En_Curso_Manual';
+          (manualInit == _ManualInitResult.loaded && !treatManualAsEnCurso) ||
+          (_pedidoEstado == 'En_Curso_Manual' && !treatManualAsEnCurso);
       if (isManual && !_expectedPalets.contains(paletId)) {
         setState(() {
           _expectedPalets.add(paletId);
@@ -493,6 +497,10 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     required String message,
     required _OverlayStatus status,
   }) async {
+    if (status == _OverlayStatus.invalid &&
+        _processingPalets.contains(paletId)) {
+      _processingPalets.remove(paletId);
+    }
     setState(() {
       _showOverlay = true;
       _overlayData = _ScanOverlayData(
