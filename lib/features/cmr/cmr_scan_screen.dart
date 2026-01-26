@@ -184,6 +184,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
           message: 'El palet no existe en Stock',
           status: _OverlayStatus.invalid,
         );
+        _processingPalets.remove(paletId);
         return;
       }
 
@@ -226,6 +227,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
           message: 'Palet escaneado. Nuevo pedido creado',
           status: _OverlayStatus.valid,
         );
+        _processingPalets.remove(paletId);
         return;
       }
 
@@ -242,6 +244,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
             message: 'El palet no pertenece al pedido',
             status: _OverlayStatus.invalid,
           );
+          _processingPalets.remove(paletId);
           return;
         }
       } else if (!isManual && _expectedPalets.isNotEmpty) {
@@ -257,6 +260,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
             message: 'El palet no pertenece al pedido',
             status: _OverlayStatus.invalid,
           );
+          _processingPalets.remove(paletId);
           return;
         }
       }
@@ -271,6 +275,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
           message: 'Palet ya escaneado',
           status: _OverlayStatus.alreadyScanned,
         );
+        _processingPalets.remove(paletId);
         return;
       }
 
@@ -287,6 +292,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
           message: 'Pedido ya expedido',
           status: _OverlayStatus.invalid,
         );
+        _processingPalets.remove(paletId);
         return;
       }
       if (scanResult == _ScanTransactionResult.duplicate) {
@@ -295,6 +301,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
           message: 'Palet ya escaneado',
           status: _OverlayStatus.alreadyScanned,
         );
+        _processingPalets.remove(paletId);
         return;
       }
       if (scanResult == _ScanTransactionResult.missingPedido) {
@@ -303,6 +310,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
           message: 'No se pudo cargar el pedido del palet',
           status: _OverlayStatus.invalid,
         );
+        _processingPalets.remove(paletId);
         return;
       }
 
