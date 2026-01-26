@@ -174,6 +174,19 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       }
       _processingPalets.add(paletId);
 
+      final stockSnapshot = await FirebaseFirestore.instance
+          .collection('Stock')
+          .doc('1$paletId')
+          .get();
+      if (!stockSnapshot.exists) {
+        await _showOverlayResult(
+          paletId: paletId,
+          message: 'El palet no existe en Stock',
+          status: _OverlayStatus.invalid,
+        );
+        return;
+      }
+
       final pedidoResolution = await _resolvePedidoForPalet(
         raw: raw,
         paletId: paletId,
@@ -199,6 +212,21 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         setState(() {
           _expectedPalets.add(paletId);
         });
+      }
+
+      if (manualInit.created) {
+        final stockService = ref.read(stockServiceProvider);
+        final pedidoId = pedidoRef.id;
+        await stockService.liberarPaletParaCmr(
+          palletId: paletId,
+          pedidoId: pedidoId,
+        );
+        await _showOverlayResult(
+          paletId: paletId,
+          message: 'Palet escaneado. Nuevo pedido creado',
+          status: _OverlayStatus.valid,
+        );
+        return;
       }
 
       if (estadoNormalizado == 'En_Curso') {
