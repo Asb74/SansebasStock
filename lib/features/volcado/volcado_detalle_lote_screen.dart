@@ -86,10 +86,21 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
                             isSelected: isSelected,
                             onPressed: (index) async {
                               final value = index == 0 ? 'S' : 'N';
-                              await FirebaseFirestore.instance
-                                  .collection('Lotes')
-                                  .doc(loteId)
-                                  .update({'palets.$paletId.p_p': value});
+                              final paletKey = paletId.replaceAll('.', '_');
+                              try {
+                                await FirebaseFirestore.instance
+                                    .collection('Lotes')
+                                    .doc(loteId)
+                                    .update({'palets.$paletKey.p_p': value});
+                              } catch (_) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'No se pudo guardar P/P. Revisa conexión.',
+                                    ),
+                                  ),
+                                );
+                              }
                             },
                             children: const [
                               Padding(
