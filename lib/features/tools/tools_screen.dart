@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../cmr/cmr_home_screen.dart';
+import '../volcado/volcado_lotes_screen.dart';
 
 class ToolsScreen extends ConsumerWidget {
   const ToolsScreen({super.key});
@@ -48,6 +49,21 @@ class ToolsScreen extends ConsumerWidget {
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => const CmrHomeScreen(),
+                  ),
+                );
+              },
+            ),
+          ),
+          Card(
+            child: ListTile(
+              title: const Text('Volcado'),
+              subtitle: const Text('Asignar palets a un lote'),
+              leading: const Icon(Icons.move_to_inbox_outlined),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const VolcadoLotesScreen(),
                   ),
                 );
               },
