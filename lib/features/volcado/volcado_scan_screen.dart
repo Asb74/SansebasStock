@@ -185,19 +185,23 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
                 ? 1
                 : 2;
         final idPartida = loteTxData['idPartida'];
+        final paletsMap =
+            (loteTxData['palets'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+        final updatedPalets = Map<String, dynamic>.from(paletsMap);
+        updatedPalets[paletKey] = {
+          'palet': paletId,
+          'neto': stockTxData['NETO'],
+          'cajas': stockTxData['CAJAS'],
+          'pedido': stockTxData['PEDIDO'],
+          'idPartida': idPartida,
+          'calibre': stockTxData['CALIBRE'],
+          'tipo': tipo,
+          'p_p': 'F',
+          'fechaAlta': FieldValue.serverTimestamp(),
+        };
 
         transaction.update(loteRef, {
-          'palets.$paletKey': {
-            'palet': paletId,
-            'neto': stockTxData['NETO'],
-            'cajas': stockTxData['CAJAS'],
-            'pedido': stockTxData['PEDIDO'],
-            'idPartida': idPartida,
-            'calibre': stockTxData['CALIBRE'],
-            'tipo': tipo,
-            'p_p': 'F',
-            'fechaAlta': FieldValue.serverTimestamp(),
-          },
+          'palets': updatedPalets,
         });
 
         transaction.update(stockRef, {
