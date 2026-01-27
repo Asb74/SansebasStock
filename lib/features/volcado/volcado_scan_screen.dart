@@ -69,6 +69,7 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
 
     final paletId = _parsePaletId(raw);
 
+    var transactionAttempted = false;
     try {
       if (paletId.isEmpty) {
         await _showOverlayResult(
@@ -138,15 +139,95 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
         return;
       }
 
+      transactionAttempted = true;
+      await FirebaseFirestore.instance.runTransaction((transaction) async {
+        final stockRef = FirebaseFirestore.instance
+            .collection('Stock')
+            .doc(paletId);
+        final loteRef = FirebaseFirestore.instance
+            .collection('Lotes')
+            .doc(widget.loteId);
+
+        final stockDoc = await transaction.get(stockRef);
+        if (!stockDoc.exists) {
+          throw StateError('Stock no existe');
+        }
+
+        final stockTxData = stockDoc.data() ?? <String, dynamic>{};
+        final idLoteTx = stockTxData['idLote']?.toString().trim() ?? '';
+        if (idLoteTx.isNotEmpty) {
+          throw StateError('Stock ya asignado');
+        }
+
+        final loteDoc = await transaction.get(loteRef);
+        if (!loteDoc.exists) {
+          throw StateError('Lote no existe');
+        }
+
+        final loteTxData = loteDoc.data() ?? <String, dynamic>{};
+        final estadoTx = loteTxData['estado']?.toString().trim() ?? '';
+        if (estadoTx != 'ABIERTO' && estadoTx != 'EN_CURSO') {
+          throw StateError('Lote no abierto');
+        }
+
+        final paletKey = paletId.replaceAll('.', '_');
+        final paletsTx = loteTxData['palets'];
+        if (paletsTx is Map && paletsTx.containsKey(paletKey)) {
+          throw StateError('Palet ya en lote');
+        }
+
+        final pedido = stockTxData['PEDIDO']?.toString().trim() ?? '';
+        final tipo = pedido == 'PRECALIBRADO'
+            ? 0
+            : pedido == 'ESTANDAR'
+                ? 1
+                : 2;
+        final idPartida = loteTxData['idPartida'];
+
+        transaction.update(loteRef, {
+          'palets.$paletKey': {
+            'palet': paletId,
+            'neto': stockTxData['NETO'],
+            'cajas': stockTxData['CAJAS'],
+            'pedido': stockTxData['PEDIDO'],
+            'idPartida': idPartida,
+            'calibre': stockTxData['CALIBRE'],
+            'tipo': tipo,
+            'p_p': 'F',
+            'fechaAlta': FieldValue.serverTimestamp(),
+          },
+        });
+
+        transaction.update(stockRef, {
+          'Hueco': 'Libre',
+          'idLote': widget.loteId,
+        });
+      });
+
       await _showOverlayResult(
         paletId: paletId,
-        message: 'Palet válido',
+        message: 'Palet añadido al lote',
         status: _OverlayStatus.valid,
+        popOnAccept: true,
       );
     } on FirebaseException {
       await _showOverlayResult(
         paletId: paletId.isEmpty ? '—' : paletId,
-        message: 'No se pudo validar el palet',
+        message: transactionAttempted
+            ? 'No se pudo añadir el palet'
+            : 'No se pudo validar el palet',
+        status: _OverlayStatus.invalid,
+      );
+    } on StateError {
+      await _showOverlayResult(
+        paletId: paletId.isEmpty ? '—' : paletId,
+        message: 'No se pudo añadir el palet',
+        status: _OverlayStatus.invalid,
+      );
+    } catch (_) {
+      await _showOverlayResult(
+        paletId: paletId.isEmpty ? '—' : paletId,
+        message: 'No se pudo añadir el palet',
         status: _OverlayStatus.invalid,
       );
     } finally {
@@ -170,6 +251,7 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
     required String paletId,
     required String message,
     required _OverlayStatus status,
+    bool popOnAccept = false,
   }) async {
     setState(() {
       _showOverlay = true;
@@ -177,6 +259,7 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
         paletId: paletId,
         message: message,
         status: status,
+        popOnAccept: popOnAccept,
       );
     });
   }
@@ -189,8 +272,13 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
   }
 
   Future<void> _acceptOverlay() async {
+    final shouldPop = _overlayData?.popOnAccept ?? false;
     await _closeOverlay();
     if (!mounted || _busy) {
+      return;
+    }
+    if (shouldPop) {
+      Navigator.of(context).pop();
       return;
     }
     await _startScan();
@@ -322,9 +410,11 @@ class _ScanOverlayData {
     required this.paletId,
     required this.message,
     required this.status,
+    required this.popOnAccept,
   });
 
   final String paletId;
   final String message;
   final _OverlayStatus status;
+  final bool popOnAccept;
 }
