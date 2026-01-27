@@ -39,7 +39,17 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
             );
           }
 
-          final entries = palets.entries.toList();
+          final entries = palets.entries.toList()
+            ..sort((a, b) {
+              final aData = a.value as Map<String, dynamic>?;
+              final bData = b.value as Map<String, dynamic>?;
+              final aFecha = aData?['fechaAlta'];
+              final bFecha = bData?['fechaAlta'];
+              if (aFecha is Timestamp && bFecha is Timestamp) {
+                return bFecha.compareTo(aFecha);
+              }
+              return a.key.compareTo(b.key);
+            });
 
           return ListView.separated(
             padding: const EdgeInsets.all(16),
@@ -54,7 +64,7 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
               final pedido = paletData?['pedido']?.toString() ?? '-';
               final calibre = paletData?['calibre']?.toString() ?? '-';
               final tipo = paletData?['tipo']?.toString() ?? '-';
-              final pp = paletData?['P_P']?.toString() ?? '-';
+              final pp = paletData?['p_p']?.toString() ?? 'F';
 
               return Card(
                 child: ListTile(
@@ -67,7 +77,7 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
                       Text('Pedido: $pedido'),
                       Text('Calibre: $calibre'),
                       Text('Tipo: $tipo'),
-                      Text('P_P: $pp'),
+                      Text('P/P: $pp'),
                     ],
                   ),
                 ),
