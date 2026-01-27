@@ -67,8 +67,9 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
       _busy = true;
     });
 
+    final paletId = _parsePaletId(raw);
+
     try {
-      final paletId = _parsePaletId(raw);
       if (paletId.isEmpty) {
         await _showOverlayResult(
           paletId: '—',
@@ -126,6 +127,17 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
         return;
       }
 
+      final paletKey = paletId.replaceAll('.', '_');
+      final palets = loteData['palets'];
+      if (palets is Map && palets.containsKey(paletKey)) {
+        await _showOverlayResult(
+          paletId: paletId,
+          message: 'Palet ya añadido al lote',
+          status: _OverlayStatus.invalid,
+        );
+        return;
+      }
+
       await _showOverlayResult(
         paletId: paletId,
         message: 'Palet válido',
@@ -133,7 +145,7 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
       );
     } on FirebaseException {
       await _showOverlayResult(
-        paletId: _parsePaletId(raw).isEmpty ? '—' : _parsePaletId(raw),
+        paletId: paletId.isEmpty ? '—' : paletId,
         message: 'No se pudo validar el palet',
         status: _OverlayStatus.invalid,
       );
@@ -176,6 +188,14 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
     });
   }
 
+  Future<void> _acceptOverlay() async {
+    await _closeOverlay();
+    if (!mounted || _busy) {
+      return;
+    }
+    await _startScan();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -191,7 +211,7 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
             Positioned.fill(
               child: _ScanOverlay(
                 data: _overlayData!,
-                onAccept: _closeOverlay,
+                onAccept: _acceptOverlay,
               ),
             ),
           if (_busy)
