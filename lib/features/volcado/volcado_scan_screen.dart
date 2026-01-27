@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:sansebas_stock/utils/stock_doc_id.dart';
 
 import '../cmr/cmr_utils.dart';
 import '../ops/qr_scan_screen.dart';
@@ -80,9 +81,10 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
         return;
       }
 
+      final stockDocId = buildStockDocId(paletId);
       final stockSnapshot = await FirebaseFirestore.instance
           .collection('Stock')
-          .doc(paletId)
+          .doc(stockDocId)
           .get();
       if (!stockSnapshot.exists) {
         await _showOverlayResult(
@@ -143,7 +145,7 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
       await FirebaseFirestore.instance.runTransaction((transaction) async {
         final stockRef = FirebaseFirestore.instance
             .collection('Stock')
-            .doc(paletId);
+            .doc(stockDocId);
         final loteRef = FirebaseFirestore.instance
             .collection('Lotes')
             .doc(widget.loteId);
