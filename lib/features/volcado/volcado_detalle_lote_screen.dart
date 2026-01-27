@@ -64,7 +64,9 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
               final pedido = paletData?['pedido']?.toString() ?? '-';
               final calibre = paletData?['calibre']?.toString() ?? '-';
               final tipo = paletData?['tipo']?.toString() ?? '-';
-              final pp = paletData?['p_p']?.toString() ?? 'F';
+              final pp = paletData?['p_p']?.toString();
+              final isPending = pp == null || pp == 'F';
+              final isSelected = [pp == 'S', pp == 'N'];
 
               return Card(
                 child: ListTile(
@@ -77,7 +79,40 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
                       Text('Pedido: $pedido'),
                       Text('Calibre: $calibre'),
                       Text('Tipo: $tipo'),
-                      Text('P/P: $pp'),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          ToggleButtons(
+                            isSelected: isSelected,
+                            onPressed: (index) async {
+                              final value = index == 0 ? 'S' : 'N';
+                              await FirebaseFirestore.instance
+                                  .collection('Lotes')
+                                  .doc(loteId)
+                                  .update({'palets.$paletId.p_p': value});
+                            },
+                            children: const [
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 12),
+                                child: Text('S'),
+                              ),
+                              Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 12),
+                                child: Text('N'),
+                              ),
+                            ],
+                          ),
+                          if (isPending) ...[
+                            const SizedBox(width: 8),
+                            Chip(
+                              label: const Text('Pendiente'),
+                              backgroundColor: Colors.grey.shade200,
+                              labelStyle: const TextStyle(color: Colors.grey),
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ],
+                        ],
+                      ),
                     ],
                   ),
                 ),
