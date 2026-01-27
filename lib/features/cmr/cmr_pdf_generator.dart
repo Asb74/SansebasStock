@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:sansebas_stock/utils/stock_doc_id.dart';
 
 import 'cmr_field_layout.dart';
 import 'cmr_models.dart';
@@ -378,7 +379,7 @@ class CmrPdfGenerator {
     final grouped = <_MerchandiseKey, _MerchandiseGroup>{};
     final confeccionCache = <String, String>{};
     for (final paletId in paletIds) {
-      final stockDocId = '1$paletId';
+      final stockDocId = buildStockDocId(paletId);
       final snapshot =
           await firestore.collection('Stock').doc(stockDocId).get();
       if (!snapshot.exists) {

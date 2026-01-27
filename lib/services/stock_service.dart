@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:sansebas_stock/features/qr/qr_parser.dart';
+import 'package:sansebas_stock/utils/stock_doc_id.dart';
 
 import '../models/camera_model.dart';
 import '../models/stock_location.dart';
@@ -238,7 +239,7 @@ class StockService {
     required String palletId,
     String? pedidoId,
   }) async {
-    final stockDocId = '1$palletId';
+    final stockDocId = buildStockDocId(palletId);
     final ref = _db.collection('Stock').doc(stockDocId);
     final normalizedPedidoId = pedidoId?.trim() ?? '';
 

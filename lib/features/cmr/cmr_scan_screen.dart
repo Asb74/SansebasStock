@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sansebas_stock/features/qr/qr_parser.dart' as qr;
 import 'package:sansebas_stock/services/stock_service.dart';
+import 'package:sansebas_stock/utils/stock_doc_id.dart';
 
 import '../ops/ops_providers.dart';
 import '../ops/qr_scan_screen.dart';
@@ -174,9 +175,10 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       }
       _processingPalets.add(paletId);
 
+      final stockDocId = buildStockDocId(paletId);
       final stockSnapshot = await FirebaseFirestore.instance
           .collection('Stock')
-          .doc('1$paletId')
+          .doc(stockDocId)
           .get();
       if (!stockSnapshot.exists) {
         await _showOverlayResult(
@@ -453,9 +455,10 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     final pedidoFromQr = _parsePedidoDisplayFromQr(raw);
     var pedidoDisplay = pedidoFromQr.trim();
     if (pedidoDisplay.isEmpty) {
+      final stockDocId = buildStockDocId(paletId);
       final stockSnapshot = await FirebaseFirestore.instance
           .collection('Stock')
-          .doc('1$paletId')
+          .doc(stockDocId)
           .get();
       pedidoDisplay = stockSnapshot.data()?['PEDIDO']?.toString().trim() ?? '';
     }
@@ -712,7 +715,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         }
 
         for (final palet in pendientes) {
-          final stockDocId = '1$palet';
+          final stockDocId = buildStockDocId(palet);
           final stockRef = db.collection('Stock').doc(stockDocId);
           await tx.get(stockRef);
           tx.set(
