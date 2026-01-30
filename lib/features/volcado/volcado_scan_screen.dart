@@ -205,7 +205,7 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
         });
 
         transaction.update(stockRef, {
-          'Hueco': 'Libre',
+          'HUECO': 'Libre',
           'idLote': widget.loteId,
         });
       });
