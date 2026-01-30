@@ -8,6 +8,8 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
 
   final String loteId;
 
+  String buildStockDocId(String paletId) => '1$paletId';
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
@@ -17,6 +19,7 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
         Widget body;
         Map<String, dynamic>? palets;
         String? estado;
+        var canEdit = false;
 
         if (snapshot.hasError) {
           body = const Center(
@@ -30,6 +33,7 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
           final data = snapshot.data?.data() as Map<String, dynamic>?;
           palets = data?['palets'] as Map<String, dynamic>?;
           estado = data?['estado']?.toString();
+          canEdit = estado == 'ABIERTO' || estado == 'EN_CURSO';
 
           if (palets == null || palets.isEmpty) {
             body = const Center(
@@ -79,6 +83,11 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
                         const SizedBox(height: 8),
                         Row(
                           children: [
+                            const Text(
+                              'P/P:',
+                              style: TextStyle(fontWeight: FontWeight.w500),
+                            ),
+                            const SizedBox(width: 8),
                             ToggleButtons(
                               isSelected: isSelected,
                               onPressed: (index) async {
@@ -123,6 +132,75 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
                         ),
                       ],
                     ),
+                    trailing: IconButton(
+                      tooltip: canEdit
+                          ? 'Eliminar palet'
+                          : 'No se puede eliminar un palet con el lote cerrado',
+                      onPressed: canEdit
+                          ? () async {
+                              final shouldDelete = await showDialog<bool>(
+                                context: context,
+                                builder: (context) => AlertDialog(
+                                  title: const Text('Eliminar palet'),
+                                  content: Text(
+                                    '¿Quieres eliminar el palet $paletId del lote?',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.of(context).pop(false),
+                                      child: const Text('Cancelar'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.of(context).pop(true),
+                                      child: const Text('Eliminar'),
+                                    ),
+                                  ],
+                                ),
+                              );
+
+                              if (shouldDelete != true) {
+                                return;
+                              }
+
+                              final loteRef = FirebaseFirestore.instance
+                                  .collection('Lotes')
+                                  .doc(loteId);
+                              final stockDocId = buildStockDocId(paletId);
+                              final stockRef = FirebaseFirestore.instance
+                                  .collection('Stock')
+                                  .doc(stockDocId);
+                              final paletKey = paletId.replaceAll('.', '_');
+                              try {
+                                await FirebaseFirestore.instance
+                                    .runTransaction((transaction) async {
+                                  transaction.update(loteRef, {
+                                    'palets.$paletKey': FieldValue.delete(),
+                                  });
+                                  transaction.update(stockRef, {
+                                    'HUECO': 'Ocupado',
+                                    'updatedAt': FieldValue.serverTimestamp(),
+                                  });
+                                });
+                              } catch (_) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'No se pudo eliminar el palet.',
+                                    ),
+                                  ),
+                                );
+                              }
+                            }
+                          : null,
+                      icon: Icon(
+                        Icons.delete_outline,
+                        color: canEdit
+                            ? Theme.of(context).colorScheme.error
+                            : Theme.of(context).disabledColor,
+                      ),
+                    ),
                   ),
                 );
               },
@@ -130,15 +208,12 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
           }
         }
 
-        final showFinalizar =
-            estado == 'ABIERTO' || estado == 'EN_CURSO';
-
         return Scaffold(
           appBar: AppBar(
             title: const Text('Detalle de lote'),
           ),
           body: body,
-          bottomNavigationBar: showFinalizar
+          bottomNavigationBar: canEdit
               ? SafeArea(
                   minimum: const EdgeInsets.all(16),
                   child: ElevatedButton(
