@@ -180,6 +180,7 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
                                   });
                                   transaction.update(stockRef, {
                                     'HUECO': 'Ocupado',
+                                    'idLote': '',
                                     'updatedAt': FieldValue.serverTimestamp(),
                                   });
                                 });
