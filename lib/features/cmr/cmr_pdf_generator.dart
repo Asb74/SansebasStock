@@ -52,6 +52,10 @@ class CmrPdfGenerator {
         (a, b) => _platformSortKey(a.key, pedido)
             .compareTo(_platformSortKey(b.key, pedido)),
       );
+    if (plataformaEntries.isEmpty) {
+      // No generamos CMR sin líneas: evitamos crear un PDF vacío.
+      return Uint8List(0);
+    }
     for (final entry in plataformaEntries) {
       final lineas = entry.value;
       final plataforma = _resolvePlataforma(entry.key, pedido);
@@ -92,6 +96,7 @@ class CmrPdfGenerator {
           '27': tipoPalet,
         });
 
+      // Orden de páginas CMR: Rojo (Expedidor) → Verde (Transportista) → Azul (Destinatario).
       doc.addPage(
         _buildPage(
           background: expedidorBg,
@@ -325,8 +330,7 @@ class CmrPdfGenerator {
     }
 
     if (grouped.isEmpty) {
-      final fallback = _fallbackPlataforma(pedido);
-      grouped[fallback] = [];
+      // Sin líneas no debemos crear una plataforma ficticia para evitar CMR vacíos.
     }
 
     return grouped;
