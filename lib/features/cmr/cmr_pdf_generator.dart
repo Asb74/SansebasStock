@@ -47,11 +47,14 @@ class CmrPdfGenerator {
 
     final doc = pw.Document();
     final plataformas = _groupLineasByPlataforma(pedido);
-    for (final entry in plataformas.entries) {
+    final plataformaEntries = plataformas.entries.toList()
+      ..sort(
+        (a, b) => _platformSortKey(a.key, pedido)
+            .compareTo(_platformSortKey(b.key, pedido)),
+      );
+    for (final entry in plataformaEntries) {
       final lineas = entry.value;
-      final plataforma = entry.key.isNotEmpty
-          ? entry.key
-          : _fallbackPlataforma(pedido);
+      final plataforma = _resolvePlataforma(entry.key, pedido);
       final paletsExpedidos = parsePaletsFromLines(
         lineas.expand((linea) => linea.palets),
       );
@@ -99,7 +102,7 @@ class CmrPdfGenerator {
       );
       doc.addPage(
         _buildPage(
-          background: destinatarioBg,
+          background: transportistaBg,
           cmrValues: cmrValues,
           merchandiseData: merchandiseData,
           layout: layout,
@@ -107,7 +110,7 @@ class CmrPdfGenerator {
       );
       doc.addPage(
         _buildPage(
-          background: transportistaBg,
+          background: destinatarioBg,
           cmrValues: cmrValues,
           merchandiseData: merchandiseData,
           layout: layout,
@@ -327,6 +330,18 @@ class CmrPdfGenerator {
     }
 
     return grouped;
+  }
+
+  static String _resolvePlataforma(String plataforma, CmrPedido pedido) {
+    final trimmed = plataforma.trim();
+    if (trimmed.isNotEmpty) {
+      return trimmed;
+    }
+    return _fallbackPlataforma(pedido);
+  }
+
+  static String _platformSortKey(String plataforma, CmrPedido pedido) {
+    return _resolvePlataforma(plataforma, pedido).toLowerCase();
   }
 
   static String _fallbackPlataforma(CmrPedido pedido) {
