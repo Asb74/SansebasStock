@@ -199,6 +199,7 @@ class CmrPdfGenerator {
       _buildMerchandiseTotalsWidgets(
         data,
         layout: layout,
+        currentOffsetY: currentOffsetY,
         rowHeight: rowHeight,
       ),
     );
@@ -209,23 +210,22 @@ class CmrPdfGenerator {
   static List<pw.Widget> _buildMerchandiseTotalsWidgets(
     _CmrMerchandiseData data, {
     required CmrLayout layout,
+    required double currentOffsetY,
     required double rowHeight,
   }) {
     if (data.rows.isEmpty) {
       return const [];
     }
 
-    final tableTopField = layout.field('6');
-    if (tableTopField == null) {
+    final rowStartField = layout.field('6');
+    if (rowStartField == null) {
       return const [];
     }
 
-    final instructionsField = layout.field('13');
-
     final widgets = <pw.Widget>[];
-    final tableTop = tableTopField.y;
-    final tableBottom = instructionsField?.y ?? (tableTop + tableTopField.height);
-    final totalsY = tableBottom - rowHeight;
+    final rowsBottomY = rowStartField.y + currentOffsetY;
+    final tableBottom = layout.field('13')?.y ?? (rowsBottomY + rowHeight);
+    final totalsY = min(rowsBottomY, tableBottom - rowHeight);
 
     final totalFields = [
       _MerchandiseField('7', _formatNum(data.totalCajas)),
