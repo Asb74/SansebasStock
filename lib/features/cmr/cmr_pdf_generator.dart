@@ -196,7 +196,15 @@ class CmrPdfGenerator {
       currentOffsetY += rowHeight;
     }
 
-    widgets.addAll(_buildMerchandiseTotalsWidgets(data, layout: layout));
+    widgets.addAll(
+      _buildMerchandiseTotalsWidgets(
+        data,
+        layout: layout,
+        baseField: baseField,
+        currentOffsetY: currentOffsetY,
+        rowHeight: rowHeight,
+      ),
+    );
 
     return widgets;
   }
@@ -204,12 +212,22 @@ class CmrPdfGenerator {
   static List<pw.Widget> _buildMerchandiseTotalsWidgets(
     _CmrMerchandiseData data, {
     required CmrLayout layout,
+    required CmrLayoutField baseField,
+    required double currentOffsetY,
+    required double rowHeight,
   }) {
     if (data.rows.isEmpty) {
       return const [];
     }
 
     final widgets = <pw.Widget>[];
+    final tableTop = baseField.y;
+    final tableBottom = tableTop + baseField.height;
+    var totalsY = baseField.y + currentOffsetY;
+    if (totalsY + rowHeight > tableBottom) {
+      totalsY = tableBottom - rowHeight;
+    }
+
     final totalFields = [
       _MerchandiseField('7', _formatNum(data.totalCajas)),
       _MerchandiseField('11', _formatNum(data.totalBruto)),
@@ -219,16 +237,13 @@ class CmrPdfGenerator {
     for (final field in totalFields) {
       final layoutField = layout.field(field.casilla);
       if (layoutField == null) continue;
-
-      final totalHeight = min(layoutField.height, layoutField.lineHeight);
-      final totalY = layoutField.y + layoutField.height - totalHeight;
       widgets.addAll(
         _renderField(
           layout,
           casilla: field.casilla,
           value: field.value,
-          y: totalY,
-          height: totalHeight,
+          y: totalsY,
+          height: rowHeight,
         ),
       );
     }
