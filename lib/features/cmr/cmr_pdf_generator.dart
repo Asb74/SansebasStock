@@ -212,7 +212,7 @@ class CmrPdfGenerator {
   static List<pw.Widget> _buildMerchandiseTotalsWidgets(
     _CmrMerchandiseData data, {
     required CmrLayout layout,
-    required CmrLayoutField baseField,
+    required dynamic baseField,
     required double currentOffsetY,
     required double rowHeight,
   }) {
