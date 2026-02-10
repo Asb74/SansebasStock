@@ -201,7 +201,6 @@ class CmrPdfGenerator {
         data,
         layout: layout,
         baseField: baseField,
-        currentOffsetY: currentOffsetY,
         rowHeight: rowHeight,
       ),
     );
@@ -213,7 +212,6 @@ class CmrPdfGenerator {
     _CmrMerchandiseData data, {
     required CmrLayout layout,
     required dynamic baseField,
-    required double currentOffsetY,
     required double rowHeight,
   }) {
     if (data.rows.isEmpty) {
@@ -223,10 +221,7 @@ class CmrPdfGenerator {
     final widgets = <pw.Widget>[];
     final tableTop = baseField.y;
     final tableBottom = tableTop + baseField.height;
-    var totalsY = baseField.y + currentOffsetY;
-    if (totalsY + rowHeight > tableBottom) {
-      totalsY = tableBottom - rowHeight;
-    }
+    final totalsY = tableBottom - rowHeight;
 
     final totalFields = [
       _MerchandiseField('7', _formatNum(data.totalCajas)),
