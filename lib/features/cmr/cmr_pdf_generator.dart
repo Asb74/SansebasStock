@@ -169,8 +169,7 @@ class CmrPdfGenerator {
   }) {
     final widgets = <pw.Widget>[];
     final fields = ['6', '7', '8', '9', '11', '12'];
-    final baseField = layout.field('6');
-    if (baseField == null) {
+    if (layout.field('6') == null) {
       return widgets;
     }
     final rowHeight = _maxRowHeight(layout, fields);
@@ -200,7 +199,6 @@ class CmrPdfGenerator {
       _buildMerchandiseTotalsWidgets(
         data,
         layout: layout,
-        baseField: baseField,
         rowHeight: rowHeight,
       ),
     );
@@ -211,16 +209,22 @@ class CmrPdfGenerator {
   static List<pw.Widget> _buildMerchandiseTotalsWidgets(
     _CmrMerchandiseData data, {
     required CmrLayout layout,
-    required dynamic baseField,
     required double rowHeight,
   }) {
     if (data.rows.isEmpty) {
       return const [];
     }
 
+    final tableTopField = layout.field('6');
+    if (tableTopField == null) {
+      return const [];
+    }
+
+    final instructionsField = layout.field('13');
+
     final widgets = <pw.Widget>[];
-    final tableTop = baseField.y;
-    final tableBottom = tableTop + baseField.height;
+    final tableTop = tableTopField.y;
+    final tableBottom = instructionsField?.y ?? (tableTop + tableTopField.height);
     final totalsY = tableBottom - rowHeight;
 
     final totalFields = [
