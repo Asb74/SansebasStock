@@ -182,7 +182,7 @@ class CmrPdfGenerator {
         _MerchandiseField('7', row.totalCajas),
         _MerchandiseField('8', row.idConfeccion),
         _MerchandiseField('9', row.cultivo),
-        _MerchandiseField('11', row.totalNeto),
+        _MerchandiseField('11', row.totalBruto),
         _MerchandiseField('12', row.totalPalets),
       ];
       widgets.addAll(
@@ -199,7 +199,7 @@ class CmrPdfGenerator {
     if (data.rows.isNotEmpty) {
       final totalFields = [
         _MerchandiseField('7', _formatNum(data.totalCajas)),
-        _MerchandiseField('11', _formatNum(data.totalNeto)),
+        _MerchandiseField('11', _formatNum(data.totalBruto)),
         _MerchandiseField('12', data.totalPalets.toString()),
       ];
       widgets.addAll(
@@ -422,7 +422,8 @@ class CmrPdfGenerator {
           _stringFromKeys(data, const ['CULTIVO', 'Cultivo', 'cultivo']);
       final cajas =
           _numFromKeys(data, const ['CAJAS', 'Cajas', 'cajas']) ?? 0;
-      final neto = _numFromKeys(data, const ['NETO', 'Neto', 'neto']) ?? 0;
+      final bruto =
+          _numFromKeys(data, const ['BRUTO', 'Bruto', 'bruto']) ?? 0;
 
       final key = _MerchandiseKey(
         marca: marca,
@@ -443,7 +444,7 @@ class CmrPdfGenerator {
         group.confeccionDescripcion = confeccionDescripcion;
       }
       group.totalCajas += cajas;
-      group.totalNeto += neto;
+      group.totalBruto += bruto;
       group.totalPalets += 1;
     }
 
@@ -452,12 +453,12 @@ class CmrPdfGenerator {
     }
 
     num totalCajas = 0;
-    num totalNeto = 0;
+    num totalBruto = 0;
     var totalPalets = 0;
 
     final rows = grouped.values.map((group) {
       totalCajas += group.totalCajas;
-      totalNeto += group.totalNeto;
+      totalBruto += group.totalBruto;
       totalPalets += group.totalPalets;
       return _CmrMerchandiseRow(
         marca: group.marca,
@@ -466,7 +467,7 @@ class CmrPdfGenerator {
             : group.idConfeccion,
         cultivo: group.cultivo,
         totalCajas: _formatNum(group.totalCajas),
-        totalNeto: _formatNum(group.totalNeto),
+        totalBruto: _formatNum(group.totalBruto),
         totalPalets: group.totalPalets.toString(),
       );
     }).toList();
@@ -474,7 +475,7 @@ class CmrPdfGenerator {
     return _CmrMerchandiseData(
       rows: rows,
       totalCajas: totalCajas,
-      totalNeto: totalNeto,
+      totalBruto: totalBruto,
       totalPalets: totalPalets,
     );
   }
@@ -610,19 +611,19 @@ class _CmrMerchandiseData {
   const _CmrMerchandiseData({
     required this.rows,
     required this.totalCajas,
-    required this.totalNeto,
+    required this.totalBruto,
     required this.totalPalets,
   });
 
   const _CmrMerchandiseData.empty()
       : rows = const [],
         totalCajas = 0,
-        totalNeto = 0,
+        totalBruto = 0,
         totalPalets = 0;
 
   final List<_CmrMerchandiseRow> rows;
   final num totalCajas;
-  final num totalNeto;
+  final num totalBruto;
   final int totalPalets;
 }
 
@@ -632,7 +633,7 @@ class _CmrMerchandiseRow {
     required this.idConfeccion,
     required this.cultivo,
     required this.totalCajas,
-    required this.totalNeto,
+    required this.totalBruto,
     required this.totalPalets,
   });
 
@@ -640,7 +641,7 @@ class _CmrMerchandiseRow {
   final String idConfeccion;
   final String cultivo;
   final String totalCajas;
-  final String totalNeto;
+  final String totalBruto;
   final String totalPalets;
 }
 
@@ -687,6 +688,6 @@ class _MerchandiseGroup {
   final String cultivo;
   String confeccionDescripcion;
   num totalCajas = 0;
-  num totalNeto = 0;
+  num totalBruto = 0;
   int totalPalets = 0;
 }
