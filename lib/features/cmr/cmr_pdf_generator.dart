@@ -480,7 +480,7 @@ class CmrPdfGenerator {
       }
       group.totalCajas += cajas;
       group.totalBruto += bruto;
-      group.totalPalets += 1;
+      group.rowPalets += 1;
     }
 
     if (grouped.isEmpty) {
@@ -492,9 +492,10 @@ class CmrPdfGenerator {
     var totalPalets = 0;
 
     final rows = grouped.values.map((group) {
+      final rowPalets = group.rowPalets;
       totalCajas += group.totalCajas;
       totalBruto += group.totalBruto;
-      totalPalets += group.totalPalets;
+      totalPalets += rowPalets;
       return _CmrMerchandiseRow(
         marca: group.marca,
         idConfeccion: group.confeccionDescripcion.isNotEmpty
@@ -503,7 +504,7 @@ class CmrPdfGenerator {
         cultivo: group.cultivo,
         totalCajas: _formatNum(group.totalCajas),
         totalBruto: _formatNum(group.totalBruto),
-        totalPalets: group.totalPalets.toString(),
+        totalPalets: rowPalets.toString(),
       );
     }).toList();
 
@@ -724,5 +725,5 @@ class _MerchandiseGroup {
   String confeccionDescripcion;
   num totalCajas = 0;
   num totalBruto = 0;
-  int totalPalets = 0;
+  int rowPalets = 0;
 }
