@@ -124,9 +124,10 @@ class StockService {
             .collection('Stock')
             .where('CAMARA', isEqualTo: toCamara)
             .where('ESTANTERIA', isEqualTo: toEstanteria)
-            .where('NIVEL', isEqualTo: toNivel);
+            .where('NIVEL', isEqualTo: toNivel)
+            .where('HUECO', isEqualTo: 'Ocupado');
 
-        final stockQuerySnap = await stockQuery.get();
+        final stockQuerySnap = await tx.get(stockQuery);
         final int ocupados = stockQuerySnap.docs
             .where((doc) => doc.id != stockDocId)
             .length;
