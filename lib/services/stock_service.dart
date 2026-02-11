@@ -87,12 +87,23 @@ class StockService {
       }
 
       final storageSnap = await tx.get(storageRef);
+      if (!storageSnap.exists) {
+        throw Exception('No existe la configuración Storage para la cámara $toCamara.');
+      }
+
       final storageData = storageSnap.data();
       final tipo = storageData?['tipo']?.toString().toLowerCase();
       final posicionesMaxRaw = storageData?['posicionesMax'];
       final int posicionesMax = posicionesMaxRaw is int
           ? posicionesMaxRaw
           : int.tryParse(posicionesMaxRaw?.toString() ?? '') ?? 0;
+
+      if (tipo == 'expedicion' && posicionesMax <= 0) {
+        throw Exception(
+          'Configuración inválida: posicionesMax debe ser mayor que 0 para '
+          'Storage/$toCamara cuando tipo es expedicion.',
+        );
+      }
 
       final data = snap.data() as Map<String, dynamic>;
 
