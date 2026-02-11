@@ -193,6 +193,34 @@ class StockService {
 
         final int posicion =
             resolvedUbicacion.posicion ?? await _siguientePosicion(resolvedUbicacion);
+
+        final DocumentSnapshot<Map<String, dynamic>> storageSnapshot = await _db
+            .collection('Storage')
+            .doc(resolvedUbicacion.camara)
+            .get();
+        final Map<String, dynamic>? storageData = storageSnapshot.data();
+        final String tipo =
+            storageData?['tipo']?.toString().toLowerCase().trim() ?? '';
+        final dynamic posicionesMaxRaw = storageData?['posicionesMax'];
+        final int posicionesMax = posicionesMaxRaw is int
+            ? posicionesMaxRaw
+            : int.tryParse(posicionesMaxRaw?.toString() ?? '') ?? 0;
+
+        if (tipo == 'expedicion') {
+          if (posicionesMax <= 0) {
+            throw Exception(
+              'Configuración inválida: posicionesMax debe ser mayor que 0 '
+              'para Storage/${resolvedUbicacion.camara} cuando tipo es expedicion.',
+            );
+          }
+          if (posicion > posicionesMax) {
+            throw Exception(
+              'Ubicación completa. El nivel admite máximo $posicionesMax '
+              'posiciones. Seleccione otra ubicación.',
+            );
+          }
+        }
+
         final Map<String, dynamic> data = _buildBaseData(qr)
           ..addAll(resolvedUbicacion.toMap())
           ..['POSICION'] = posicion
@@ -243,6 +271,33 @@ class StockService {
 
       final int posicion =
           resolvedUbicacion.posicion ?? await _siguientePosicion(resolvedUbicacion);
+
+      final DocumentSnapshot<Map<String, dynamic>> storageSnapshot = await _db
+          .collection('Storage')
+          .doc(resolvedUbicacion.camara)
+          .get();
+      final Map<String, dynamic>? storageData = storageSnapshot.data();
+      final String tipo = storageData?['tipo']?.toString().toLowerCase().trim() ?? '';
+      final dynamic posicionesMaxRaw = storageData?['posicionesMax'];
+      final int posicionesMax = posicionesMaxRaw is int
+          ? posicionesMaxRaw
+          : int.tryParse(posicionesMaxRaw?.toString() ?? '') ?? 0;
+
+      if (tipo == 'expedicion') {
+        if (posicionesMax <= 0) {
+          throw Exception(
+            'Configuración inválida: posicionesMax debe ser mayor que 0 para '
+            'Storage/${resolvedUbicacion.camara} cuando tipo es expedicion.',
+          );
+        }
+        if (posicion > posicionesMax) {
+          throw Exception(
+            'Ubicación completa. El nivel admite máximo $posicionesMax '
+            'posiciones. Seleccione otra ubicación.',
+          );
+        }
+      }
+
       final Map<String, dynamic> data = _buildBaseData(qr)
         ..addAll(resolvedUbicacion.toMap())
         ..['POSICION'] = posicion
