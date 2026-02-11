@@ -124,8 +124,11 @@ class StockService {
             .collection('Stock')
             .where('CAMARA', isEqualTo: toCamara)
             .where('ESTANTERIA', isEqualTo: toEstanteria)
-            .where('NIVEL', isEqualTo: toNivel);
+            .where('NIVEL', isEqualTo: toNivel)
+            .where('HUECO', isEqualTo: 'Ocupado');
 
+        // En cloud_firestore 5.x Transaction.get() solo admite DocumentReference.
+        // Para Query se debe ejecutar directamente la consulta dentro de runTransaction.
         final stockQuerySnap = await stockQuery.get();
         final int ocupados = stockQuerySnap.docs
             .where((doc) => doc.id != stockDocId)
