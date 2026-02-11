@@ -230,7 +230,7 @@ class CmrPdfGenerator {
     final totalFields = [
       _MerchandiseField('7', _formatNum(data.totalCajas)),
       _MerchandiseField('11', _formatNum(data.totalBruto)),
-      _MerchandiseField('12', data.totalPalets.toString()),
+      // _MerchandiseField('12', data.totalPalets.toString()),
     ];
 
     for (final field in totalFields) {
