@@ -79,11 +79,20 @@ class StockService {
 
     await db.runTransaction((tx) async {
       final stockRef = db.collection('Stock').doc(stockDocId);
+      final storageRef = db.collection('Storage').doc(toCamara);
 
       final snap = await tx.get(stockRef);
       if (!snap.exists) {
         throw Exception('El palet ya no existe en Stock');
       }
+
+      final storageSnap = await tx.get(storageRef);
+      final storageData = storageSnap.data();
+      final tipo = storageData?['tipo']?.toString().toLowerCase();
+      final posicionesMaxRaw = storageData?['posicionesMax'];
+      final int posicionesMax = posicionesMaxRaw is int
+          ? posicionesMaxRaw
+          : int.tryParse(posicionesMaxRaw?.toString() ?? '') ?? 0;
 
       final data = snap.data() as Map<String, dynamic>;
 
@@ -97,6 +106,26 @@ class StockService {
 
       if (data['HUECO'] != 'Ocupado') {
         throw Exception('El palet ya no está en un hueco ocupado');
+      }
+
+      if (tipo == 'expedicion' && posicionesMax > 0) {
+        final stockQuery = db
+            .collection('Stock')
+            .where('CAMARA', isEqualTo: toCamara)
+            .where('ESTANTERIA', isEqualTo: toEstanteria)
+            .where('NIVEL', isEqualTo: toNivel);
+
+        final stockQuerySnap = await tx.get(stockQuery);
+        final int ocupados = stockQuerySnap.docs
+            .where((doc) => doc.id != stockDocId)
+            .length;
+
+        if (ocupados >= posicionesMax) {
+          throw Exception(
+            'Capacidad máxima alcanzada en cámara $toCamara, estantería '
+            '$toEstanteria, nivel $toNivel.',
+          );
+        }
       }
 
       // Actualizar posición
