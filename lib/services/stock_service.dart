@@ -126,7 +126,7 @@ class StockService {
             .where('ESTANTERIA', isEqualTo: toEstanteria)
             .where('NIVEL', isEqualTo: toNivel);
 
-        final stockQuerySnap = await tx.get(stockQuery);
+        final stockQuerySnap = await stockQuery.get();
         final int ocupados = stockQuerySnap.docs
             .where((doc) => doc.id != stockDocId)
             .length;
