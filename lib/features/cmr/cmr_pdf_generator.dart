@@ -182,7 +182,7 @@ class CmrPdfGenerator {
         _MerchandiseField('8', row.idConfeccion),
         _MerchandiseField('9', row.cultivo),
         _MerchandiseField('11', row.totalBruto),
-        _MerchandiseField('12', row.totalPalets),
+        // _MerchandiseField('12', row.totalPalets),
       ];
       widgets.addAll(
         _buildMerchandiseRowWidgets(
