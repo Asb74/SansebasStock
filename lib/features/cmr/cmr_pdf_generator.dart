@@ -80,8 +80,7 @@ class CmrPdfGenerator {
             almacenLocation,
           ].where((value) => value.trim().isNotEmpty).join('\n'),
           '5': pedido.termografos,
-          '12':
-              paletsExpedidos.isNotEmpty ? paletsExpedidos.length.toString() : '',
+          //'12': paletsExpedidos.isNotEmpty ? paletsExpedidos.length.toString() : '',
           '13': pedido.observaciones,
           '17': [
             pedido.transportista,
@@ -182,7 +181,7 @@ class CmrPdfGenerator {
         _MerchandiseField('8', row.idConfeccion),
         _MerchandiseField('9', row.cultivo),
         _MerchandiseField('11', row.totalBruto),
-        // _MerchandiseField('12', row.totalPalets),
+        _MerchandiseField('12', row.totalPalets),
       ];
       widgets.addAll(
         _buildMerchandiseRowWidgets(
@@ -230,7 +229,7 @@ class CmrPdfGenerator {
     final totalFields = [
       _MerchandiseField('7', _formatNum(data.totalCajas)),
       _MerchandiseField('11', _formatNum(data.totalBruto)),
-      // _MerchandiseField('12', data.totalPalets.toString()),
+      _MerchandiseField('12', data.totalPalets.toString()),
     ];
 
     for (final field in totalFields) {
