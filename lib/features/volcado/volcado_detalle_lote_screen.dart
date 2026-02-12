@@ -349,6 +349,9 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
               ? SafeArea(
                   minimum: const EdgeInsets.all(16),
                   child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.red,
+                    ),
                     onPressed: () async {
                       final paletsMap = palets ?? <String, dynamic>{};
                       final hasPending = paletsMap.values.any((palet) {
@@ -377,11 +380,41 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
                         return;
                       }
 
+                      final shouldFinalize = await showDialog<bool>(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: const Text('Finalizar lote'),
+                          content: const Text(
+                            '¿Está seguro de que desea finalizar este lote?\n'
+                            'No podrá añadir más palets hasta que lo vuelva a abrir.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(false),
+                              child: const Text('Cancelar'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(context).pop(true),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.red,
+                              ),
+                              child: const Text('Finalizar'),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (shouldFinalize != true) {
+                        return;
+                      }
+
                       await loteRef.update({
                         'estado': 'CERRADO',
                         'fechaCierre': FieldValue.serverTimestamp(),
                       });
-                      Navigator.pop(context);
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                      }
                     },
                     child: const Text('Finalizar lote'),
                   ),
