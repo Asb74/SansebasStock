@@ -15,7 +15,10 @@ class VolcadoLotesScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Volcado'),
         actions: [
-          TextButton.icon(
+          IconButton(
+            icon: const Icon(Icons.inventory_2_outlined),
+            tooltip: 'Lotes cerrados',
+            splashRadius: 22,
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
@@ -23,8 +26,6 @@ class VolcadoLotesScreen extends StatelessWidget {
                 ),
               );
             },
-            icon: const Icon(Icons.inventory_2_outlined),
-            label: const Text('Cerrados'),
           ),
         ],
       ),
