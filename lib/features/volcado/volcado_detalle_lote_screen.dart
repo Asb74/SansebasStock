@@ -43,6 +43,10 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
   }) {
     final campana = loteData['campana']?.toString() ?? '-';
     final cultivo = loteData['cultivo']?.toString() ?? '-';
+    final productoRaw = loteData['cultivo2'];
+    final productoStr = productoRaw?.toString().trim().isNotEmpty == true
+        ? productoRaw.toString().trim()
+        : '-';
     final empresa = loteData['empresa']?.toString() ?? '-';
     final estado = loteData['estado']?.toString() ?? '-';
     final fechaCreacion = loteData['fechaCreacion'];
@@ -87,6 +91,7 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
             const SizedBox(height: 16),
             _datoLote('Campaña', campana),
             _datoLote('Cultivo', cultivo),
+            _datoLote('Producto', productoStr),
             _datoLote('Empresa', empresa),
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
