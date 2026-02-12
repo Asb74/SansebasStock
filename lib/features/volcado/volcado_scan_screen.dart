@@ -120,6 +120,25 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
       }
 
       final loteData = loteSnapshot.data() ?? <String, dynamic>{};
+      final stockCultivo = (stockData['CULTIVO'] ?? '')
+          .toString()
+          .trim()
+          .toUpperCase();
+      final loteCultivo2 = (loteData['cultivo2'] ?? '')
+          .toString()
+          .trim()
+          .toUpperCase();
+      final cultivoValido = stockCultivo.isNotEmpty &&
+          loteCultivo2.isNotEmpty &&
+          stockCultivo == loteCultivo2;
+      if (!cultivoValido) {
+        await _showCultivoMismatchDialog(
+          stockCultivo: stockCultivo,
+          loteCultivo2: loteCultivo2,
+        );
+        return;
+      }
+
       final estado = loteData['estado']?.toString().trim() ?? '';
       if (estado != 'ABIERTO' && estado != 'EN_CURSO') {
         await _showOverlayResult(
@@ -167,6 +186,20 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
         }
 
         final loteTxData = loteDoc.data() ?? <String, dynamic>{};
+        final stockCultivoTx = (stockTxData['CULTIVO'] ?? '')
+            .toString()
+            .trim()
+            .toUpperCase();
+        final loteCultivo2Tx = (loteTxData['cultivo2'] ?? '')
+            .toString()
+            .trim()
+            .toUpperCase();
+        if (stockCultivoTx.isEmpty ||
+            loteCultivo2Tx.isEmpty ||
+            stockCultivoTx != loteCultivo2Tx) {
+          throw StateError('Cultivo incompatible');
+        }
+
         final estadoTx = loteTxData['estado']?.toString().trim() ?? '';
         if (estadoTx != 'ABIERTO' && estadoTx != 'EN_CURSO') {
           throw StateError('Lote no abierto');
@@ -243,6 +276,41 @@ class _VolcadoScanScreenState extends State<VolcadoScanScreen> {
         });
       }
     }
+  }
+
+  Future<void> _showCultivoMismatchDialog({
+    required String stockCultivo,
+    required String loteCultivo2,
+  }) async {
+    final stockValue = stockCultivo.isEmpty ? '—' : stockCultivo;
+    final loteValue = loteCultivo2.isEmpty ? '—' : loteCultivo2;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.red.shade50,
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Producto incorrecto'),
+          ],
+        ),
+        content: Text(
+          'El palet escaneado pertenece a "$stockValue"\n'
+          'y este lote es de "$loteValue".\n\n'
+          'No puede añadirse a este lote.',
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Aceptar'),
+          ),
+        ],
+      ),
+    );
   }
 
   String _parsePaletId(String raw) {
