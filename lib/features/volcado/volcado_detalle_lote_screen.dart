@@ -39,7 +39,6 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
 
   Widget _buildTarjetaInfoLote({
     required BuildContext context,
-    required DocumentReference<Map<String, dynamic>> loteRef,
     required Map<String, dynamic> loteData,
   }) {
     final campana = loteData['campana']?.toString() ?? '-';
@@ -55,73 +54,70 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
         ? _formatearFecha(fechaCierre.toDate())
         : '-';
     final abierto = estado == 'ABIERTO';
+    final paletsRaw = loteData['palets'];
+    final palets =
+        paletsRaw is Map ? Map<String, dynamic>.from(paletsRaw) : <String, dynamic>{};
+    final totalPalets = palets.length;
+    final totalNeto = palets.values.fold<num>(0, (acumulado, paletData) {
+      if (paletData is! Map) return acumulado;
+      final neto = paletData['neto'];
+      if (neto is num) {
+        return acumulado + neto;
+      }
+      if (neto is String) {
+        return acumulado + (num.tryParse(neto) ?? 0);
+      }
+      return acumulado;
+    });
+    final totalNetoStr = '${totalNeto.toStringAsFixed(1)} kg';
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: loteRef.collection('palets').snapshots(),
-      builder: (context, paletsSnapshot) {
-        final docs = paletsSnapshot.data?.docs ?? const [];
-        final totalPalets = docs.length;
-        final totalNeto = docs.fold<num>(0, (acumulado, doc) {
-          final data = doc.data();
-          final neto = data['neto'];
-          if (neto is num) {
-            return acumulado + neto;
-          }
-          if (neto is String) {
-            return acumulado + (num.tryParse(neto) ?? 0);
-          }
-          return acumulado;
-        });
-
-        return Card(
-          margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  loteId,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
-                const SizedBox(height: 16),
-                _datoLote('Campaña', campana),
-                _datoLote('Cultivo', cultivo),
-                _datoLote('Empresa', empresa),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      const SizedBox(
-                        width: 130,
-                        child: Text(
-                          'Estado',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      Chip(
-                        label: Text(estado),
-                        backgroundColor:
-                            abierto ? Colors.green.shade100 : Colors.grey.shade300,
-                        labelStyle: TextStyle(
-                          color: abierto ? Colors.green.shade900 : Colors.grey.shade800,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              loteId,
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
                   ),
-                ),
-                _datoLote('Fecha creación', fechaCreacionStr),
-                _datoLote('Fecha cierre', fechaCierreStr),
-                _datoLote('Total palets', totalPalets.toString()),
-                _datoLote('Total neto', totalNeto.toString()),
-              ],
             ),
-          ),
-        );
-      },
+            const SizedBox(height: 16),
+            _datoLote('Campaña', campana),
+            _datoLote('Cultivo', cultivo),
+            _datoLote('Empresa', empresa),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 130,
+                    child: Text(
+                      'Estado',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Chip(
+                    label: Text(estado),
+                    backgroundColor:
+                        abierto ? Colors.green.shade100 : Colors.grey.shade300,
+                    labelStyle: TextStyle(
+                      color: abierto ? Colors.green.shade900 : Colors.grey.shade800,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _datoLote('Fecha creación', fechaCreacionStr),
+            _datoLote('Fecha cierre', fechaCierreStr),
+            _datoLote('Total palets', totalPalets.toString()),
+            _datoLote('Total neto', totalNetoStr),
+          ],
+        ),
+      ),
     );
   }
 
@@ -131,7 +127,6 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
       stream:
           FirebaseFirestore.instance.collection('Lotes').doc(loteId).snapshots(),
       builder: (context, snapshot) {
-        final loteRef = FirebaseFirestore.instance.collection('Lotes').doc(loteId);
         Widget body;
         Map<String, dynamic>? palets;
         String? estado;
