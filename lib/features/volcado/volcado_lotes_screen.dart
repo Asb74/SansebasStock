@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import 'volcado_detalle_lote_screen.dart';
+import 'volcado_lotes_cerrados_screen.dart';
 
 class VolcadoLotesScreen extends StatelessWidget {
   const VolcadoLotesScreen({super.key});
@@ -13,6 +14,19 @@ class VolcadoLotesScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Volcado'),
+        actions: [
+          TextButton.icon(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const VolcadoLotesCerradosScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.inventory_2_outlined),
+            label: const Text('Cerrados'),
+          ),
+        ],
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance

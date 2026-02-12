@@ -395,10 +395,12 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
                         ),
                         onPressed: () async {
                           await loteRef.update({
-                            'estado': 'EN_CURSO',
-                            'reabierto': true,
-                            'fechaReapertura': FieldValue.serverTimestamp(),
+                            'estado': 'ABIERTO',
+                            'fechaCierre': FieldValue.delete(),
                           });
+                          if (context.mounted) {
+                            Navigator.of(context).pop();
+                          }
                         },
                         child: const Text(
                           'Reabrir lote',
