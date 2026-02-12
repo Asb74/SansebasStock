@@ -276,16 +276,18 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
                       ),
                     )
                   : null,
-          floatingActionButton: FloatingActionButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => VolcadoScanScreen(loteId: loteId),
-                ),
-              );
-            },
-            child: const Icon(Icons.qr_code_scanner),
-          ),
+          floatingActionButton: canEdit
+              ? FloatingActionButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => VolcadoScanScreen(loteId: loteId),
+                      ),
+                    );
+                  },
+                  child: const Icon(Icons.qr_code_scanner),
+                )
+              : null,
         );
       },
     );
