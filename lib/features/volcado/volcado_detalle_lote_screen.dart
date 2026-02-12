@@ -16,10 +16,12 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
       stream:
           FirebaseFirestore.instance.collection('Lotes').doc(loteId).snapshots(),
       builder: (context, snapshot) {
+        final loteRef = FirebaseFirestore.instance.collection('Lotes').doc(loteId);
         Widget body;
         Map<String, dynamic>? palets;
         String? estado;
         var canEdit = false;
+        var canReopen = false;
 
         if (snapshot.hasError) {
           body = const Center(
@@ -34,6 +36,7 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
           palets = data?['palets'] as Map<String, dynamic>?;
           estado = data?['estado']?.toString();
           canEdit = estado == 'ABIERTO' || estado == 'EN_CURSO';
+          canReopen = estado == 'CERRADO';
 
           if (palets == null || palets.isEmpty) {
             body = const Center(
@@ -164,9 +167,6 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
                                 return;
                               }
 
-                              final loteRef = FirebaseFirestore.instance
-                                  .collection('Lotes')
-                                  .doc(loteId);
                               final stockDocId = buildStockDocId(paletId);
                               final stockRef = FirebaseFirestore.instance
                                   .collection('Stock')
@@ -246,10 +246,7 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
                         return;
                       }
 
-                      await FirebaseFirestore.instance
-                          .collection('Lotes')
-                          .doc(loteId)
-                          .update({
+                      await loteRef.update({
                         'estado': 'CERRADO',
                         'fechaCierre': FieldValue.serverTimestamp(),
                       });
@@ -258,7 +255,27 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
                     child: const Text('Finalizar lote'),
                   ),
                 )
-              : null,
+              : canReopen
+                  ? SafeArea(
+                      minimum: const EdgeInsets.all(16),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                        ),
+                        onPressed: () async {
+                          await loteRef.update({
+                            'estado': 'EN_CURSO',
+                            'reabierto': true,
+                            'fechaReapertura': FieldValue.serverTimestamp(),
+                          });
+                        },
+                        child: const Text(
+                          'Reabrir lote',
+                          style: TextStyle(fontSize: 16),
+                        ),
+                      ),
+                    )
+                  : null,
           floatingActionButton: FloatingActionButton(
             onPressed: () {
               Navigator.of(context).push(
