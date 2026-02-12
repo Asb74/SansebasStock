@@ -123,9 +123,10 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final loteRef = FirebaseFirestore.instance.collection('Lotes').doc(loteId);
+
     return StreamBuilder<DocumentSnapshot>(
-      stream:
-          FirebaseFirestore.instance.collection('Lotes').doc(loteId).snapshots(),
+      stream: loteRef.snapshots(),
       builder: (context, snapshot) {
         Widget body;
         Map<String, dynamic>? palets;
@@ -323,7 +324,6 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
             children: [
               _buildTarjetaInfoLote(
                 context: context,
-                loteRef: loteRef,
                 loteData: data ?? <String, dynamic>{},
               ),
               Expanded(child: listaPalets),
