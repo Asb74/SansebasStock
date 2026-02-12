@@ -69,7 +69,7 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
       }
       return acumulado;
     });
-    final totalNetoStr = '${totalNeto.toStringAsFixed(1)} kg';
+    final totalNetoStr = '${totalNeto.toStringAsFixed(0)} kg';
 
     return Card(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
