@@ -52,15 +52,18 @@ class VolcadoLotesCerradosScreen extends StatelessWidget {
               final doc = docs[index];
               final data = doc.data();
 
-              final idPartida = (data['idPartida'] as String?)?.trim().isNotEmpty == true
-                  ? (data['idPartida'] as String).trim()
-                  : doc.id;
-              final campana = (data['campana'] as String?)?.trim().isNotEmpty == true
-                  ? (data['campana'] as String).trim()
-                  : '-';
-              final cultivo2 = (data['cultivo2'] as String?)?.trim().isNotEmpty == true
-                  ? (data['cultivo2'] as String).trim()
-                  : '-';
+              final idPartidaRaw = data['idPartida']?.toString().trim();
+              final idPartida =
+                  (idPartidaRaw?.isNotEmpty ?? false) ? idPartidaRaw! : doc.id;
+
+              final campanaRaw = data['campana']?.toString().trim();
+              final campana =
+                  (campanaRaw?.isNotEmpty ?? false) ? campanaRaw! : '-';
+
+              final cultivo2Raw = data['cultivo2']?.toString().trim();
+              final cultivo2 =
+                  (cultivo2Raw?.isNotEmpty ?? false) ? cultivo2Raw! : '-';
+
               final fechaCierre = _formatFecha(data['fechaCierre']);
 
               return Card(
