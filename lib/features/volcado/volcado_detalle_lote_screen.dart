@@ -51,6 +51,10 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
     final estado = loteData['estado']?.toString() ?? '-';
     final fechaCreacion = loteData['fechaCreacion'];
     final fechaCierre = loteData['fechaCierre'];
+    final idPartidaRaw = loteData['idPartida'];
+    final idPartidaStr = idPartidaRaw?.toString().trim().isNotEmpty == true
+        ? idPartidaRaw.toString().trim()
+        : loteId;
     final fechaCreacionStr = fechaCreacion is Timestamp
         ? _formatearFecha(fechaCreacion.toDate())
         : '-';
@@ -83,7 +87,7 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              loteId,
+              idPartidaStr,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
