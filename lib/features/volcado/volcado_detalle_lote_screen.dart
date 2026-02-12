@@ -10,6 +10,121 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
 
   String buildStockDocId(String paletId) => '1$paletId';
 
+  String _formatearFecha(DateTime fecha) {
+    return "${fecha.day.toString().padLeft(2, '0')}/"
+        "${fecha.month.toString().padLeft(2, '0')}/"
+        "${fecha.year} "
+        "${fecha.hour.toString().padLeft(2, '0')}:"
+        "${fecha.minute.toString().padLeft(2, '0')}";
+  }
+
+  Widget _datoLote(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Expanded(child: Text(value)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTarjetaInfoLote({
+    required BuildContext context,
+    required DocumentReference<Map<String, dynamic>> loteRef,
+    required Map<String, dynamic> loteData,
+  }) {
+    final campana = loteData['campana']?.toString() ?? '-';
+    final cultivo = loteData['cultivo']?.toString() ?? '-';
+    final empresa = loteData['empresa']?.toString() ?? '-';
+    final estado = loteData['estado']?.toString() ?? '-';
+    final fechaCreacion = loteData['fechaCreacion'];
+    final fechaCierre = loteData['fechaCierre'];
+    final fechaCreacionStr = fechaCreacion is Timestamp
+        ? _formatearFecha(fechaCreacion.toDate())
+        : '-';
+    final fechaCierreStr = fechaCierre is Timestamp
+        ? _formatearFecha(fechaCierre.toDate())
+        : '-';
+    final abierto = estado == 'ABIERTO';
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: loteRef.collection('palets').snapshots(),
+      builder: (context, paletsSnapshot) {
+        final docs = paletsSnapshot.data?.docs ?? const [];
+        final totalPalets = docs.length;
+        final totalNeto = docs.fold<num>(0, (acumulado, doc) {
+          final data = doc.data();
+          final neto = data['neto'];
+          if (neto is num) {
+            return acumulado + neto;
+          }
+          if (neto is String) {
+            return acumulado + (num.tryParse(neto) ?? 0);
+          }
+          return acumulado;
+        });
+
+        return Card(
+          margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  loteId,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                _datoLote('Campaña', campana),
+                _datoLote('Cultivo', cultivo),
+                _datoLote('Empresa', empresa),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 130,
+                        child: Text(
+                          'Estado',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      Chip(
+                        label: Text(estado),
+                        backgroundColor:
+                            abierto ? Colors.green.shade100 : Colors.grey.shade300,
+                        labelStyle: TextStyle(
+                          color: abierto ? Colors.green.shade900 : Colors.grey.shade800,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _datoLote('Fecha creación', fechaCreacionStr),
+                _datoLote('Fecha cierre', fechaCierreStr),
+                _datoLote('Total palets', totalPalets.toString()),
+                _datoLote('Total neto', totalNeto.toString()),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
@@ -38,8 +153,9 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
           canEdit = estado == 'ABIERTO' || estado == 'EN_CURSO';
           canReopen = estado == 'CERRADO';
 
+          Widget listaPalets;
           if (palets == null || palets.isEmpty) {
-            body = const Center(
+            listaPalets = const Center(
               child: Text('No hay palets añadidos'),
             );
           } else {
@@ -55,8 +171,8 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
                 return a.key.compareTo(b.key);
               });
 
-            body = ListView.separated(
-              padding: const EdgeInsets.all(16),
+            listaPalets = ListView.separated(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               itemCount: entries.length,
               separatorBuilder: (_, __) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
@@ -207,6 +323,17 @@ class VolcadoDetalleLoteScreen extends StatelessWidget {
               },
             );
           }
+
+          body = Column(
+            children: [
+              _buildTarjetaInfoLote(
+                context: context,
+                loteRef: loteRef,
+                loteData: data ?? <String, dynamic>{},
+              ),
+              Expanded(child: listaPalets),
+            ],
+          );
         }
 
         return Scaffold(
