@@ -1,9 +1,9 @@
 # Codemagic workflow configuration for iOS release builds
 workflows:
   ios_release:
-    name: iOS Release (Xcode 16.4)
+    name: iOS Release (Xcode 26)
     environment:
-      xcode: 16.4
+      xcode: 26
       flutter: 3.24.3
       vars:
         BUNDLE_ID: com.sansebas.sansebasstock
