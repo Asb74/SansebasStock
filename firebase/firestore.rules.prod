@@ -14,6 +14,11 @@ service cloud.firestore {
           (request.resource.data[field] is int && request.resource.data[field] >= 0);
     }
 
+    function optionalPositiveNumber(field) {
+      return !hasField(field) ||
+          (request.resource.data[field] is number && request.resource.data[field] >= 0);
+    }
+
     function optionalPositiveString(field) {
       return !hasField(field) ||
           (request.resource.data[field] is string && request.resource.data[field].size() > 0);
@@ -43,7 +48,8 @@ service cloud.firestore {
         return optionalPositiveInt('P') &&
                optionalPositiveInt('LINEA') &&
                optionalPositiveInt('CAJAS') &&
-               optionalPositiveInt('NETO') &&
+               optionalPositiveNumber('NETO') &&
+               optionalPositiveNumber('BRUTO') &&
                optionalPositiveInt('NIVEL') &&
                optionalPositiveInt('POSICION') &&
                optionalPositiveInt('LINEAS') &&
