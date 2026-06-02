@@ -104,16 +104,6 @@ class HomeScreen extends ConsumerWidget {
                     );
                   },
                 ),
-
-                // --- AGRUPAR BOXES ---
-                _HomeActionCard(
-                  title: 'Agrupar Boxes',
-                  subtitle: 'Agrupa QR de boxes en un palet físico',
-                  icon: Icons.inventory_2_outlined,
-                  color: theme.colorScheme.primary,
-                  onTap: () => context.pushNamed('tools-agrupar-boxes'),
-                ),
-
                 // --- HERRAMIENTAS ---
                 _HomeActionCard(
                   title: 'Herramientas',
