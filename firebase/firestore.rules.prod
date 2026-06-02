@@ -59,8 +59,8 @@ service cloud.firestore {
     }
 
     match /Storage/{camaraId} {
-      allow read: if request.auth != null;
-      allow create, update: if request.auth != null
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn()
         && request.resource.data.CAMARA is string
         && request.resource.data.ESTANTERIAS is int
         && request.resource.data.NIVELES is int
@@ -68,13 +68,23 @@ service cloud.firestore {
         && int(request.resource.data.CAMARA) > 0
         && request.resource.data.ESTANTERIAS > 0
         && request.resource.data.NIVELES > 0;
-      allow delete: if request.auth != null;
+      allow delete: if isSignedIn();
     }
 
     match /StorageConfig/{cameraId} {
       match /rows/{rowId} {
         allow read, write: if isSignedIn();
       }
+    }
+
+    match /PalletGroups/{groupId} {
+      allow read, create, update: if isSignedIn();
+      allow delete: if false;
+    }
+
+    match /PalletGroupMembers/{palletId} {
+      allow read, create: if isSignedIn();
+      allow update, delete: if false;
     }
 
     // Bloquear cualquier otra colección por defecto

@@ -30,6 +30,17 @@ class ToolsScreen extends ConsumerWidget {
           ),
           Card(
             child: ListTile(
+              title: const Text('Agrupar Boxes'),
+              subtitle: const Text(
+                'Agrupa varios QR de box sobre un mismo palet físico',
+              ),
+              leading: const Icon(Icons.inventory_2_outlined),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.pushNamed('tools-agrupar-boxes'),
+            ),
+          ),
+          Card(
+            child: ListTile(
               title: const Text('Asignar lugar de almacenamiento'),
               subtitle: const Text(
                 'Configura qué productos se almacenan en cada fila de las cámaras de recepción',
