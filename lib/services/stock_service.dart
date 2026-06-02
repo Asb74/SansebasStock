@@ -5,6 +5,7 @@ import 'package:sansebas_stock/features/qr/qr_parser.dart';
 import 'package:sansebas_stock/utils/stock_doc_id.dart';
 
 import '../models/camera_model.dart';
+import '../models/pallet_group.dart';
 import '../models/stock_location.dart';
 import 'palet_location_service.dart';
 
@@ -51,6 +52,26 @@ class StockProcessException implements Exception {
 
   @override
   String toString() => 'StockProcessException($code, $message)';
+}
+
+class _PalletGroupStockContext {
+  const _PalletGroupStockContext({
+    required this.groupId,
+    required this.referencePalletId,
+    required this.memberPalletIds,
+    required this.boxesCount,
+    required this.netoTotal,
+    required this.brutoTotal,
+    required this.cajasTotal,
+  });
+
+  final String groupId;
+  final String referencePalletId;
+  final List<String> memberPalletIds;
+  final int boxesCount;
+  final double netoTotal;
+  final double brutoTotal;
+  final int cajasTotal;
 }
 
 class StockService {
@@ -175,8 +196,11 @@ class StockService {
     StockLocation? ubicacion,
   }) async {
     try {
+      final String scannedId = '${qr.linea}${qr.p}';
+      final _PalletGroupStockContext? groupContext =
+          await _resolvePalletGroupContext(scannedId);
+      final String docId = groupContext?.referencePalletId ?? scannedId;
       final StockLocation? resolvedUbicacion = await _resolveUbicacion(ubicacion);
-      final String docId = '${qr.linea}${qr.p}';
       final DocumentReference<Map<String, dynamic>> ref =
           _db.collection('Stock').doc(docId);
 
@@ -221,7 +245,10 @@ class StockService {
           }
         }
 
-        final Map<String, dynamic> data = _buildBaseData(qr)
+        final Map<String, dynamic> data = _buildStockData(
+          qr: qr,
+          groupContext: groupContext,
+        )
           ..addAll(resolvedUbicacion.toMap())
           ..['POSICION'] = posicion
           ..['HUECO'] = 'Ocupado';
@@ -230,6 +257,7 @@ class StockService {
 
         await _writeStockLog(
           palletId: docId,
+          scannedId: scannedId,
           fromValue: 'new',
           toValue: 'Ocupado',
         );
@@ -248,10 +276,16 @@ class StockService {
           (current['HUECO']?.toString().toLowerCase() ?? 'ocupado');
 
       if (huecoActual == 'ocupado') {
-        await ref.set({'HUECO': 'Libre'}, SetOptions(merge: true));
+        final Map<String, dynamic> data = groupContext == null
+            ? <String, dynamic>{'HUECO': 'Libre'}
+            : (_buildStockData(qr: qr, groupContext: groupContext)
+              ..['HUECO'] = 'Libre');
+
+        await ref.set(data, SetOptions(merge: true));
 
         await _writeStockLog(
           palletId: docId,
+          scannedId: scannedId,
           fromValue: huecoAnterior,
           toValue: 'Libre',
         );
@@ -298,7 +332,10 @@ class StockService {
         }
       }
 
-      final Map<String, dynamic> data = _buildBaseData(qr)
+      final Map<String, dynamic> data = _buildStockData(
+        qr: qr,
+        groupContext: groupContext,
+      )
         ..addAll(resolvedUbicacion.toMap())
         ..['POSICION'] = posicion
         ..['HUECO'] = 'Ocupado';
@@ -307,6 +344,7 @@ class StockService {
 
       await _writeStockLog(
         palletId: docId,
+        scannedId: scannedId,
         fromValue: huecoAnterior,
         toValue: 'Ocupado',
       );
@@ -423,6 +461,95 @@ class StockService {
     return posicion <= 0 ? 1 : posicion + 1;
   }
 
+  Future<_PalletGroupStockContext?> _resolvePalletGroupContext(
+    String scannedId,
+  ) async {
+    final DocumentSnapshot<Map<String, dynamic>> memberSnapshot = await _db
+        .collection('PalletGroupMembers')
+        .doc(scannedId)
+        .get();
+
+    if (!memberSnapshot.exists) {
+      return null;
+    }
+
+    final Map<String, dynamic> memberData =
+        memberSnapshot.data() ?? <String, dynamic>{};
+    final String groupId = memberData['groupId']?.toString().trim() ?? '';
+    final String referencePalletId =
+        memberData['referencePalletId']?.toString().trim() ?? '';
+
+    if (groupId.isEmpty || referencePalletId.isEmpty) {
+      throw const StockProcessException(
+        'invalid_pallet_group_member',
+        'El QR pertenece a un grupo, pero la relación del grupo está incompleta.',
+      );
+    }
+
+    final DocumentSnapshot<Map<String, dynamic>> groupSnapshot =
+        await _db.collection('PalletGroups').doc(groupId).get();
+
+    if (!groupSnapshot.exists) {
+      throw StockProcessException(
+        'pallet_group_not_found',
+        'El QR pertenece al grupo $groupId, pero el grupo no existe. Stock no se ha modificado.',
+      );
+    }
+
+    final PalletGroup group = PalletGroup.fromDoc(
+      groupSnapshot.id,
+      groupSnapshot.data() ?? <String, dynamic>{},
+    );
+
+    if (group.status.toLowerCase().trim() != 'closed') {
+      throw StockProcessException(
+        'pallet_group_not_closed',
+        'El QR pertenece al grupo $groupId, pero el grupo no está cerrado. Stock no se ha modificado.',
+      );
+    }
+
+    final _PalletGroupStockContext context = _PalletGroupStockContext(
+      groupId: groupId,
+      referencePalletId: referencePalletId,
+      memberPalletIds: group.memberPalletIds,
+      boxesCount: group.boxesCount,
+      netoTotal: group.netoTotal,
+      brutoTotal: group.brutoTotal,
+      cajasTotal: group.cajasTotal,
+    );
+
+    debugPrint(
+      'Agrupar Boxes Stock: scannedId=$scannedId, '
+      'groupId=${context.groupId}, '
+      'referencePalletId=${context.referencePalletId}, '
+      'boxesCount=${context.boxesCount}, '
+      'netoTotal=${context.netoTotal}, '
+      'cajasTotal=${context.cajasTotal}',
+    );
+
+    return context;
+  }
+
+  Map<String, dynamic> _buildStockData({
+    required ParsedQr qr,
+    required _PalletGroupStockContext? groupContext,
+  }) {
+    final Map<String, dynamic> data = _buildBaseData(qr);
+    if (groupContext == null) {
+      return data;
+    }
+
+    data['NETO'] = _normalizeStockNumber(groupContext.netoTotal);
+    data['BRUTO'] = _normalizeStockNumber(groupContext.brutoTotal);
+    data['CAJAS'] = groupContext.cajasTotal;
+    data['ES_GRUPO'] = true;
+    data['GROUP_ID'] = groupContext.groupId;
+    data['REFERENCE_PALLET_ID'] = groupContext.referencePalletId;
+    data['MEMBER_PALLET_IDS'] = groupContext.memberPalletIds;
+    data['BOXES_COUNT'] = groupContext.boxesCount;
+    return data;
+  }
+
   Map<String, dynamic> _buildBaseData(ParsedQr qr) {
     final Map<String, dynamic> data = Map<String, dynamic>.from(qr.data);
     data['P'] = qr.p;
@@ -434,6 +561,10 @@ class StockService {
     data['VIDA'] = qr.vida;
     data['LINEAS'] = qr.lineas;
     return data;
+  }
+
+  num _normalizeStockNumber(double value) {
+    return value % 1 == 0 ? value.toInt() : value;
   }
 
   String _normalizeHuecoValue(dynamic value) {
@@ -455,6 +586,7 @@ class StockService {
 
   Future<void> _writeStockLog({
     required String palletId,
+    String? scannedId,
     required String fromValue,
     required String toValue,
   }) async {
@@ -476,8 +608,9 @@ class StockService {
 
       final String? userName = userDoc.data()?['Nombre']?.toString();
 
-      await _db.collection('StockLogs').add(<String, dynamic>{
+      final Map<String, dynamic> logData = <String, dynamic>{
         'palletId': palletId,
+        if (scannedId != null && scannedId.isNotEmpty) 'scannedId': scannedId,
         'campo': 'HUECO',
         'from': fromValue,
         'to': toValue,
@@ -485,7 +618,9 @@ class StockService {
         'userEmail': user?.email,
         'userName': userName,
         'timestamp': FieldValue.serverTimestamp(),
-      });
+      };
+
+      await _db.collection('StockLogs').add(logData);
     } catch (e, st) {
       debugPrint('Error al escribir en StockLogs: $e');
       debugPrintStack(label: 'StockLogs stack', stackTrace: st);
