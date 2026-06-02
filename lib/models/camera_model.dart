@@ -27,34 +27,40 @@ extension CameraPasilloX on CameraPasillo {
   }
 }
 
-enum CameraTipo { expedicion, recepcion }
+enum CameraTipo { recepcion, expedicion, campo }
 
 extension CameraTipoX on CameraTipo {
   String get label {
     switch (this) {
-      case CameraTipo.expedicion:
-        return 'Expedición';
       case CameraTipo.recepcion:
         return 'Recepción';
+      case CameraTipo.expedicion:
+        return 'Expedición';
+      case CameraTipo.campo:
+        return 'Campo';
     }
   }
 
   String get firestoreValue {
     switch (this) {
-      case CameraTipo.expedicion:
-        return 'expedicion';
       case CameraTipo.recepcion:
         return 'recepcion';
+      case CameraTipo.expedicion:
+        return 'expedicion';
+      case CameraTipo.campo:
+        return 'campo';
     }
   }
 
   static CameraTipo fromFirestore(String? raw) {
-    switch ((raw ?? '').toLowerCase()) {
-      case 'recepcion':
-        return CameraTipo.recepcion;
+    switch ((raw ?? '').trim().toLowerCase()) {
       case 'expedicion':
-      default:
         return CameraTipo.expedicion;
+      case 'campo':
+        return CameraTipo.campo;
+      case 'recepcion':
+      default:
+        return CameraTipo.recepcion;
     }
   }
 }
