@@ -45,5 +45,24 @@ void main() {
       expect(palet.hueco, 'Libre');
       expect(palet.neto, 0);
     });
+
+    test('expone metadatos de grupos de boxes', () {
+      final palet = Palet.fromDoc('group123', {
+        'P': 'G-01',
+        'NETO': 360,
+        'BRUTO': '390,5',
+        'CAJAS': 24,
+        'ES_GRUPO': true,
+        'BOXES_COUNT': '3',
+        'MEMBER_PALLET_IDS': ['1001', '1002', '1003'],
+      });
+
+      expect(palet.esGrupo, isTrue);
+      expect(palet.boxesCount, 3);
+      expect(palet.bruto, 390.5);
+      expect(palet.memberPalletIds, ['1001', '1002', '1003']);
+      expect(palet.neto, 360);
+      expect(palet.cajas, 24);
+    });
   });
 }

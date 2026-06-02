@@ -49,10 +49,40 @@ class StockEntry {
 
   int? get cajas => _asInt(data['CAJAS']);
   int? get neto => _asInt(data['NETO']);
+  num? get bruto => _asNum(data['BRUTO']);
+  bool get esGrupo => data['ES_GRUPO'] == true;
+  int? get boxesCount => _asInt(data['BOXES_COUNT']);
+
+  List<String> get memberPalletIds {
+    final raw = data['MEMBER_PALLET_IDS'];
+    if (raw is Iterable) {
+      return raw
+          .map((value) => value.toString().trim())
+          .where((value) => value.isNotEmpty)
+          .toList(growable: false);
+    }
+
+    final text = raw?.toString().trim();
+    if (text == null || text.isEmpty) {
+      return const <String>[];
+    }
+
+    return text
+        .split(',')
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
 
   static int? _asInt(dynamic value) {
     if (value is int) return value;
+    if (value is num) return value.toInt();
     return int.tryParse(value?.toString() ?? '');
+  }
+
+  static num? _asNum(dynamic value) {
+    if (value is num) return value;
+    return num.tryParse(value?.toString().replaceAll(',', '.') ?? '');
   }
 }
 

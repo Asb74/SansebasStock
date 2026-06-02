@@ -46,17 +46,47 @@ class Palet extends Equatable {
 
   bool get estaOcupado => hueco.toLowerCase() == 'ocupado';
 
+  bool get esGrupo => rawData['ES_GRUPO'] == true;
+
+  int get boxesCount => _asNullableInt(rawData['BOXES_COUNT']) ?? 0;
+
+  num? get bruto => _asNullableNum(rawData['BRUTO']);
+
+  List<String> get memberPalletIds {
+    final raw = rawData['MEMBER_PALLET_IDS'];
+    if (raw is Iterable) {
+      return raw
+          .map((value) => value.toString().trim())
+          .where((value) => value.isNotEmpty)
+          .toList(growable: false);
+    }
+
+    final text = raw?.toString().trim();
+    if (text == null || text.isEmpty) {
+      return const <String>[];
+    }
+
+    return text
+        .split(',')
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  static int? _asNullableInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '');
+  }
+
+  static num? _asNullableNum(dynamic value) {
+    if (value is num) return value;
+    return num.tryParse(value?.toString().replaceAll(',', '.') ?? '');
+  }
+
   /// Crea una instancia de [Palet] a partir de un documento de Firestore.
   factory Palet.fromDoc(String id, Map<String, dynamic> data) {
-    int _asInt(dynamic value) {
-      if (value is int) {
-        return value;
-      }
-      if (value is num) {
-        return value.toInt();
-      }
-      return int.tryParse(value?.toString() ?? '') ?? 0;
-    }
+    int _asInt(dynamic value) => _asNullableInt(value) ?? 0;
 
     String _asString(String key) {
       final raw = data[key];

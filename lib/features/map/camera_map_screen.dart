@@ -481,13 +481,35 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Palet ${palet.codigo}',
-                  style: Theme.of(context).textTheme.titleLarge),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    'Palet ${palet.codigo}',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  if (entry.esGrupo)
+                    Chip(
+                      visualDensity: VisualDensity.compact,
+                      avatar: const Icon(Icons.inventory_2_outlined, size: 16),
+                      label: const Text('Agrupado'),
+                      backgroundColor:
+                          Theme.of(context).colorScheme.secondaryContainer,
+                    ),
+                ],
+              ),
               const SizedBox(height: 12),
               Text('Fila: F${entry.fila}'),
               Text('Posición: P${entry.posicion}'),
               if (entry.neto != null) Text('Neto: ${entry.neto}'),
+              if (entry.bruto != null) Text('Bruto: ${_formatStockNumber(entry.bruto!)}'),
               if (entry.cajas != null) Text('Cajas: ${entry.cajas}'),
+              if (entry.esGrupo) ...[
+                const SizedBox(height: 8),
+                Text('Grupo de boxes · BOXES_COUNT: ${entry.boxesCount ?? 0}'),
+              ],
               const SizedBox(height: 16),
               Text('ID: ${entry.id}'),
               const SizedBox(height: 8),
@@ -529,9 +551,17 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                         addField('CALIBRE', data['CALIBRE']);
                         addField('MARCA', data['MARCA']);
                         addField('NETO', data['NETO']);
+                        addField('BRUTO', data['BRUTO']);
                         addField('LINEA', data['LINEA']);
                         addField('P', data['P']);
                         addField('CAJAS', data['CAJAS']);
+                        if (entry.esGrupo) {
+                          addField('ES_GRUPO', 'Grupo de boxes');
+                          addField('BOXES_COUNT', data['BOXES_COUNT']);
+                          addField('GROUP_ID', data['GROUP_ID']);
+                          addField('REFERENCE_PALLET_ID',
+                              data['REFERENCE_PALLET_ID']);
+                        }
                         addField('CATEGORIA', data['CATEGORIA']);
                         addField('CONFECCION', data['CONFECCION']);
                         addField('PEDIDO', data['PEDIDO']);
@@ -576,6 +606,10 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 ...fieldWidgets,
+                                if (entry.esGrupo)
+                                  _GroupBoxesSection(
+                                    memberPalletIds: entry.memberPalletIds,
+                                  ),
                                 lastMovementAsync.when(
                                   data: (log) {
                                     if (log == null) {
@@ -656,7 +690,9 @@ class _CameraMapScreenState extends ConsumerState<CameraMapScreen>
                       },
                     );
                   },
-                  child: const Text('Ver todos los campos'),
+                  child: Text(
+                    entry.esGrupo ? 'Ver boxes del grupo' : 'Ver todos los campos',
+                  ),
                 ),
             ],
           ),
@@ -1557,6 +1593,41 @@ class _CameraCanvas extends StatelessWidget {
             ...rows,
           ],
         ),
+      ),
+    );
+  }
+}
+
+String _formatStockNumber(num value) {
+  if (value % 1 == 0) {
+    return value.toInt().toString();
+  }
+  return value.toStringAsFixed(2);
+}
+
+class _GroupBoxesSection extends StatelessWidget {
+  const _GroupBoxesSection({required this.memberPalletIds});
+
+  final List<String> memberPalletIds;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'MEMBER_PALLET_IDS',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          if (memberPalletIds.isEmpty)
+            const Text('Sin boxes registrados.')
+          else
+            ...memberPalletIds.map((memberId) => Text('• $memberId')),
+          const SizedBox(height: 8),
+        ],
       ),
     );
   }
