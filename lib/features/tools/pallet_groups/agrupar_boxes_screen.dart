@@ -22,7 +22,6 @@ class AgruparBoxesScreen extends ConsumerStatefulWidget {
 class _AgruparBoxesScreenState extends ConsumerState<AgruparBoxesScreen> {
   static const int _maxBoxes = 6;
 
-  final TextEditingController _manualQrController = TextEditingController();
   final List<_ScannedBox> _boxes = <_ScannedBox>[];
   bool _busy = false;
 
@@ -48,12 +47,6 @@ class _AgruparBoxesScreenState extends ConsumerState<AgruparBoxesScreen> {
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
-  @override
-  void dispose() {
-    _manualQrController.dispose();
-    super.dispose();
-  }
-
   Future<void> _scanQr() async {
     if (!_canScan) {
       return;
@@ -72,18 +65,10 @@ class _AgruparBoxesScreenState extends ConsumerState<AgruparBoxesScreen> {
       return;
     }
 
-    await _addRawQr(result);
+    await _addScannedQr(result);
   }
 
-  Future<void> _addManualQr() async {
-    final raw = _manualQrController.text;
-    await _addRawQr(raw);
-    if (mounted && raw.trim().isNotEmpty) {
-      _manualQrController.clear();
-    }
-  }
-
-  Future<void> _addRawQr(String raw) async {
+  Future<void> _addScannedQr(String raw) async {
     if (!_canScan) {
       _showError('El grupo no puede tener más de $_maxBoxes QR.');
       return;
@@ -288,33 +273,12 @@ class _AgruparBoxesScreenState extends ConsumerState<AgruparBoxesScreen> {
                     if (!_isMobile) ...[
                       const SizedBox(height: 8),
                       Text(
-                        'El escaneo con cámara solo está disponible en móvil. Puedes pegar un QR para pruebas o escritorio.',
+                        'El escaneo con cámara solo está disponible en móvil.',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ],
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _manualQrController,
-                      minLines: 1,
-                      maxLines: 3,
-                      decoration: InputDecoration(
-                        labelText: 'QR manual',
-                        hintText: 'Pega aquí el contenido del QR',
-                        border: const OutlineInputBorder(),
-                        suffixIcon: IconButton(
-                          tooltip: 'Añadir QR manual',
-                          onPressed: _canScan ? _addManualQr : null,
-                          icon: const Icon(Icons.add_circle_outline),
-                        ),
-                      ),
-                      onSubmitted: (_) {
-                        if (_canScan) {
-                          _addManualQr();
-                        }
-                      },
-                    ),
                   ],
                 ),
               ),
