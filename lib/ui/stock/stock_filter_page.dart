@@ -172,21 +172,11 @@ class _StockFilterPageState extends ConsumerState<StockFilterPage> {
                               'Palets: ${palets.length} — Neto grupo: $groupTotal kg',
                             ),
                             children: palets.map((palet) {
-                              return ListTile(
-                                title: Text(
-                                  '${palet.codigo} · ${palet.cultivo} ${palet.variedad}',
-                                ),
-                                subtitle: Text(
-                                  'Calibre: ${palet.calibre} · Marca: ${palet.marca}\nNivel: ${palet.nivel} · Línea: ${palet.linea} · Posición: ${palet.posicion}',
-                                ),
-                                trailing: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(palet.hueco),
-                                    Text('${palet.neto} kg'),
-                                  ],
-                                ),
+                              return _PaletStockTile(
+                                palet: palet,
+                                onShowGroupBoxes: palet.esGrupo
+                                    ? () => _showGroupBoxesDialog(context, palet)
+                                    : null,
                               );
                             }).toList(),
                           ),
@@ -210,6 +200,70 @@ class _StockFilterPageState extends ConsumerState<StockFilterPage> {
           ],
         ),
       ),
+    );
+  }
+
+
+  void _showGroupBoxesDialog(BuildContext context, Palet palet) {
+    final memberIds = palet.memberPalletIds;
+
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Boxes del grupo ${palet.codigo}'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _GroupSummaryLine(label: 'Etiqueta', value: 'Agrupado'),
+                  _GroupSummaryLine(
+                    label: 'BOXES_COUNT',
+                    value: palet.boxesCount.toString(),
+                  ),
+                  _GroupSummaryLine(label: 'NETO total', value: '${palet.neto} kg'),
+                  if (palet.bruto != null)
+                    _GroupSummaryLine(
+                      label: 'BRUTO total',
+                      value: _formatNumber(palet.bruto!),
+                    ),
+                  if (palet.cajas != null)
+                    _GroupSummaryLine(
+                      label: 'CAJAS total',
+                      value: palet.cajas.toString(),
+                    ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'MEMBER_PALLET_IDS',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 6),
+                  if (memberIds.isEmpty)
+                    const Text('Sin boxes registrados.')
+                  else
+                    ...memberIds.map(
+                      (memberId) => ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.inventory_2_outlined),
+                        title: Text(memberId),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cerrar'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -867,3 +921,87 @@ class _ErrorMessage extends StatelessWidget {
 }
 
 enum _ViewsMenuAction { load, rename, delete }
+
+String _formatNumber(num value) {
+  if (value % 1 == 0) {
+    return value.toInt().toString();
+  }
+  return value.toStringAsFixed(2);
+}
+
+class _PaletStockTile extends StatelessWidget {
+  const _PaletStockTile({required this.palet, required this.onShowGroupBoxes});
+
+  final Palet palet;
+  final VoidCallback? onShowGroupBoxes;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return ListTile(
+      title: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text('${palet.codigo} · ${palet.cultivo} ${palet.variedad}'),
+          if (palet.esGrupo)
+            Chip(
+              visualDensity: VisualDensity.compact,
+              avatar: const Icon(Icons.inventory_2_outlined, size: 16),
+              label: const Text('Agrupado'),
+              backgroundColor: theme.colorScheme.secondaryContainer,
+            ),
+        ],
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Calibre: ${palet.calibre} · Marca: ${palet.marca}\n'
+            'Nivel: ${palet.nivel} · Línea: ${palet.linea} · Posición: ${palet.posicion}',
+          ),
+          if (palet.esGrupo) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Grupo de boxes · BOXES_COUNT: ${palet.boxesCount} · '
+              'NETO: ${palet.neto} kg'
+              '${palet.bruto != null ? ' · BRUTO: ${_formatNumber(palet.bruto!)}' : ''}'
+              '${palet.cajas != null ? ' · CAJAS: ${palet.cajas}' : ''}',
+            ),
+            TextButton.icon(
+              onPressed: onShowGroupBoxes,
+              icon: const Icon(Icons.visibility_outlined),
+              label: const Text('Ver boxes del grupo'),
+            ),
+          ],
+        ],
+      ),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(palet.hueco),
+          Text('${palet.neto} kg'),
+          if (palet.esGrupo && palet.cajas != null) Text('${palet.cajas} cajas'),
+        ],
+      ),
+    );
+  }
+}
+
+class _GroupSummaryLine extends StatelessWidget {
+  const _GroupSummaryLine({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Text('$label: $value'),
+    );
+  }
+}
