@@ -5,6 +5,7 @@ import '../features/auth/login_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/tools/compare_loteado_stock_screen.dart';
+import '../features/tools/pallet_groups/agrupar_boxes_screen.dart';
 import '../features/tools/assign_storage/assign_storage_cameras_screen.dart';
 import '../features/tools/assign_storage/assign_storage_rows_screen.dart';
 import '../features/tools/tools_screen.dart';
@@ -46,6 +47,12 @@ final GoRouter appRouter = GoRouter(
           name: 'tools-compare',
           builder: (BuildContext context, GoRouterState state) =>
               const CompareLoteadoStockScreen(),
+        ),
+        GoRoute(
+          path: 'agrupar-boxes',
+          name: 'tools-agrupar-boxes',
+          builder: (BuildContext context, GoRouterState state) =>
+              const AgruparBoxesScreen(),
         ),
         GoRoute(
           path: 'assign-storage',
