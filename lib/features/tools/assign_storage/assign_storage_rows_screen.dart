@@ -22,23 +22,6 @@ class AssignStorageRowsScreen extends ConsumerStatefulWidget {
 
 class _AssignStorageRowsScreenState
     extends ConsumerState<AssignStorageRowsScreen> {
-  List<StorageRowConfig>? _rows;
-
-  @override
-  void initState() {
-    super.initState();
-    ref.listen<AsyncValue<List<StorageRowConfig>>>(
-      storageRowsByCameraProvider(widget.camera.numero),
-      (previous, next) {
-        next.whenData((rows) {
-          setState(() {
-            _rows = rows;
-          });
-        });
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final rowsAsync =
@@ -65,12 +48,11 @@ class _AssignStorageRowsScreenState
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Error cargando configuración: $e')),
             data: (rowsFromStream) {
-              final rows = _rows ?? rowsFromStream;
               return occupiedAsync.when(
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => Center(child: Text('Error cargando filas ocupadas: $e')),
                 data: (occupiedRows) {
-                  final byFila = {for (final r in rows) r.fila: r};
+                  final byFila = {for (final r in rowsFromStream) r.fila: r};
 
                   return ListView.builder(
                     padding: const EdgeInsets.all(16),
@@ -267,19 +249,6 @@ class _AssignStorageRowsScreenState
   }
 
   Future<void> _updateRowAndSave(StorageRowConfig row) async {
-    setState(() {
-      final updatedRows = [...?_rows];
-      final index = updatedRows.indexWhere((r) => r.rowId == row.rowId);
-
-      if (index == -1) {
-        updatedRows.add(row);
-      } else {
-        updatedRows[index] = row;
-      }
-
-      _rows = updatedRows;
-    });
-
     try {
       final repo = ref.read(storageConfigRepositoryProvider);
       await repo.saveRow(row);
