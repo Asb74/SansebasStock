@@ -82,7 +82,8 @@ Future<CmrPalletGroupResolution> resolverGrupoCmr({
   required FirebaseFirestore firestore,
   required String scannedPalletId,
 }) async {
-  final normalizedScannedPalletId = normalizarPalet(scannedPalletId).trim();
+  final rawScannedPalletId = scannedPalletId.replaceAll(' ', '').trim();
+  final normalizedScannedPalletId = normalizarPalet(rawScannedPalletId).trim();
   if (normalizedScannedPalletId.isEmpty) {
     return const CmrPalletGroupResolution(
       scannedPalletId: '',
@@ -96,32 +97,69 @@ Future<CmrPalletGroupResolution> resolverGrupoCmr({
     );
   }
 
-  final memberSnapshot = await firestore
-      .collection('PalletGroupMembers')
-      .doc(normalizedScannedPalletId)
-      .get();
-  final foundByMember = memberSnapshot.exists;
+  final palletIdVariants = <String>{
+    normalizedScannedPalletId,
+    if (rawScannedPalletId.isNotEmpty) rawScannedPalletId,
+  };
+  var foundByMember = false;
   var foundByGroupId = false;
   DocumentSnapshot<Map<String, dynamic>>? groupSnapshot;
   var groupId = '';
 
-  if (foundByMember) {
+  for (final palletId in palletIdVariants) {
+    final memberSnapshot = await firestore
+        .collection('PalletGroupMembers')
+        .doc(palletId)
+        .get();
+    if (!memberSnapshot.exists) {
+      continue;
+    }
+
+    foundByMember = true;
     final memberData = memberSnapshot.data() ?? <String, dynamic>{};
     groupId = memberData['groupId']?.toString().trim() ?? '';
+    if (groupId.isEmpty) {
+      groupId = normalizarPalet(
+        memberData['referencePalletId']?.toString() ?? '',
+      ).trim();
+    }
     if (groupId.isNotEmpty) {
       groupSnapshot = await firestore
           .collection('PalletGroups')
           .doc(groupId)
           .get();
+      if (groupSnapshot.exists) {
+        break;
+      }
     }
-  } else {
-    groupSnapshot = await firestore
-        .collection('PalletGroups')
-        .doc(normalizedScannedPalletId)
-        .get();
-    foundByGroupId = groupSnapshot.exists;
-    if (foundByGroupId) {
-      groupId = normalizedScannedPalletId;
+  }
+
+  if (groupSnapshot == null || !groupSnapshot.exists) {
+    for (final palletId in palletIdVariants) {
+      groupSnapshot = await firestore
+          .collection('PalletGroups')
+          .doc(palletId)
+          .get();
+      if (groupSnapshot.exists) {
+        foundByGroupId = true;
+        groupId = palletId;
+        break;
+      }
+    }
+  }
+
+  if (groupSnapshot == null || !groupSnapshot.exists) {
+    for (final palletId in palletIdVariants) {
+      final querySnapshot = await firestore
+          .collection('PalletGroups')
+          .where('memberPalletIds', arrayContains: palletId)
+          .limit(1)
+          .get();
+      if (querySnapshot.docs.isNotEmpty) {
+        groupSnapshot = querySnapshot.docs.first;
+        groupId = groupSnapshot.id;
+        break;
+      }
     }
   }
 
@@ -144,7 +182,7 @@ Future<CmrPalletGroupResolution> resolverGrupoCmr({
           ? groupData['groupId'].toString().trim()
           : groupSnapshot.id;
   final referencePalletId = normalizarPalet(
-    groupData['referencePalletId']?.toString() ?? '',
+    groupData['referencePalletId']?.toString() ?? groupSnapshot.id,
   ).trim();
   final memberPalletIds =
       (groupData['memberPalletIds'] as List<dynamic>? ?? const [])
@@ -152,9 +190,7 @@ Future<CmrPalletGroupResolution> resolverGrupoCmr({
           .where((value) => value.isNotEmpty)
           .toSet()
           .toList(growable: false);
-  final effectivePalletId = referencePalletId.isNotEmpty
-      ? referencePalletId
-      : normalizedScannedPalletId;
+  final effectivePalletId = referencePalletId;
 
   return CmrPalletGroupResolution(
     scannedPalletId: normalizedScannedPalletId,

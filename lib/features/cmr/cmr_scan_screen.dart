@@ -325,6 +325,15 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       final paletsToMark = isManual
           ? memberPalletIds
           : miembrosDelPedidoMarcados;
+      debugPrint(
+        'CMR upsert debug: '
+        'scannedPalletId=$scannedPalletId, '
+        'effectivePalletId=$effectivePalletId, '
+        'isGrouped=$isGrouped, '
+        'memberPalletIds=$memberPalletIds, '
+        'miembrosDelPedidoMarcados=$miembrosDelPedidoMarcados, '
+        'paletsToMark=$paletsToMark',
+      );
       final scanResult = await _upsertPaletsInPedido(
         pedidoRef: pedidoRef,
         paletIds: paletsToMark,
@@ -615,14 +624,15 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
 
     final data = snapshot.data() ?? <String, dynamic>{};
     final expectedFromLines = _buildExpectedPaletsFromData(data).keys.toSet();
-    if (expectedFromLines.isNotEmpty) {
-      return members
-          .where(expectedFromLines.contains)
-          .toList(growable: false);
-    }
+    final expectedPalets = expectedFromLines.isNotEmpty
+        ? expectedFromLines
+        : _expectedPalets.map(_normalizePaletId).toSet();
 
-    return members
-        .where(_expectedPalets.contains)
+    return memberPalletIds
+        .map(_normalizePaletId)
+        .where((value) => value.isNotEmpty)
+        .where(expectedPalets.contains)
+        .toSet()
         .toList(growable: false);
   }
 
