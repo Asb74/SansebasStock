@@ -80,10 +80,29 @@ String parsePaletFromQr(String raw) {
   return normalizePaletForStock(candidate);
 }
 
+({String basePalletId, String level})? _parseEmbeddedLevelInP(String raw) {
+  final match = RegExp(
+    r'(?:^|[^A-Z0-9_])P\s*=\s*([0-9]{10})\^#([123])(?:$|[^0-9])',
+    caseSensitive: false,
+  ).firstMatch(raw);
+  if (match == null) {
+    return null;
+  }
+
+  return (basePalletId: match.group(1) ?? '', level: match.group(2) ?? '');
+}
+
 String parseStockPaletIdFromQr(String raw) {
   final trimmed = raw.trim();
   if (trimmed.isEmpty) {
     return '';
+  }
+
+  final embeddedLevel = _parseEmbeddedLevelInP(trimmed);
+  if (embeddedLevel != null) {
+    return normalizePaletForStock(
+      '${embeddedLevel.level}${embeddedLevel.basePalletId}',
+    );
   }
 
   final paletId = parsePaletFromQr(trimmed);
