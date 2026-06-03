@@ -160,7 +160,15 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     });
 
     try {
-      final scannedStockId = normalizePaletForStock(parsePaletFromQr(raw));
+      final scannedStockId = parseStockPaletIdFromQr(raw);
+      debugPrint('CMR QR DEBUG raw=$raw');
+      debugPrint(
+        'CMR QR DEBUG '
+        'p=${parsePaletFromQr(raw)} '
+        'stockId=${parseStockPaletIdFromQr(raw)} '
+        'pedidoId=${normalizePaletForPedido(parseStockPaletIdFromQr(raw))}',
+      );
+
       if (scannedStockId.isEmpty) {
         await _showOverlayResult(
           paletId: '—',
@@ -189,6 +197,12 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
           .where((value) => value.isNotEmpty)
           .toSet()
           .toList(growable: false);
+      debugPrint(
+        'CMR GROUP DEBUG '
+        'foundByMember=${groupResolution.foundByMember}, '
+        'memberStockIds=$memberStockIds, '
+        'memberPedidoIds=$memberPedidoIds',
+      );
 
       if (effectiveStockId.isEmpty) {
         await _showOverlayResult(
@@ -398,21 +412,21 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         status: _OverlayStatus.valid,
       );
     } on FormatException catch (e) {
-      final paletId = normalizePaletForStock(parsePaletFromQr(raw));
+      final paletId = parseStockPaletIdFromQr(raw);
       await _showOverlayResult(
         paletId: paletId.isEmpty ? '—' : paletId,
         message: e.message,
         status: _OverlayStatus.invalid,
       );
     } on StockProcessException catch (e) {
-      final paletId = normalizePaletForStock(parsePaletFromQr(raw));
+      final paletId = parseStockPaletIdFromQr(raw);
       await _showOverlayResult(
         paletId: paletId.isEmpty ? '—' : paletId,
         message: e.message,
         status: _OverlayStatus.invalid,
       );
     } on FirebaseException {
-      final paletId = normalizePaletForStock(parsePaletFromQr(raw));
+      final paletId = parseStockPaletIdFromQr(raw);
       await _showOverlayResult(
         paletId: paletId.isEmpty ? '—' : paletId,
         message: 'No se pudo actualizar el palet',

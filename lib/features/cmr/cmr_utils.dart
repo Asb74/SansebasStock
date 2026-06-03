@@ -55,25 +55,53 @@ String normalizePaletId(String raw) {
   return normalizePaletForPedido(raw);
 }
 
+String? _parseNumericQrField(String raw, Iterable<String> keys) {
+  final keyPattern = keys.map(RegExp.escape).join('|');
+  final match = RegExp(
+    '(?:^|[^A-Z0-9_])(?:$keyPattern)\\s*=\\s*([0-9]+)',
+    caseSensitive: false,
+  ).firstMatch(raw);
+  return match?.group(1);
+}
+
 String parsePaletFromQr(String raw) {
   final trimmed = raw.trim();
   if (trimmed.isEmpty) {
     return '';
   }
 
-  String? candidate;
-  final match = RegExp(r'P=([0-9]+)').firstMatch(trimmed);
-  if (match != null) {
-    candidate = match.group(1);
-  } else if (RegExp(r'^\d+$').hasMatch(trimmed)) {
-    candidate = trimmed;
-  }
+  final candidate = _parseNumericQrField(trimmed, const ['P']) ??
+      (RegExp(r'^\d+$').hasMatch(trimmed) ? trimmed : null);
 
   if (candidate == null || candidate.isEmpty) {
     return '';
   }
 
   return normalizePaletForStock(candidate);
+}
+
+String parseStockPaletIdFromQr(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) {
+    return '';
+  }
+
+  final paletId = parsePaletFromQr(trimmed);
+  if (paletId.isEmpty) {
+    return '';
+  }
+  if (RegExp(r'^\d{11}$').hasMatch(paletId)) {
+    return paletId;
+  }
+
+  final nivel = _parseNumericQrField(trimmed, const ['NIVEL', 'Q']);
+  if (RegExp(r'^\d{10}$').hasMatch(paletId) &&
+      nivel != null &&
+      RegExp(r'^\d$').hasMatch(nivel)) {
+    return normalizePaletForStock('$nivel$paletId');
+  }
+
+  return paletId;
 }
 
 List<String> parsePaletsFromLines(Iterable<String> rawPalets) {
