@@ -15,7 +15,8 @@ service cloud.firestore {
     // 2) Stock: lectura para usuarios autenticados (ajusta si necesitas escribir)
     match /Stock/{docId} {
       allow read: if request.auth != null;
-      allow write: if false; // cambia a condición real si necesitas escribir
+      allow delete: if request.auth != null;
+      allow create, update: if false; // cambia a condición real si necesitas escribir
     }
 
     // 3) Storage (metadatos de cámaras/estanterías): lectura autenticada
@@ -36,11 +37,15 @@ service cloud.firestore {
     }
 
     match /PalletGroups/{groupId} {
-      allow read, create, update: if request.auth != null;
-      allow delete: if false;
+      allow read, create, update, delete: if request.auth != null;
     }
 
     match /PalletGroupMembers/{palletId} {
+      allow read, create, delete: if request.auth != null;
+      allow update: if false;
+    }
+
+    match /GroupLogs/{logId} {
       allow read, create: if request.auth != null;
       allow update, delete: if false;
     }
