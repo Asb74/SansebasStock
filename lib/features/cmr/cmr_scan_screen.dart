@@ -208,13 +208,16 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       debugPrint(
         'CMR group debug: '
         'scannedPalletId=$scannedPalletId, '
+        'effectivePalletId=$effectivePalletId, '
+        'isGrouped=$isGrouped, '
+        'groupId=${groupResolution.groupId}, '
+        'memberPalletIds=$memberPalletIds, '
+        'miembrosDelPedidoMarcados=[], '
+        'stockDocIdUsado=$stockDocId, '
+        'stockDocPath=$stockDocPath, '
         'foundByMember=${groupResolution.foundByMember}, '
         'foundByGroupId=${groupResolution.foundByGroupId}, '
-        'groupId=${groupResolution.groupId}, '
-        'referencePalletId=${groupResolution.referencePalletId}, '
-        'effectivePalletId=$effectivePalletId, '
-        'memberPalletIds=$memberPalletIds, '
-        'stockDocPath=$stockDocPath',
+        'referencePalletId=${groupResolution.referencePalletId}',
       );
 
       if (!stockSnapshot.exists) {
@@ -266,8 +269,20 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
           palletId: effectivePalletId,
           pedidoId: pedidoId,
         );
+        if (mounted) {
+          setState(() {
+            _firestorePalets.addAll(memberPalletIds);
+          });
+        }
         debugPrint(
-          'CMR group debug: miembrosDelPedidoMarcados=$memberPalletIds, '
+          'CMR group debug: '
+          'scannedPalletId=$scannedPalletId, '
+          'effectivePalletId=$effectivePalletId, '
+          'isGrouped=$isGrouped, '
+          'groupId=${groupResolution.groupId}, '
+          'memberPalletIds=$memberPalletIds, '
+          'miembrosDelPedidoMarcados=$memberPalletIds, '
+          'stockDocIdUsado=$stockDocId, '
           'stockDocPath=$stockDocPath',
         );
         await _showOverlayResult(
@@ -286,7 +301,14 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         memberPalletIds: memberPalletIds,
       );
       debugPrint(
-        'CMR group debug: miembrosDelPedidoMarcados=$miembrosDelPedidoMarcados, '
+        'CMR group debug: '
+        'scannedPalletId=$scannedPalletId, '
+        'effectivePalletId=$effectivePalletId, '
+        'isGrouped=$isGrouped, '
+        'groupId=${groupResolution.groupId}, '
+        'memberPalletIds=$memberPalletIds, '
+        'miembrosDelPedidoMarcados=$miembrosDelPedidoMarcados, '
+        'stockDocIdUsado=$stockDocId, '
         'stockDocPath=$stockDocPath',
       );
       if (miembrosDelPedidoMarcados.isEmpty && !isManual) {
@@ -336,6 +358,11 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       }
 
       if (scanResult.status == _ScanTransactionStatus.added) {
+        if (mounted) {
+          setState(() {
+            _firestorePalets.addAll(scanResult.addedPaletIds);
+          });
+        }
         final stockService = ref.read(stockServiceProvider);
         final pedidoId = pedidoRef.id;
         await stockService.liberarPaletParaCmr(
@@ -937,7 +964,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         _pedidoEstado = 'En_Curso_Manual';
         _expectedPalets = paletIds.toSet();
         _lineaByPalet = <String, int?>{};
-        _firestorePalets = <String>{};
+        _firestorePalets = paletIds.toSet();
       });
     }
 
