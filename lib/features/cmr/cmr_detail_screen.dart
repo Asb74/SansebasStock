@@ -101,7 +101,7 @@ class _CmrDetailScreenState extends State<CmrDetailScreen> {
       return const [];
     }
     return raw
-        .map((value) => normalizarPalet(value?.toString() ?? ''))
+        .map((value) => normalizePaletForPedido(value?.toString() ?? ''))
         .where((value) => value.isNotEmpty)
         .toList();
   }
@@ -110,7 +110,7 @@ class _CmrDetailScreenState extends State<CmrDetailScreen> {
     final Map<String, int?> map = {};
     for (final line in pedido.lineas) {
       for (final raw in line.palets) {
-        final normalized = normalizePaletId(raw);
+        final normalized = normalizePaletForPedido(raw);
         if (normalized.isEmpty) continue;
         map.putIfAbsent(normalized, () => line.linea);
       }

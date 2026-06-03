@@ -53,12 +53,12 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
   @override
   void initState() {
     super.initState();
-    _expectedPalets = widget.expectedPalets.map(_normalizePaletId).toSet();
+    _expectedPalets = widget.expectedPalets.map(_normalizePedidoPaletId).toSet();
     _lineaByPalet = {
       for (final entry in widget.lineaByPalet.entries)
-        _normalizePaletId(entry.key): entry.value,
+        _normalizePedidoPaletId(entry.key): entry.value,
     };
-    _invalid.addAll(widget.initialInvalid.map(_normalizePaletId));
+    _invalid.addAll(widget.initialInvalid.map(_normalizePedidoPaletId));
     _pedido = widget.pedido;
     _pedidoRef = widget.pedido?.ref;
     _pedidoId = widget.pedido?.idPedidoLora ?? '';
@@ -99,6 +99,11 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     final palets = _extractPaletsFromData(data).toSet();
     final expectedFromLineas =
         _expectedPalets.isEmpty ? _buildExpectedPaletsFromData(data) : null;
+    debugPrint(
+      'CMR counter debug: '
+      'expectedPedidoIds=${expectedFromLineas?.keys.toSet() ?? _expectedPalets}, '
+      'firestorePedidoIds=$palets',
+    );
     final pedido = CmrPedido.fromSnapshot(snapshot);
 
     setState(() {
@@ -155,8 +160,8 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     });
 
     try {
-      final scannedPalletId = _normalizePaletId(parsePaletFromQr(raw));
-      if (scannedPalletId.isEmpty) {
+      final scannedStockId = normalizePaletForStock(parsePaletFromQr(raw));
+      if (scannedStockId.isEmpty) {
         await _showOverlayResult(
           paletId: '—',
           message: 'QR no reconocido',
@@ -167,38 +172,43 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
 
       final groupResolution = await resolverGrupoCmr(
         firestore: FirebaseFirestore.instance,
-        scannedPalletId: scannedPalletId,
+        scannedPalletId: scannedStockId,
       );
-      final effectivePalletId = _normalizePaletId(
+      final effectiveStockId = normalizePaletForStock(
         groupResolution.effectivePalletId,
       );
-      processedPaletId = effectivePalletId;
+      processedPaletId = effectiveStockId;
       final isGrouped = groupResolution.isGrouped;
-      final memberPalletIds = groupResolution.memberPalletIds
-          .map(_normalizePaletId)
+      final memberStockIds = groupResolution.memberPalletIds
+          .map(normalizePaletForStock)
+          .where((value) => value.isNotEmpty)
+          .toSet()
+          .toList(growable: false);
+      final memberPedidoIds = memberStockIds
+          .map(normalizePaletForPedido)
           .where((value) => value.isNotEmpty)
           .toSet()
           .toList(growable: false);
 
-      if (effectivePalletId.isEmpty) {
+      if (effectiveStockId.isEmpty) {
         await _showOverlayResult(
-          paletId: scannedPalletId,
+          paletId: scannedStockId,
           message: 'QR no reconocido',
           status: _OverlayStatus.invalid,
         );
         return;
       }
-      if (_processingPalets.contains(effectivePalletId)) {
+      if (_processingPalets.contains(effectiveStockId)) {
         await _showOverlayResult(
-          paletId: effectivePalletId,
+          paletId: effectiveStockId,
           message: isGrouped ? 'Grupo ya escaneado' : 'Palet ya escaneado',
           status: _OverlayStatus.alreadyScanned,
         );
         return;
       }
-      _processingPalets.add(effectivePalletId);
+      _processingPalets.add(effectiveStockId);
 
-      final stockDocId = buildStockDocId(effectivePalletId);
+      final stockDocId = buildStockDocId(effectiveStockId);
       final stockDocPath = 'Stock/$stockDocId';
       final stockSnapshot = await FirebaseFirestore.instance
           .collection('Stock')
@@ -207,11 +217,11 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
 
       debugPrint(
         'CMR group debug: '
-        'scannedPalletId=$scannedPalletId, '
-        'effectivePalletId=$effectivePalletId, '
+        'scannedStockId=$scannedStockId, '
+        'effectiveStockId=$effectiveStockId, '
         'isGrouped=$isGrouped, '
         'groupId=${groupResolution.groupId}, '
-        'memberPalletIds=$memberPalletIds, '
+        'memberStockIds=$memberStockIds, memberPedidoIds=$memberPedidoIds, '
         'miembrosDelPedidoMarcados=[], '
         'stockDocIdUsado=$stockDocId, '
         'stockDocPath=$stockDocPath, '
@@ -222,29 +232,29 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
 
       if (!stockSnapshot.exists) {
         await _showOverlayResult(
-          paletId: effectivePalletId,
+          paletId: effectiveStockId,
           message: 'El palet no existe en Stock',
           status: _OverlayStatus.invalid,
         );
-        _processingPalets.remove(effectivePalletId);
+        _processingPalets.remove(effectiveStockId);
         return;
       }
 
       final pedidoResolution = await _resolvePedidoForPalet(
         raw: isGrouped ? '' : raw,
-        paletId: effectivePalletId,
+        paletId: effectiveStockId,
       );
       if (pedidoResolution == null) {
-        _processingPalets.remove(effectivePalletId);
+        _processingPalets.remove(effectiveStockId);
         return;
       }
 
       final manualInit = await _initManualPedidoFromPalet(
-        paletIds: memberPalletIds,
+        paletIds: memberPedidoIds,
         pedido: pedidoResolution,
       );
       if (manualInit == null) {
-        _processingPalets.remove(effectivePalletId);
+        _processingPalets.remove(effectiveStockId);
         return;
       }
 
@@ -252,7 +262,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       final estadoNormalizado = manualInit.estado;
       final isManual = estadoNormalizado == 'En_Curso_Manual';
       if (isManual) {
-        final nuevosEsperados = memberPalletIds
+        final nuevosEsperados = memberPedidoIds
             .where((paletId) => !_expectedPalets.contains(paletId))
             .toList(growable: false);
         if (nuevosEsperados.isNotEmpty) {
@@ -266,71 +276,71 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         final stockService = ref.read(stockServiceProvider);
         final pedidoId = pedidoRef.id;
         await stockService.liberarPaletParaCmr(
-          palletId: effectivePalletId,
+          palletId: effectiveStockId,
           pedidoId: pedidoId,
         );
         if (mounted) {
           setState(() {
-            _firestorePalets.addAll(memberPalletIds);
+            _firestorePalets.addAll(memberPedidoIds);
           });
         }
         debugPrint(
           'CMR group debug: '
-          'scannedPalletId=$scannedPalletId, '
-          'effectivePalletId=$effectivePalletId, '
+          'scannedStockId=$scannedStockId, '
+          'effectiveStockId=$effectiveStockId, '
           'isGrouped=$isGrouped, '
           'groupId=${groupResolution.groupId}, '
-          'memberPalletIds=$memberPalletIds, '
-          'miembrosDelPedidoMarcados=$memberPalletIds, '
+          'memberStockIds=$memberStockIds, memberPedidoIds=$memberPedidoIds, '
+          'miembrosDelPedidoMarcados=$memberPedidoIds, '
           'stockDocIdUsado=$stockDocId, '
           'stockDocPath=$stockDocPath',
         );
         await _showOverlayResult(
-          paletId: effectivePalletId,
+          paletId: effectiveStockId,
           message: isGrouped
-              ? 'Grupo de boxes detectado. Se expedirá como $effectivePalletId'
+              ? 'Grupo de boxes detectado. Se expedirá como $effectiveStockId'
               : 'Palet escaneado. Nuevo pedido creado',
           status: _OverlayStatus.valid,
         );
-        _processingPalets.remove(effectivePalletId);
+        _processingPalets.remove(effectiveStockId);
         return;
       }
 
       final miembrosDelPedidoMarcados = await _memberPalletIdsInPedido(
         pedidoRef: pedidoRef,
-        memberPalletIds: memberPalletIds,
+        memberPalletIds: memberPedidoIds,
       );
       debugPrint(
         'CMR group debug: '
-        'scannedPalletId=$scannedPalletId, '
-        'effectivePalletId=$effectivePalletId, '
+        'scannedStockId=$scannedStockId, '
+        'effectiveStockId=$effectiveStockId, '
         'isGrouped=$isGrouped, '
         'groupId=${groupResolution.groupId}, '
-        'memberPalletIds=$memberPalletIds, '
+        'memberStockIds=$memberStockIds, memberPedidoIds=$memberPedidoIds, '
         'miembrosDelPedidoMarcados=$miembrosDelPedidoMarcados, '
         'stockDocIdUsado=$stockDocId, '
         'stockDocPath=$stockDocPath',
       );
       if (miembrosDelPedidoMarcados.isEmpty && !isManual) {
-        _invalid.add(effectivePalletId);
+        _invalid.add(normalizePaletForPedido(effectiveStockId));
         await _showOverlayResult(
-          paletId: effectivePalletId,
+          paletId: effectiveStockId,
           message: 'El palet no pertenece al pedido',
           status: _OverlayStatus.invalid,
         );
-        _processingPalets.remove(effectivePalletId);
+        _processingPalets.remove(effectiveStockId);
         return;
       }
 
       final paletsToMark = isManual
-          ? memberPalletIds
+          ? memberPedidoIds
           : miembrosDelPedidoMarcados;
       debugPrint(
         'CMR upsert debug: '
-        'scannedPalletId=$scannedPalletId, '
-        'effectivePalletId=$effectivePalletId, '
+        'scannedStockId=$scannedStockId, '
+        'effectiveStockId=$effectiveStockId, '
         'isGrouped=$isGrouped, '
-        'memberPalletIds=$memberPalletIds, '
+        'memberStockIds=$memberStockIds, memberPedidoIds=$memberPedidoIds, '
         'miembrosDelPedidoMarcados=$miembrosDelPedidoMarcados, '
         'paletsToMark=$paletsToMark',
       );
@@ -340,29 +350,29 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       );
       if (scanResult.status == _ScanTransactionStatus.expedido) {
         await _showOverlayResult(
-          paletId: effectivePalletId,
+          paletId: effectiveStockId,
           message: 'Pedido ya expedido',
           status: _OverlayStatus.invalid,
         );
-        _processingPalets.remove(effectivePalletId);
+        _processingPalets.remove(effectiveStockId);
         return;
       }
       if (scanResult.status == _ScanTransactionStatus.duplicate) {
         await _showOverlayResult(
-          paletId: effectivePalletId,
+          paletId: effectiveStockId,
           message: isGrouped ? 'Grupo ya escaneado' : 'Palet ya escaneado',
           status: _OverlayStatus.alreadyScanned,
         );
-        _processingPalets.remove(effectivePalletId);
+        _processingPalets.remove(effectiveStockId);
         return;
       }
       if (scanResult.status == _ScanTransactionStatus.missingPedido) {
         await _showOverlayResult(
-          paletId: effectivePalletId,
+          paletId: effectiveStockId,
           message: 'No se pudo cargar el pedido del palet',
           status: _OverlayStatus.invalid,
         );
-        _processingPalets.remove(effectivePalletId);
+        _processingPalets.remove(effectiveStockId);
         return;
       }
 
@@ -375,34 +385,34 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         final stockService = ref.read(stockServiceProvider);
         final pedidoId = pedidoRef.id;
         await stockService.liberarPaletParaCmr(
-          palletId: effectivePalletId,
+          palletId: effectiveStockId,
           pedidoId: pedidoId,
         );
       }
 
       await _showOverlayResult(
-        paletId: effectivePalletId,
+        paletId: effectiveStockId,
         message: isGrouped
-            ? 'Grupo de boxes detectado. Se expedirá como $effectivePalletId'
+            ? 'Grupo de boxes detectado. Se expedirá como $effectiveStockId'
             : 'Palet correcto',
         status: _OverlayStatus.valid,
       );
     } on FormatException catch (e) {
-      final paletId = _normalizePaletId(parsePaletFromQr(raw));
+      final paletId = normalizePaletForStock(parsePaletFromQr(raw));
       await _showOverlayResult(
         paletId: paletId.isEmpty ? '—' : paletId,
         message: e.message,
         status: _OverlayStatus.invalid,
       );
     } on StockProcessException catch (e) {
-      final paletId = _normalizePaletId(parsePaletFromQr(raw));
+      final paletId = normalizePaletForStock(parsePaletFromQr(raw));
       await _showOverlayResult(
         paletId: paletId.isEmpty ? '—' : paletId,
         message: e.message,
         status: _OverlayStatus.invalid,
       );
     } on FirebaseException {
-      final paletId = _normalizePaletId(parsePaletFromQr(raw));
+      final paletId = normalizePaletForStock(parsePaletFromQr(raw));
       await _showOverlayResult(
         paletId: paletId.isEmpty ? '—' : paletId,
         message: 'No se pudo actualizar el palet',
@@ -426,7 +436,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       return const [];
     }
     return raw
-        .map((value) => _normalizePaletId(value?.toString() ?? ''))
+        .map((value) => _normalizePedidoPaletId(value?.toString() ?? ''))
         .where((value) => value.isNotEmpty)
         .toList();
   }
@@ -451,7 +461,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       }
       final palets = paletRaw
           .split('|')
-          .map(_normalizePaletId)
+          .map(_normalizePedidoPaletId)
           .where((value) => value.isNotEmpty);
       for (final palet in palets) {
         map.putIfAbsent(palet, () => lineNumber);
@@ -470,26 +480,8 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     return int.tryParse(value?.toString() ?? '');
   }
 
-  String _normalizePaletId(String raw) {
-    final normalized = normalizarPalet(raw).trim();
-    if (normalized.isEmpty) {
-      return '';
-    }
-    if (RegExp(r'^\d{11}$').hasMatch(normalized) &&
-        normalized.startsWith('1')) {
-      return normalized.substring(1);
-    }
-    return normalized;
-  }
-
-  String _normalizePedidoId(String? raw) {
-    final value = raw?.trim() ?? '';
-    if (value.isEmpty) {
-      return '';
-    }
-    final whitespaceNormalized = value.replaceAll(RegExp(r'\s+'), '_');
-    final slashNormalized = whitespaceNormalized.replaceAll('/', '_');
-    return slashNormalized.replaceAll(RegExp(r'_+'), '_');
+  String _normalizePedidoPaletId(String raw) {
+    return normalizePaletForPedido(raw);
   }
 
   bool _isPedidoSeleccionable(String pedidoDisplay) {
@@ -529,7 +521,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       return null;
     }
 
-    final pedidoDocId = _normalizePedidoId(pedidoDisplay);
+    final pedidoDocId = normalizePedidoDocId(pedidoDisplay);
     if (pedidoDocId.isEmpty) {
       await _showOverlayResult(
         paletId: paletId,
@@ -539,6 +531,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       return null;
     }
 
+    debugPrint('CMR pedido debug: pedidoDocId normalizado=$pedidoDocId');
     final pedidoRef =
         FirebaseFirestore.instance.collection('Pedidos').doc(pedidoDocId);
     return _PedidoResolution(
@@ -593,7 +586,8 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     required DocumentReference<Map<String, dynamic>> pedidoRef,
     required String paletId,
   }) async {
-    if (_firestorePalets.contains(paletId)) {
+    final pedidoPaletId = _normalizePedidoPaletId(paletId);
+    if (_firestorePalets.contains(pedidoPaletId)) {
       return true;
     }
     final snapshot = await pedidoRef.get();
@@ -602,7 +596,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     }
     final data = snapshot.data() ?? <String, dynamic>{};
     final palets = _extractPaletsFromData(data);
-    return palets.contains(paletId);
+    return palets.contains(pedidoPaletId);
   }
 
   Future<List<String>> _memberPalletIdsInPedido({
@@ -610,7 +604,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     required List<String> memberPalletIds,
   }) async {
     final members = memberPalletIds
-        .map(_normalizePaletId)
+        .map(_normalizePedidoPaletId)
         .where((value) => value.isNotEmpty)
         .toSet();
     if (members.isEmpty) {
@@ -626,10 +620,11 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     final expectedFromLines = _buildExpectedPaletsFromData(data).keys.toSet();
     final expectedPalets = expectedFromLines.isNotEmpty
         ? expectedFromLines
-        : _expectedPalets.map(_normalizePaletId).toSet();
+        : _expectedPalets.map(_normalizePedidoPaletId).toSet();
+    debugPrint('CMR member debug: expectedPedidoIds=$expectedPalets');
 
     return memberPalletIds
-        .map(_normalizePaletId)
+        .map(_normalizePedidoPaletId)
         .where((value) => value.isNotEmpty)
         .where(expectedPalets.contains)
         .toSet()
@@ -641,7 +636,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     required List<String> paletIds,
   }) async {
     final paletsToScan = paletIds
-        .map(_normalizePaletId)
+        .map(_normalizePedidoPaletId)
         .where((value) => value.isNotEmpty)
         .toSet()
         .toList(growable: false);
@@ -671,7 +666,12 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         );
       }
 
-      final palets = _extractPaletsFromData(data).toSet();
+      final existingPalets = _extractPaletsFromData(data);
+      final palets = existingPalets.toSet();
+      debugPrint(
+        'CMR upsert debug: firestorePedidoIds=$palets, '
+        'expectedPedidoIds=$_expectedPalets',
+      );
       final missingPalets = paletsToScan
           .where((paletId) => !palets.contains(paletId))
           .toList(growable: false);
@@ -688,9 +688,13 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
           : estadoActual == 'En_Curso_Manual'
               ? 'En_Curso_Manual'
               : estadoActual;
+      final normalizedPalets = <String>[
+        ...existingPalets.where((paletId) => paletId.isNotEmpty),
+        ...missingPalets,
+      ].toSet().toList(growable: false);
       tx.update(pedidoRef, {
         'Estado': nuevoEstado,
-        'palets': FieldValue.arrayUnion(missingPalets),
+        'palets': normalizedPalets,
         'updatedAt': FieldValue.serverTimestamp(),
       });
       return _ScanTransactionResult(
@@ -765,7 +769,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     final user = FirebaseAuth.instance.currentUser;
     final userName = await _loadUserName(user);
     final pendientesSet = pendientes
-        .map(_normalizePaletId)
+        .map(_normalizePedidoPaletId)
         .where((value) => value.isNotEmpty)
         .toSet();
 
@@ -814,7 +818,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
                   .where((value) => value.isNotEmpty)
                   .where(
                     (value) =>
-                        !pendientesSet.contains(_normalizePaletId(value)),
+                        !pendientesSet.contains(_normalizePedidoPaletId(value)),
                   )
                   .toList();
               if (palets.isEmpty) {
@@ -952,11 +956,15 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
   }) async {
     final pedidoRef = db.collection('Pedidos').doc(pedidoDocId);
     _pedidoId = pedidoDisplay;
+    final pedidoPaletIds = paletIds
+        .map(normalizePaletForPedido)
+        .where((value) => value.isNotEmpty)
+        .toSet();
 
     final base = <String, dynamic>{
       'IdPedidoLora': pedidoDisplay,
       'Estado': 'En_Curso_Manual',
-      'palets': paletIds,
+      'palets': pedidoPaletIds.toList(growable: false),
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
@@ -972,9 +980,9 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     if (mounted) {
       setState(() {
         _pedidoEstado = 'En_Curso_Manual';
-        _expectedPalets = paletIds.toSet();
+        _expectedPalets = pedidoPaletIds;
         _lineaByPalet = <String, int?>{};
-        _firestorePalets = paletIds.toSet();
+        _firestorePalets = pedidoPaletIds;
       });
     }
 

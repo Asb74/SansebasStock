@@ -3,24 +3,56 @@ import 'package:flutter/foundation.dart';
 
 import 'cmr_models.dart';
 
-String normalizarPalet(String raw) {
-  final trimmed = raw.replaceAll(' ', '').trim();
-  if (trimmed.isEmpty) {
+String normalizePaletForPedido(String value) {
+  final digits = RegExp(r'\d+')
+      .allMatches(value)
+      .map((match) => match.group(0) ?? '')
+      .join();
+  if (digits.isEmpty) {
     return '';
   }
 
-  final numericOnly = RegExp(r'^\d+$');
-  if (numericOnly.hasMatch(trimmed) &&
-      trimmed.length == 11 &&
-      trimmed.startsWith('1')) {
-    return trimmed.substring(1);
+  final pedidoDigits = RegExp(r'^[123]\d{10}$').hasMatch(digits)
+      ? digits.substring(1)
+      : digits;
+  if (!RegExp(r'^\d{10}$').hasMatch(pedidoDigits)) {
+    return '';
   }
 
-  return trimmed;
+  return pedidoDigits;
+}
+
+String normalizePaletForStock(String value) {
+  final digits = RegExp(r'\d+')
+      .allMatches(value)
+      .map((match) => match.group(0) ?? '')
+      .join();
+  if (digits.isEmpty) {
+    return '';
+  }
+  if (!RegExp(r'^\d{10,11}$').hasMatch(digits)) {
+    return '';
+  }
+  return digits;
+}
+
+String normalizePedidoDocId(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) {
+    return '';
+  }
+  return trimmed
+      .replaceAll(RegExp(r'\s+'), '_')
+      .replaceAll('/', '_')
+      .replaceAll(RegExp(r'_+'), '_');
+}
+
+String normalizarPalet(String raw) {
+  return normalizePaletForPedido(raw);
 }
 
 String normalizePaletId(String raw) {
-  return normalizarPalet(raw);
+  return normalizePaletForPedido(raw);
 }
 
 String parsePaletFromQr(String raw) {
@@ -41,17 +73,12 @@ String parsePaletFromQr(String raw) {
     return '';
   }
 
-  final normalized = normalizarPalet(candidate);
-  if (!RegExp(r'^\d{10}$').hasMatch(normalized)) {
-    return '';
-  }
-
-  return normalized;
+  return normalizePaletForStock(candidate);
 }
 
 List<String> parsePaletsFromLines(Iterable<String> rawPalets) {
   return rawPalets
-      .map(normalizarPalet)
+      .map(normalizePaletForPedido)
       .where((value) => value.isNotEmpty)
       .toList();
 }
@@ -83,7 +110,8 @@ Future<CmrPalletGroupResolution> resolverGrupoCmr({
   required String scannedPalletId,
 }) async {
   final rawScannedPalletId = scannedPalletId.replaceAll(' ', '').trim();
-  final normalizedScannedPalletId = normalizarPalet(rawScannedPalletId).trim();
+  final normalizedScannedPalletId =
+      normalizePaletForStock(rawScannedPalletId).trim();
   if (normalizedScannedPalletId.isEmpty) {
     return const CmrPalletGroupResolution(
       scannedPalletId: '',
@@ -119,7 +147,7 @@ Future<CmrPalletGroupResolution> resolverGrupoCmr({
     final memberData = memberSnapshot.data() ?? <String, dynamic>{};
     groupId = memberData['groupId']?.toString().trim() ?? '';
     if (groupId.isEmpty) {
-      groupId = normalizarPalet(
+      groupId = normalizePaletForStock(
         memberData['referencePalletId']?.toString() ?? '',
       ).trim();
     }
@@ -181,12 +209,14 @@ Future<CmrPalletGroupResolution> resolverGrupoCmr({
       groupData['groupId']?.toString().trim().isNotEmpty == true
           ? groupData['groupId'].toString().trim()
           : groupSnapshot.id;
-  final referencePalletId = normalizarPalet(
+  final referencePalletId = normalizePaletForStock(
     groupData['referencePalletId']?.toString() ?? groupSnapshot.id,
   ).trim();
   final memberPalletIds =
       (groupData['memberPalletIds'] as List<dynamic>? ?? const [])
-          .map((value) => normalizarPalet(value?.toString() ?? '').trim())
+          .map(
+            (value) => normalizePaletForStock(value?.toString() ?? '').trim(),
+          )
           .where((value) => value.isNotEmpty)
           .toSet()
           .toList(growable: false);
@@ -246,8 +276,8 @@ Future<bool> paletPerteneceALineasPedido({
 
     final palets = paletRaw.split('|');
     for (final palet in palets) {
-      final normalized = normalizarPalet(palet);
-      if (normalized == paletId) {
+      final normalized = normalizePaletForPedido(palet);
+      if (normalized == normalizePaletForPedido(paletId)) {
         return true;
       }
     }
