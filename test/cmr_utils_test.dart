@@ -25,6 +25,27 @@ void main() {
       );
     });
 
+    test('detecta el nivel incrustado en P con ^#1', () {
+      expect(
+        parseStockPaletIdFromQr('P=2026018837^#1|LOTE=ABC'),
+        '12026018837',
+      );
+    });
+
+    test('detecta el nivel incrustado en P con ^#2', () {
+      expect(
+        parseStockPaletIdFromQr('P=2026018837^#2|LOTE=ABC'),
+        '22026018837',
+      );
+    });
+
+    test('detecta el nivel incrustado en P con ^#3', () {
+      expect(
+        parseStockPaletIdFromQr('P=2026018837^#3|LOTE=ABC'),
+        '32026018837',
+      );
+    });
+
     test('usa P como fallback cuando no hay NIVEL ni Q', () {
       expect(parseStockPaletIdFromQr('P=2026018833'), '2026018833');
     });
