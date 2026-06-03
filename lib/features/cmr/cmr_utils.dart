@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
 
 import 'cmr_models.dart';
 
@@ -62,12 +61,20 @@ class CmrPalletGroupResolution {
     required this.effectivePalletId,
     required this.isGrouped,
     required this.groupId,
+    required this.referencePalletId,
+    required this.memberPalletIds,
+    required this.foundByMember,
+    required this.foundByGroupId,
   });
 
   final String scannedPalletId;
   final String effectivePalletId;
   final bool isGrouped;
   final String groupId;
+  final String referencePalletId;
+  final List<String> memberPalletIds;
+  final bool foundByMember;
+  final bool foundByGroupId;
 }
 
 Future<CmrPalletGroupResolution> resolverGrupoCmr({
@@ -81,6 +88,10 @@ Future<CmrPalletGroupResolution> resolverGrupoCmr({
       effectivePalletId: '',
       isGrouped: false,
       groupId: '',
+      referencePalletId: '',
+      memberPalletIds: <String>[],
+      foundByMember: false,
+      foundByGroupId: false,
     );
   }
 
@@ -88,20 +99,58 @@ Future<CmrPalletGroupResolution> resolverGrupoCmr({
       .collection('PalletGroupMembers')
       .doc(normalizedScannedPalletId)
       .get();
-  if (!memberSnapshot.exists) {
+  final foundByMember = memberSnapshot.exists;
+  var foundByGroupId = false;
+  DocumentSnapshot<Map<String, dynamic>>? groupSnapshot;
+  var groupId = '';
+
+  if (foundByMember) {
+    final memberData = memberSnapshot.data() ?? <String, dynamic>{};
+    groupId = memberData['groupId']?.toString().trim() ?? '';
+    if (groupId.isNotEmpty) {
+      groupSnapshot = await firestore
+          .collection('PalletGroups')
+          .doc(groupId)
+          .get();
+    }
+  } else {
+    groupSnapshot = await firestore
+        .collection('PalletGroups')
+        .doc(normalizedScannedPalletId)
+        .get();
+    foundByGroupId = groupSnapshot.exists;
+    if (foundByGroupId) {
+      groupId = normalizedScannedPalletId;
+    }
+  }
+
+  if (groupSnapshot == null || !groupSnapshot.exists) {
     return CmrPalletGroupResolution(
       scannedPalletId: normalizedScannedPalletId,
       effectivePalletId: normalizedScannedPalletId,
       isGrouped: false,
-      groupId: '',
+      groupId: groupId,
+      referencePalletId: '',
+      memberPalletIds: <String>[normalizedScannedPalletId],
+      foundByMember: foundByMember,
+      foundByGroupId: foundByGroupId,
     );
   }
 
-  final data = memberSnapshot.data() ?? <String, dynamic>{};
-  final groupId = data['groupId']?.toString().trim() ?? '';
+  final groupData = groupSnapshot.data() ?? <String, dynamic>{};
+  final resolvedGroupId =
+      groupData['groupId']?.toString().trim().isNotEmpty == true
+          ? groupData['groupId'].toString().trim()
+          : groupSnapshot.id;
   final referencePalletId = normalizarPalet(
-    data['referencePalletId']?.toString() ?? '',
+    groupData['referencePalletId']?.toString() ?? '',
   ).trim();
+  final memberPalletIds =
+      (groupData['memberPalletIds'] as List<dynamic>? ?? const [])
+          .map((value) => normalizarPalet(value?.toString() ?? '').trim())
+          .where((value) => value.isNotEmpty)
+          .toSet()
+          .toList(growable: false);
   final effectivePalletId = referencePalletId.isNotEmpty
       ? referencePalletId
       : normalizedScannedPalletId;
@@ -110,7 +159,13 @@ Future<CmrPalletGroupResolution> resolverGrupoCmr({
     scannedPalletId: normalizedScannedPalletId,
     effectivePalletId: effectivePalletId,
     isGrouped: true,
-    groupId: groupId,
+    groupId: resolvedGroupId,
+    referencePalletId: referencePalletId,
+    memberPalletIds: memberPalletIds.isNotEmpty
+        ? memberPalletIds
+        : <String>[normalizedScannedPalletId],
+    foundByMember: foundByMember,
+    foundByGroupId: foundByGroupId,
   );
 }
 
