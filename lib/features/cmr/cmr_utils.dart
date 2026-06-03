@@ -56,6 +56,64 @@ List<String> parsePaletsFromLines(Iterable<String> rawPalets) {
       .toList();
 }
 
+class CmrPalletGroupResolution {
+  const CmrPalletGroupResolution({
+    required this.scannedPalletId,
+    required this.effectivePalletId,
+    required this.isGrouped,
+    required this.groupId,
+  });
+
+  final String scannedPalletId;
+  final String effectivePalletId;
+  final bool isGrouped;
+  final String groupId;
+}
+
+Future<CmrPalletGroupResolution> resolverGrupoCmr({
+  required FirebaseFirestore firestore,
+  required String scannedPalletId,
+}) async {
+  final normalizedScannedPalletId = normalizarPalet(scannedPalletId).trim();
+  if (normalizedScannedPalletId.isEmpty) {
+    return const CmrPalletGroupResolution(
+      scannedPalletId: '',
+      effectivePalletId: '',
+      isGrouped: false,
+      groupId: '',
+    );
+  }
+
+  final memberSnapshot = await firestore
+      .collection('PalletGroupMembers')
+      .doc(normalizedScannedPalletId)
+      .get();
+  if (!memberSnapshot.exists) {
+    return CmrPalletGroupResolution(
+      scannedPalletId: normalizedScannedPalletId,
+      effectivePalletId: normalizedScannedPalletId,
+      isGrouped: false,
+      groupId: '',
+    );
+  }
+
+  final data = memberSnapshot.data() ?? <String, dynamic>{};
+  final groupId = data['groupId']?.toString().trim() ?? '';
+  final referencePalletId = normalizarPalet(
+    data['referencePalletId']?.toString() ?? '',
+  ).trim();
+  final effectivePalletId = referencePalletId.isNotEmpty
+      ? referencePalletId
+      : normalizedScannedPalletId;
+
+  return CmrPalletGroupResolution(
+    scannedPalletId: normalizedScannedPalletId,
+    effectivePalletId: effectivePalletId,
+    isGrouped: true,
+    groupId: groupId,
+  );
+}
+
 Future<bool> paletPerteneceAPedido({
   required FirebaseFirestore firestore,
   required DocumentReference<Map<String, dynamic>> pedidoRef,
