@@ -39,6 +39,34 @@ class ToolsScreen extends ConsumerWidget {
               onTap: () => context.pushNamed('tools-agrupar-boxes'),
             ),
           ),
+          const Divider(height: 28),
+          Card(
+            color: Theme.of(context).colorScheme.errorContainer,
+            child: ListTile(
+              title: Text(
+                'Desagrupar Boxes',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              subtitle: Text(
+                'Elimina un grupo y borra su stock de referencia',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                ),
+              ),
+              leading: Icon(
+                Icons.warning_amber_rounded,
+                color: Theme.of(context).colorScheme.onErrorContainer,
+              ),
+              trailing: Icon(
+                Icons.chevron_right,
+                color: Theme.of(context).colorScheme.onErrorContainer,
+              ),
+              onTap: () => context.pushNamed('tools-desagrupar-boxes'),
+            ),
+          ),
           Card(
             child: ListTile(
               title: const Text('Asignar lugar de almacenamiento'),

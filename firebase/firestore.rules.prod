@@ -84,11 +84,15 @@ service cloud.firestore {
     }
 
     match /PalletGroups/{groupId} {
-      allow read, create, update: if isSignedIn();
-      allow delete: if false;
+      allow read, create, update, delete: if isSignedIn();
     }
 
     match /PalletGroupMembers/{palletId} {
+      allow read, create, delete: if isSignedIn();
+      allow update: if false;
+    }
+
+    match /GroupLogs/{logId} {
       allow read, create: if isSignedIn();
       allow update, delete: if false;
     }
