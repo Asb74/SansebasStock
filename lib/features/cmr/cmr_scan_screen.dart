@@ -155,9 +155,8 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     });
 
     try {
-      final paletId = _normalizePaletId(parsePaletFromQr(raw));
-      processedPaletId = paletId;
-      if (paletId.isEmpty) {
+      final scannedPalletId = _normalizePaletId(parsePaletFromQr(raw));
+      if (scannedPalletId.isEmpty) {
         await _showOverlayResult(
           paletId: '—',
           message: 'QR no reconocido',
@@ -165,55 +164,84 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         );
         return;
       }
-      if (_processingPalets.contains(paletId)) {
+
+      final groupResolution = await resolverGrupoCmr(
+        firestore: FirebaseFirestore.instance,
+        scannedPalletId: scannedPalletId,
+      );
+      final effectivePalletId = _normalizePaletId(
+        groupResolution.effectivePalletId,
+      );
+      processedPaletId = effectivePalletId;
+      final isGrouped = groupResolution.isGrouped;
+
+      debugPrint(
+        'CMR group resolution: '
+        'scannedPalletId=$scannedPalletId, '
+        'effectivePalletId=$effectivePalletId, '
+        'isGrouped=$isGrouped, '
+        'groupId=${groupResolution.groupId}',
+      );
+
+      if (effectivePalletId.isEmpty) {
         await _showOverlayResult(
-          paletId: paletId,
-          message: 'Palet ya escaneado',
+          paletId: scannedPalletId,
+          message: 'QR no reconocido',
+          status: _OverlayStatus.invalid,
+        );
+        return;
+      }
+      if (_processingPalets.contains(effectivePalletId)) {
+        await _showOverlayResult(
+          paletId: effectivePalletId,
+          message: isGrouped
+              ? 'Grupo ya añadido al CMR'
+              : 'Palet ya escaneado',
           status: _OverlayStatus.alreadyScanned,
         );
         return;
       }
-      _processingPalets.add(paletId);
+      _processingPalets.add(effectivePalletId);
 
-      final stockDocId = buildStockDocId(paletId);
+      final stockDocId = buildStockDocId(effectivePalletId);
       final stockSnapshot = await FirebaseFirestore.instance
           .collection('Stock')
           .doc(stockDocId)
           .get();
       if (!stockSnapshot.exists) {
         await _showOverlayResult(
-          paletId: paletId,
+          paletId: effectivePalletId,
           message: 'El palet no existe en Stock',
           status: _OverlayStatus.invalid,
         );
-        _processingPalets.remove(paletId);
+        _processingPalets.remove(effectivePalletId);
         return;
       }
 
       final pedidoResolution = await _resolvePedidoForPalet(
-        raw: raw,
-        paletId: paletId,
+        raw: isGrouped ? '' : raw,
+        paletId: effectivePalletId,
       );
       if (pedidoResolution == null) {
-        _processingPalets.remove(paletId);
+        _processingPalets.remove(effectivePalletId);
         return;
       }
 
       final manualInit = await _initManualPedidoFromPalet(
-        paletId: paletId,
+        paletId: effectivePalletId,
         pedido: pedidoResolution,
       );
       if (manualInit == null) {
-        _processingPalets.remove(paletId);
+        _processingPalets.remove(effectivePalletId);
         return;
       }
 
       final pedidoRef = manualInit.ref;
       final estadoNormalizado = manualInit.estado;
       final isManual = estadoNormalizado == 'En_Curso_Manual';
-      if (isManual && !_expectedPalets.contains(paletId)) {
+      if (isManual && !_expectedPalets.contains(effectivePalletId)) {
         setState(() {
-          _expectedPalets.add(paletId);
+          _expectedPalets.add(effectivePalletId);
         });
       }
 
@@ -221,15 +249,17 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         final stockService = ref.read(stockServiceProvider);
         final pedidoId = pedidoRef.id;
         await stockService.liberarPaletParaCmr(
-          palletId: paletId,
+          palletId: effectivePalletId,
           pedidoId: pedidoId,
         );
         await _showOverlayResult(
-          paletId: paletId,
-          message: 'Palet escaneado. Nuevo pedido creado',
+          paletId: effectivePalletId,
+          message: isGrouped
+              ? 'Grupo de boxes detectado. Se expedirá como $effectivePalletId'
+              : 'Palet escaneado. Nuevo pedido creado',
           status: _OverlayStatus.valid,
         );
-        _processingPalets.remove(paletId);
+        _processingPalets.remove(effectivePalletId);
         return;
       }
 
@@ -237,82 +267,85 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         final pertenece = await paletPerteneceALineasPedido(
           firestore: FirebaseFirestore.instance,
           pedidoRef: pedidoRef,
-          paletId: paletId,
+          paletId: effectivePalletId,
         );
         if (!pertenece) {
-          _invalid.add(paletId);
+          _invalid.add(effectivePalletId);
           await _showOverlayResult(
-            paletId: paletId,
+            paletId: effectivePalletId,
             message: 'El palet no pertenece al pedido',
             status: _OverlayStatus.invalid,
           );
-          _processingPalets.remove(paletId);
+          _processingPalets.remove(effectivePalletId);
           return;
         }
       } else if (!isManual && _expectedPalets.isNotEmpty) {
         final pertenece = await paletPerteneceAPedido(
           firestore: FirebaseFirestore.instance,
           pedidoRef: pedidoRef,
-          paletId: paletId,
+          paletId: effectivePalletId,
         );
         if (!pertenece) {
-          _invalid.add(paletId);
+          _invalid.add(effectivePalletId);
           await _showOverlayResult(
-            paletId: paletId,
+            paletId: effectivePalletId,
             message: 'El palet no pertenece al pedido',
             status: _OverlayStatus.invalid,
           );
-          _processingPalets.remove(paletId);
+          _processingPalets.remove(effectivePalletId);
           return;
         }
       }
 
       final alreadyScanned = await _isPaletAlreadyScanned(
         pedidoRef: pedidoRef,
-        paletId: paletId,
+        paletId: effectivePalletId,
       );
       if (alreadyScanned) {
         await _showOverlayResult(
-          paletId: paletId,
-          message: 'Palet ya escaneado',
+          paletId: effectivePalletId,
+          message: isGrouped
+              ? 'Grupo ya añadido al CMR'
+              : 'Palet ya escaneado',
           status: _OverlayStatus.alreadyScanned,
         );
-        _processingPalets.remove(paletId);
+        _processingPalets.remove(effectivePalletId);
         return;
       }
 
-      final scanResult =
-          manualInit.created
-              ? _ScanTransactionResult.added
-              : await _upsertPaletInPedido(
-                pedidoRef: pedidoRef,
-                paletId: paletId,
-              );
+      final scanResult = manualInit.created
+          ? _ScanTransactionResult.added
+          : await _upsertPaletInPedido(
+              pedidoRef: pedidoRef,
+              paletId: effectivePalletId,
+            );
       if (scanResult == _ScanTransactionResult.expedido) {
         await _showOverlayResult(
-          paletId: paletId,
+          paletId: effectivePalletId,
           message: 'Pedido ya expedido',
           status: _OverlayStatus.invalid,
         );
-        _processingPalets.remove(paletId);
+        _processingPalets.remove(effectivePalletId);
         return;
       }
       if (scanResult == _ScanTransactionResult.duplicate) {
         await _showOverlayResult(
-          paletId: paletId,
-          message: 'Palet ya escaneado',
+          paletId: effectivePalletId,
+          message: isGrouped
+              ? 'Grupo ya añadido al CMR'
+              : 'Palet ya escaneado',
           status: _OverlayStatus.alreadyScanned,
         );
-        _processingPalets.remove(paletId);
+        _processingPalets.remove(effectivePalletId);
         return;
       }
       if (scanResult == _ScanTransactionResult.missingPedido) {
         await _showOverlayResult(
-          paletId: paletId,
+          paletId: effectivePalletId,
           message: 'No se pudo cargar el pedido del palet',
           status: _OverlayStatus.invalid,
         );
-        _processingPalets.remove(paletId);
+        _processingPalets.remove(effectivePalletId);
         return;
       }
 
@@ -320,14 +353,16 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         final stockService = ref.read(stockServiceProvider);
         final pedidoId = pedidoRef.id;
         await stockService.liberarPaletParaCmr(
-          palletId: paletId,
+          palletId: effectivePalletId,
           pedidoId: pedidoId,
         );
       }
 
       await _showOverlayResult(
-        paletId: paletId,
-        message: 'Palet correcto',
+        paletId: effectivePalletId,
+        message: isGrouped
+            ? 'Grupo de boxes detectado. Se expedirá como $effectivePalletId'
+            : 'Palet correcto',
         status: _OverlayStatus.valid,
       );
     } on FormatException catch (e) {
