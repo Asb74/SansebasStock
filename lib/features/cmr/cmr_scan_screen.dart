@@ -174,14 +174,11 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       );
       processedPaletId = effectivePalletId;
       final isGrouped = groupResolution.isGrouped;
-
-      debugPrint(
-        'CMR group resolution: '
-        'scannedPalletId=$scannedPalletId, '
-        'effectivePalletId=$effectivePalletId, '
-        'isGrouped=$isGrouped, '
-        'groupId=${groupResolution.groupId}',
-      );
+      final memberPalletIds = groupResolution.memberPalletIds
+          .map(_normalizePaletId)
+          .where((value) => value.isNotEmpty)
+          .toSet()
+          .toList(growable: false);
 
       if (effectivePalletId.isEmpty) {
         await _showOverlayResult(
@@ -194,9 +191,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       if (_processingPalets.contains(effectivePalletId)) {
         await _showOverlayResult(
           paletId: effectivePalletId,
-          message: isGrouped
-              ? 'Grupo ya añadido al CMR'
-              : 'Palet ya escaneado',
+          message: isGrouped ? 'Grupo ya escaneado' : 'Palet ya escaneado',
           status: _OverlayStatus.alreadyScanned,
         );
         return;
@@ -204,10 +199,24 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       _processingPalets.add(effectivePalletId);
 
       final stockDocId = buildStockDocId(effectivePalletId);
+      final stockDocPath = 'Stock/$stockDocId';
       final stockSnapshot = await FirebaseFirestore.instance
           .collection('Stock')
           .doc(stockDocId)
           .get();
+
+      debugPrint(
+        'CMR group debug: '
+        'scannedPalletId=$scannedPalletId, '
+        'foundByMember=${groupResolution.foundByMember}, '
+        'foundByGroupId=${groupResolution.foundByGroupId}, '
+        'groupId=${groupResolution.groupId}, '
+        'referencePalletId=${groupResolution.referencePalletId}, '
+        'effectivePalletId=$effectivePalletId, '
+        'memberPalletIds=$memberPalletIds, '
+        'stockDocPath=$stockDocPath',
+      );
+
       if (!stockSnapshot.exists) {
         await _showOverlayResult(
           paletId: effectivePalletId,
@@ -228,7 +237,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       }
 
       final manualInit = await _initManualPedidoFromPalet(
-        paletId: effectivePalletId,
+        paletIds: memberPalletIds,
         pedido: pedidoResolution,
       );
       if (manualInit == null) {
@@ -239,10 +248,15 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
       final pedidoRef = manualInit.ref;
       final estadoNormalizado = manualInit.estado;
       final isManual = estadoNormalizado == 'En_Curso_Manual';
-      if (isManual && !_expectedPalets.contains(effectivePalletId)) {
-        setState(() {
-          _expectedPalets.add(effectivePalletId);
-        });
+      if (isManual) {
+        final nuevosEsperados = memberPalletIds
+            .where((paletId) => !_expectedPalets.contains(paletId))
+            .toList(growable: false);
+        if (nuevosEsperados.isNotEmpty) {
+          setState(() {
+            _expectedPalets.addAll(nuevosEsperados);
+          });
+        }
       }
 
       if (manualInit.created) {
@@ -251,6 +265,10 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         await stockService.liberarPaletParaCmr(
           palletId: effectivePalletId,
           pedidoId: pedidoId,
+        );
+        debugPrint(
+          'CMR group debug: miembrosDelPedidoMarcados=$memberPalletIds, '
+          'stockDocPath=$stockDocPath',
         );
         await _showOverlayResult(
           paletId: effectivePalletId,
@@ -263,63 +281,33 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         return;
       }
 
-      if (estadoNormalizado == 'En_Curso') {
-        final pertenece = await paletPerteneceALineasPedido(
-          firestore: FirebaseFirestore.instance,
-          pedidoRef: pedidoRef,
-          paletId: effectivePalletId,
-        );
-        if (!pertenece) {
-          _invalid.add(effectivePalletId);
-          await _showOverlayResult(
-            paletId: effectivePalletId,
-            message: 'El palet no pertenece al pedido',
-            status: _OverlayStatus.invalid,
-          );
-          _processingPalets.remove(effectivePalletId);
-          return;
-        }
-      } else if (!isManual && _expectedPalets.isNotEmpty) {
-        final pertenece = await paletPerteneceAPedido(
-          firestore: FirebaseFirestore.instance,
-          pedidoRef: pedidoRef,
-          paletId: effectivePalletId,
-        );
-        if (!pertenece) {
-          _invalid.add(effectivePalletId);
-          await _showOverlayResult(
-            paletId: effectivePalletId,
-            message: 'El palet no pertenece al pedido',
-            status: _OverlayStatus.invalid,
-          );
-          _processingPalets.remove(effectivePalletId);
-          return;
-        }
-      }
-
-      final alreadyScanned = await _isPaletAlreadyScanned(
+      final miembrosDelPedidoMarcados = await _memberPalletIdsInPedido(
         pedidoRef: pedidoRef,
-        paletId: effectivePalletId,
+        memberPalletIds: memberPalletIds,
       );
-      if (alreadyScanned) {
+      debugPrint(
+        'CMR group debug: miembrosDelPedidoMarcados=$miembrosDelPedidoMarcados, '
+        'stockDocPath=$stockDocPath',
+      );
+      if (miembrosDelPedidoMarcados.isEmpty && !isManual) {
+        _invalid.add(effectivePalletId);
         await _showOverlayResult(
           paletId: effectivePalletId,
-          message: isGrouped
-              ? 'Grupo ya añadido al CMR'
-              : 'Palet ya escaneado',
-          status: _OverlayStatus.alreadyScanned,
+          message: 'El palet no pertenece al pedido',
+          status: _OverlayStatus.invalid,
         );
         _processingPalets.remove(effectivePalletId);
         return;
       }
 
-      final scanResult = manualInit.created
-          ? _ScanTransactionResult.added
-          : await _upsertPaletInPedido(
-              pedidoRef: pedidoRef,
-              paletId: effectivePalletId,
-            );
-      if (scanResult == _ScanTransactionResult.expedido) {
+      final paletsToMark = isManual
+          ? memberPalletIds
+          : miembrosDelPedidoMarcados;
+      final scanResult = await _upsertPaletsInPedido(
+        pedidoRef: pedidoRef,
+        paletIds: paletsToMark,
+      );
+      if (scanResult.status == _ScanTransactionStatus.expedido) {
         await _showOverlayResult(
           paletId: effectivePalletId,
           message: 'Pedido ya expedido',
@@ -328,18 +316,16 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         _processingPalets.remove(effectivePalletId);
         return;
       }
-      if (scanResult == _ScanTransactionResult.duplicate) {
+      if (scanResult.status == _ScanTransactionStatus.duplicate) {
         await _showOverlayResult(
           paletId: effectivePalletId,
-          message: isGrouped
-              ? 'Grupo ya añadido al CMR'
-              : 'Palet ya escaneado',
+          message: isGrouped ? 'Grupo ya escaneado' : 'Palet ya escaneado',
           status: _OverlayStatus.alreadyScanned,
         );
         _processingPalets.remove(effectivePalletId);
         return;
       }
-      if (scanResult == _ScanTransactionResult.missingPedido) {
+      if (scanResult.status == _ScanTransactionStatus.missingPedido) {
         await _showOverlayResult(
           paletId: effectivePalletId,
           message: 'No se pudo cargar el pedido del palet',
@@ -349,7 +335,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
         return;
       }
 
-      if (scanResult == _ScanTransactionResult.added) {
+      if (scanResult.status == _ScanTransactionStatus.added) {
         final stockService = ref.read(stockServiceProvider);
         final pedidoId = pedidoRef.id;
         await stockService.liberarPaletParaCmr(
@@ -583,41 +569,97 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     return palets.contains(paletId);
   }
 
-  Future<_ScanTransactionResult> _upsertPaletInPedido({
+  Future<List<String>> _memberPalletIdsInPedido({
     required DocumentReference<Map<String, dynamic>> pedidoRef,
-    required String paletId,
+    required List<String> memberPalletIds,
   }) async {
+    final members = memberPalletIds
+        .map(_normalizePaletId)
+        .where((value) => value.isNotEmpty)
+        .toSet();
+    if (members.isEmpty) {
+      return const <String>[];
+    }
+
+    final snapshot = await pedidoRef.get();
+    if (!snapshot.exists) {
+      return const <String>[];
+    }
+
+    final data = snapshot.data() ?? <String, dynamic>{};
+    final expectedFromLines = _buildExpectedPaletsFromData(data).keys.toSet();
+    if (expectedFromLines.isNotEmpty) {
+      return members
+          .where(expectedFromLines.contains)
+          .toList(growable: false);
+    }
+
+    return members
+        .where(_expectedPalets.contains)
+        .toList(growable: false);
+  }
+
+  Future<_ScanTransactionResult> _upsertPaletsInPedido({
+    required DocumentReference<Map<String, dynamic>> pedidoRef,
+    required List<String> paletIds,
+  }) async {
+    final paletsToScan = paletIds
+        .map(_normalizePaletId)
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (paletsToScan.isEmpty) {
+      return const _ScanTransactionResult(
+        status: _ScanTransactionStatus.duplicate,
+        addedPaletIds: <String>[],
+      );
+    }
+
     final db = FirebaseFirestore.instance;
     return db.runTransaction((tx) async {
       final pedidoSnap = await tx.get(pedidoRef);
       if (!pedidoSnap.exists) {
-        return _ScanTransactionResult.missingPedido;
+        return const _ScanTransactionResult(
+          status: _ScanTransactionStatus.missingPedido,
+          addedPaletIds: <String>[],
+        );
       }
 
       final data = pedidoSnap.data() ?? <String, dynamic>{};
       final estado = data['Estado']?.toString() ?? '';
       if (estado == 'Expedido') {
-        return _ScanTransactionResult.expedido;
+        return const _ScanTransactionResult(
+          status: _ScanTransactionStatus.expedido,
+          addedPaletIds: <String>[],
+        );
       }
 
-      final palets = _extractPaletsFromData(data);
-      if (palets.contains(paletId)) {
-        return _ScanTransactionResult.duplicate;
+      final palets = _extractPaletsFromData(data).toSet();
+      final missingPalets = paletsToScan
+          .where((paletId) => !palets.contains(paletId))
+          .toList(growable: false);
+      if (missingPalets.isEmpty) {
+        return const _ScanTransactionResult(
+          status: _ScanTransactionStatus.duplicate,
+          addedPaletIds: <String>[],
+        );
       }
 
       final estadoActual = data['Estado']?.toString() ?? '';
-      final nuevoEstado =
-          estadoActual == 'Pendiente'
-              ? 'En_Curso'
-              : estadoActual == 'En_Curso_Manual'
-                  ? 'En_Curso_Manual'
-                  : estadoActual;
+      final nuevoEstado = estadoActual == 'Pendiente'
+          ? 'En_Curso'
+          : estadoActual == 'En_Curso_Manual'
+              ? 'En_Curso_Manual'
+              : estadoActual;
       tx.update(pedidoRef, {
         'Estado': nuevoEstado,
-        'palets': FieldValue.arrayUnion([paletId]),
+        'palets': FieldValue.arrayUnion(missingPalets),
         'updatedAt': FieldValue.serverTimestamp(),
       });
-      return _ScanTransactionResult.added;
+      return _ScanTransactionResult(
+        status: _ScanTransactionStatus.added,
+        addedPaletIds: missingPalets,
+      );
     });
   }
 
@@ -830,7 +872,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
   }
 
   Future<_PedidoLoadResult?> _initManualPedidoFromPalet({
-    required String paletId,
+    required List<String> paletIds,
     required _PedidoResolution pedido,
   }) async {
     final db = FirebaseFirestore.instance;
@@ -839,7 +881,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     if (!pedidoSnapshot.exists) {
       await _createManualPedido(
         db: db,
-        paletId: paletId,
+        paletIds: paletIds,
         pedidoDocId: pedido.docId,
         pedidoDisplay: pedido.displayId,
       );
@@ -867,7 +909,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
 
   Future<void> _createManualPedido({
     required FirebaseFirestore db,
-    required String paletId,
+    required List<String> paletIds,
     required String pedidoDocId,
     required String pedidoDisplay,
   }) async {
@@ -877,7 +919,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     final base = <String, dynamic>{
       'IdPedidoLora': pedidoDisplay,
       'Estado': 'En_Curso_Manual',
-      'palets': [paletId],
+      'palets': paletIds,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
     };
@@ -893,7 +935,7 @@ class _CmrScanScreenState extends ConsumerState<CmrScanScreen> {
     if (mounted) {
       setState(() {
         _pedidoEstado = 'En_Curso_Manual';
-        _expectedPalets = {paletId};
+        _expectedPalets = paletIds.toSet();
         _lineaByPalet = <String, int?>{};
         _firestorePalets = <String>{};
       });
@@ -1157,7 +1199,17 @@ class _PedidoLoadResult {
   final bool created;
 }
 
-enum _ScanTransactionResult { added, duplicate, expedido, missingPedido }
+class _ScanTransactionResult {
+  const _ScanTransactionResult({
+    required this.status,
+    required this.addedPaletIds,
+  });
+
+  final _ScanTransactionStatus status;
+  final List<String> addedPaletIds;
+}
+
+enum _ScanTransactionStatus { added, duplicate, expedido, missingPedido }
 
 extension on _OverlayStatus {
   Color get color {
