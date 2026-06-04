@@ -79,14 +79,22 @@ class _DesagruparBoxesScreenState
         'memberPalletIds=${resolution.memberPalletIds}',
       );
       debugPrint('Desagrupar Boxes DEBUG stockExists=${resolution.stockExists}');
+      debugPrint('Desagrupar Boxes DEBUG stockHueco=${resolution.stockHueco}');
+      debugPrint('Desagrupar Boxes DEBUG isExpedido=${resolution.isExpedido}');
+      debugPrint(
+        'Desagrupar Boxes DEBUG '
+        'pedidosEncontrados=${resolution.pedidosEncontrados}',
+      );
 
       if (!resolution.isGrouped) {
         _showError('Este QR no pertenece a ningún grupo');
         return;
       }
 
-      if (!resolution.canUngroup) {
-        _showError('El grupo no está actualmente en stock o ya fue expedido');
+      if (resolution.isExpedido) {
+        _showError(
+          'No se puede desagrupar: el grupo ya fue expedido por CMR',
+        );
         return;
       }
 
@@ -111,10 +119,13 @@ class _DesagruparBoxesScreenState
       Navigator.of(context).pop();
     } on FirebaseException catch (error) {
       debugPrint('Desagrupar Boxes FirebaseException: $error');
-      _showError('No se pudo desagrupar el grupo.');
+      final reason = error.message?.trim().isNotEmpty == true
+          ? error.message!.trim()
+          : error.code;
+      _showError('No se pudo desagrupar: $reason');
     } on Exception catch (error) {
       debugPrint('Desagrupar Boxes Exception: $error');
-      _showError('No se pudo desagrupar el grupo.');
+      _showError('No se pudo desagrupar: ${_technicalReason(error)}');
     } finally {
       if (mounted) {
         setState(() {
@@ -189,6 +200,15 @@ class _DesagruparBoxesScreenState
         );
       },
     );
+  }
+
+  String _technicalReason(Object error) {
+    final message = error.toString();
+    const badStatePrefix = 'Bad state: ';
+    if (message.startsWith(badStatePrefix)) {
+      return message.substring(badStatePrefix.length);
+    }
+    return message;
   }
 
   void _showError(String message) {
