@@ -1,5 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
+import '../features/cmr/cmr_utils.dart';
 import '../models/pallet_group.dart';
 import '../utils/stock_doc_id.dart';
 
@@ -19,7 +22,9 @@ class PalletGroupUngroupResolution {
     required this.referencePalletId,
     required this.memberPalletIds,
     required this.stockExists,
-    required this.stockIsAvailable,
+    required this.stockHueco,
+    required this.isExpedido,
+    required this.pedidosEncontrados,
     this.group,
   });
 
@@ -28,11 +33,13 @@ class PalletGroupUngroupResolution {
   final String referencePalletId;
   final List<String> memberPalletIds;
   final bool stockExists;
-  final bool stockIsAvailable;
+  final String stockHueco;
+  final bool isExpedido;
+  final List<String> pedidosEncontrados;
   final PalletGroup? group;
 
   bool get isGrouped => group != null && groupId.isNotEmpty;
-  bool get canUngroup => isGrouped && stockExists && stockIsAvailable;
+  bool get canUngroup => isGrouped && !isExpedido;
 }
 
 class PalletGroupService {
@@ -60,47 +67,45 @@ class PalletGroupService {
         referencePalletId: '',
         memberPalletIds: <String>[],
         stockExists: false,
-        stockIsAvailable: false,
+        stockHueco: '',
+        isExpedido: false,
+        pedidosEncontrados: <String>[],
       );
     }
 
-    var groupId = '';
-    DocumentSnapshot<Map<String, dynamic>>? groupSnapshot;
+    final cmrResolution = await resolverGrupoCmr(
+      firestore: _db,
+      scannedPalletId: normalizedScannedStockId,
+    );
+    final groupId = cmrResolution.groupId;
 
-    final memberSnapshot = await _db
-        .collection('PalletGroupMembers')
-        .doc(normalizedScannedStockId)
-        .get();
-    if (memberSnapshot.exists) {
-      final memberData = memberSnapshot.data() ?? <String, dynamic>{};
-      groupId = memberData['groupId']?.toString().trim() ?? '';
-      if (groupId.isEmpty) {
-        groupId = memberData['referencePalletId']?.toString().trim() ?? '';
-      }
-      if (groupId.isNotEmpty) {
-        groupSnapshot = await _db.collection('PalletGroups').doc(groupId).get();
-      }
-    }
-
-    if (groupSnapshot == null || !groupSnapshot.exists) {
-      final directGroupSnapshot = await _db
-          .collection('PalletGroups')
-          .doc(normalizedScannedStockId)
-          .get();
-      if (directGroupSnapshot.exists) {
-        groupId = normalizedScannedStockId;
-        groupSnapshot = directGroupSnapshot;
-      }
-    }
-
-    if (groupSnapshot == null || !groupSnapshot.exists) {
+    if (!cmrResolution.isGrouped || groupId.isEmpty) {
       return PalletGroupUngroupResolution(
         scannedStockId: normalizedScannedStockId,
         groupId: groupId,
         referencePalletId: '',
         memberPalletIds: const <String>[],
         stockExists: false,
-        stockIsAvailable: false,
+        stockHueco: '',
+        isExpedido: false,
+        pedidosEncontrados: const <String>[],
+      );
+    }
+
+    final groupSnapshot = await _db
+        .collection('PalletGroups')
+        .doc(groupId)
+        .get();
+    if (!groupSnapshot.exists) {
+      return PalletGroupUngroupResolution(
+        scannedStockId: normalizedScannedStockId,
+        groupId: groupId,
+        referencePalletId: '',
+        memberPalletIds: const <String>[],
+        stockExists: false,
+        stockHueco: '',
+        isExpedido: false,
+        pedidosEncontrados: const <String>[],
       );
     }
 
@@ -122,7 +127,9 @@ class PalletGroupService {
         .get();
     final stockExists = stockSnapshot.exists;
     final stockData = stockSnapshot.data() ?? <String, dynamic>{};
-    final hueco = stockData['HUECO']?.toString().trim().toLowerCase() ?? '';
+    final stockHueco = stockData['HUECO']?.toString().trim() ?? '';
+    final pedidosEncontrados = await _findExpedidoPedidos(memberPalletIds);
+    final isExpedido = pedidosEncontrados.isNotEmpty;
 
     return PalletGroupUngroupResolution(
       scannedStockId: normalizedScannedStockId,
@@ -130,15 +137,20 @@ class PalletGroupService {
       referencePalletId: referencePalletId,
       memberPalletIds: memberPalletIds,
       stockExists: stockExists,
-      stockIsAvailable: stockExists && hueco != 'libre',
+      stockHueco: stockHueco,
+      isExpedido: isExpedido,
+      pedidosEncontrados: pedidosEncontrados,
       group: group,
     );
   }
 
   Future<void> ungroup(PalletGroupUngroupResolution resolution) async {
-    if (!resolution.canUngroup) {
+    final pedidosEncontrados = await _findExpedidoPedidos(
+      resolution.memberPalletIds,
+    );
+    if (pedidosEncontrados.isNotEmpty) {
       throw StateError(
-        'El grupo no está actualmente en stock o ya fue expedido.',
+        'No se puede desagrupar: el grupo ya fue expedido por CMR',
       );
     }
 
@@ -150,24 +162,18 @@ class PalletGroupService {
         .map((palletId) => _db.collection('PalletGroupMembers').doc(palletId))
         .toList(growable: false);
     final logRef = _db.collection('GroupLogs').doc();
+    final user = FirebaseAuth.instance.currentUser;
+    final userName = await _loadUserName(user);
 
     await _db.runTransaction((transaction) async {
       final groupSnapshot = await transaction.get(groupRef);
       final stockSnapshot = await transaction.get(stockRef);
-      if (!groupSnapshot.exists || !stockSnapshot.exists) {
-        throw StateError(
-          'El grupo no está actualmente en stock o ya fue expedido.',
-        );
+      if (!groupSnapshot.exists) {
+        throw StateError('No existe PalletGroups/${resolution.groupId}.');
       }
 
       final stockData = stockSnapshot.data() ?? <String, dynamic>{};
-      final hueco = stockData['HUECO']?.toString().trim().toLowerCase() ?? '';
-      if (hueco == 'libre') {
-        throw StateError(
-          'El grupo no está actualmente en stock o ya fue expedido.',
-        );
-      }
-
+      final stockHueco = stockData['HUECO']?.toString().trim() ?? '';
       final groupData = groupSnapshot.data() ?? <String, dynamic>{};
       final now = FieldValue.serverTimestamp();
       transaction.set(logRef, <String, dynamic>{
@@ -179,16 +185,83 @@ class PalletGroupService {
         'boxesCount': resolution.group?.boxesCount ?? groupData['boxesCount'],
         'netoTotal': resolution.group?.netoTotal ?? groupData['netoTotal'],
         'brutoTotal': resolution.group?.brutoTotal ?? groupData['brutoTotal'],
-        'createdAt': now,
+        'cajasTotal': resolution.group?.cajasTotal ?? groupData['cajasTotal'],
+        'stockDeleted': stockSnapshot.exists,
+        'stockHueco': stockHueco,
+        'timestamp': now,
+        'userId': user?.uid,
+        'userEmail': user?.email,
+        'userName': userName,
         'group': groupData,
-        'stock': stockData,
+        if (stockSnapshot.exists) 'stock': stockData,
       });
-      transaction.delete(stockRef);
+      if (stockSnapshot.exists) {
+        transaction.delete(stockRef);
+      }
       transaction.delete(groupRef);
       for (final memberRef in memberRefs) {
         transaction.delete(memberRef);
       }
     });
+  }
+
+  Future<List<String>> _findExpedidoPedidos(List<String> memberPalletIds) async {
+    final pedidoPaletIds = memberPalletIds
+        .map(normalizePaletForPedido)
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (pedidoPaletIds.isEmpty) {
+      return const <String>[];
+    }
+
+    final found = <String>{};
+    for (final paletId in pedidoPaletIds) {
+      for (final field in const <String>['palets', 'Palets']) {
+        final snapshot = await _db
+            .collection('Pedidos')
+            .where(field, arrayContains: paletId)
+            .get();
+        for (final doc in snapshot.docs) {
+          final data = doc.data();
+          if (_isPedidoExpedidoPorCmr(data)) {
+            found.add(doc.id);
+          }
+        }
+      }
+    }
+    return found.toList(growable: false)..sort();
+  }
+
+  bool _isPedidoExpedidoPorCmr(Map<String, dynamic> data) {
+    final estado = (data['Estado'] ?? data['estado'])
+            ?.toString()
+            .trim()
+            .toLowerCase() ??
+        '';
+    final type = (data['type'] ?? data['Type'])
+            ?.toString()
+            .trim()
+            .toUpperCase() ??
+        '';
+    return estado == 'expedido' || type == 'CMR';
+  }
+
+  Future<String?> _loadUserName(User? user) async {
+    if (user == null) {
+      return null;
+    }
+
+    try {
+      final snapshot = await _db
+          .collection('UsuariosAutorizados')
+          .doc(user.uid)
+          .get();
+      return snapshot.data()?['Nombre']?.toString();
+    } catch (error) {
+      debugPrint('No se pudo cargar el usuario para GroupLogs: $error');
+      return null;
+    }
   }
 
   Future<void> closeGroup(PalletGroup group) async {
