@@ -19,56 +19,6 @@ class ToolsScreen extends ConsumerWidget {
         children: [
           Card(
             child: ListTile(
-              title: const Text('Comparar Loteado vs Stock'),
-              subtitle: const Text(
-                'Detecta discrepancias entre Loteado y Stock (Hueco=Ocupado)',
-              ),
-              leading: const Icon(Icons.compare_arrows_outlined),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.pushNamed('tools-compare'),
-            ),
-          ),
-          Card(
-            child: ListTile(
-              title: const Text('Agrupar Boxes'),
-              subtitle: const Text(
-                'Agrupa varios QR de box sobre un mismo palet físico',
-              ),
-              leading: const Icon(Icons.inventory_2_outlined),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => context.pushNamed('tools-agrupar-boxes'),
-            ),
-          ),
-          const Divider(height: 28),
-          Card(
-            color: Theme.of(context).colorScheme.errorContainer,
-            child: ListTile(
-              title: Text(
-                'Desagrupar Boxes',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              subtitle: Text(
-                'Elimina un grupo y borra su stock de referencia',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                ),
-              ),
-              leading: Icon(
-                Icons.warning_amber_rounded,
-                color: Theme.of(context).colorScheme.onErrorContainer,
-              ),
-              trailing: Icon(
-                Icons.chevron_right,
-                color: Theme.of(context).colorScheme.onErrorContainer,
-              ),
-              onTap: () => context.pushNamed('tools-desagrupar-boxes'),
-            ),
-          ),
-          Card(
-            child: ListTile(
               title: const Text('Asignar lugar de almacenamiento'),
               subtitle: const Text(
                 'Configura qué productos se almacenan en cada fila de las cámaras de recepción',
@@ -106,6 +56,57 @@ class ToolsScreen extends ConsumerWidget {
                   ),
                 );
               },
+            ),
+          ),
+          const Divider(height: 28),
+          Card(
+            child: ListTile(
+              title: const Text('Agrupar Boxes'),
+              subtitle: const Text(
+                'Agrupa varios QR de box sobre un mismo palet físico',
+              ),
+              leading: const Icon(Icons.inventory_2_outlined),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.pushNamed('tools-agrupar-boxes'),
+            ),
+          ),
+          Card(
+            color: Theme.of(context).colorScheme.errorContainer,
+            child: ListTile(
+              title: Text(
+                'Desagrupar Boxes',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              subtitle: Text(
+                'Elimina un grupo y borra su stock de referencia',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onErrorContainer,
+                ),
+              ),
+              leading: Icon(
+                Icons.warning_amber_rounded,
+                color: Theme.of(context).colorScheme.onErrorContainer,
+              ),
+              trailing: Icon(
+                Icons.chevron_right,
+                color: Theme.of(context).colorScheme.onErrorContainer,
+              ),
+              onTap: () => context.pushNamed('tools-desagrupar-boxes'),
+            ),
+          ),
+          const Divider(height: 28),
+          Card(
+            child: ListTile(
+              title: const Text('Comparar Loteado vs Stock'),
+              subtitle: const Text(
+                'Detecta discrepancias entre Loteado y Stock (Hueco=Ocupado)',
+              ),
+              leading: const Icon(Icons.compare_arrows_outlined),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.pushNamed('tools-compare'),
             ),
           ),
         ],
