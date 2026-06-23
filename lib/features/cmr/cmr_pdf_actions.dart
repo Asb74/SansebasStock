@@ -47,6 +47,16 @@ Future<CmrPdfPayload> buildCmrPdfPayload(CmrPedido pedido) async {
   return CmrPdfPayload(data: data, file: file, filename: filename);
 }
 
+Rect sharePositionOriginForContext(BuildContext context) {
+  final renderObject = context.findRenderObject();
+  final box = renderObject is RenderBox ? renderObject : null;
+  if (box != null && box.hasSize && !box.size.isEmpty) {
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
+  return const Rect.fromLTWH(0, 0, 1, 1);
+}
+
 Future<void> showCmrPdfActions({
   required BuildContext context,
   required CmrPedido pedido,
@@ -104,6 +114,7 @@ Future<void> showCmrPdfActions({
           [XFile(payload.file.path, mimeType: 'application/pdf')],
           subject: 'CMR ${pedido.idPedidoLora}',
           text: 'CMR ${pedido.idPedidoLora}',
+          sharePositionOrigin: sharePositionOriginForContext(context),
         );
         break;
     }
